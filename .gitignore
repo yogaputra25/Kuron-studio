@@ -1,0 +1,7 @@
+node_modules/
+dist/
+target/
+*.log
+.DS_Store
+# ONNX model besar (~20-50MB) — diputuskan di M1: vendor atau download on-demand
+*.onnx

@@ -1,0 +1,33 @@
+schema: spec-driven
+
+# Kuron Studio — OpenSpec Config
+# Private storage (user pref: tidak publish ke public GitHub)
+
+context: |
+  App: Kuron Studio — Manga Translation Workbench (Tauri v2 + Rust)
+  Bundle ID: id.kuron.studio
+  Parent: Kuron App (Flutter, nhasixapp) — reuse prompt/model/logic 1:1
+  Stack: Tauri v2, Vite + Svelte/React, Tailwind, Konva, Rust (tokio, image, ort/tract, reqwest, rusqlite, keyring)
+  Platform: Desktop (Win/macOS/Linux) stable. Mobile deferred (beta).
+  Pipeline: import batch -> ONNX detect (BubbleBox) -> canvas edit -> mosaic/compress -> BYOK LLM -> overlay -> export
+  Providers: 9 types (zen, openCodeGo, gemini, openAi, openRouter, metaAi, clinePass, cohere, custom) — BYOK + OS keychain
+  Styles: 7 (natural, genz, action, romantis, formal, kasar, literal)
+  Reuse: MosaicBuilder, FallbackImageHandler, BubbleBox, prompt, ModelJsonParser dari Kuron App
+
+rules:
+  proposal:
+    - Tulis dalam Bahasa Indonesia (campur EN untuk istilah teknis OK)
+    - Selalu sertakan Why, Scope, Non-goals, Risks
+    - Kaitkan ke docs/ide.md dan docs/target.md
+  spec:
+    - Format: Context, Purpose, Requirements (WHEN/THEN scenarios)
+    - Setiap requirement harus testable
+    - Reuse entity Kuron (BubbleBox, PageTranslation, AiProviderConfig) — jangan reinvent
+  design:
+    - Sertakan mermaid diagram (ASCII-safe) untuk arsitektur & flow
+    - Jelaskan crate boundary & Tauri commands
+    - Cantumkan reuse map Kuron -> Studio
+  tasks:
+    - Urut sesuai roadmap M0-M4
+    - Tandai P0/P1/P2, estimasi hari
+    - "Checkbox format: - [ ] Task"

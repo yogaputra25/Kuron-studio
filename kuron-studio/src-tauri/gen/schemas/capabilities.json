@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"M0: main window + open/save dialogs. fs/http/store scopes land with M2/M4 when the frontend calls those plugins directly (M0 FS goes through Rust commands, no webview permission needed).","local":true,"windows":["main"],"permissions":["core:default","dialog:allow-open","dialog:allow-save"]}}

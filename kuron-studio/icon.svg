@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#09090b"/>
+  <ellipse cx="256" cy="216" rx="150" ry="110" fill="#fff" stroke="#10b981" stroke-width="14"/>
+  <path d="M200 312 L160 380 L236 322 Z" fill="#fff" stroke="#10b981" stroke-width="14" stroke-linejoin="round"/>
+  <text x="256" y="248" font-family="sans-serif" font-size="96" font-weight="bold" text-anchor="middle" fill="#09090b">K</text>
+</svg>
