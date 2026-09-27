@@ -65,10 +65,20 @@ pub fn clear_cache(conn: &Connection) -> Result<u64, String> {
 }
 
 pub fn insert_provider(conn: &Connection, rec: &ProviderRecord) -> Result<(), String> {
+    insert_provider_with_key(conn, rec, &rec.api_key)
+}
+
+/// M4-1: store sqlite row with an explicit key value. Keychain holds the
+/// real secret; callers pass "" on keychain success, legacy key on failure.
+pub fn insert_provider_with_key(
+    conn: &Connection,
+    rec: &ProviderRecord,
+    api_key: &str,
+) -> Result<(), String> {
     let t = serde_json::to_string(&rec.provider_type).map_err(|e| e.to_string())?;
     conn.execute(
         "INSERT OR REPLACE INTO providers (id, provider_type, name, base_url, api_key, model, created_at) VALUES (?1,?2,?3,?4,?5,?6,strftime('%s','now'))",
-        params![rec.id, t, rec.name, rec.base_url, rec.api_key, rec.model],
+        params![rec.id, t, rec.name, rec.base_url, api_key, rec.model],
     )
     .map(|_| ())
     .map_err(|e| e.to_string())

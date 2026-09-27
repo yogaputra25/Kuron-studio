@@ -135,8 +135,10 @@ pub fn load_provider(
     provider_id: &str,
 ) -> Result<(reqwest::Client, ProviderRecord), String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
-    let rec = cache::get_provider(&db, provider_id)?
+    let mut rec = cache::get_provider(&db, provider_id)?
         .ok_or_else(|| format!("provider not found: {provider_id}"))?;
+    // M4-1: keychain first, sqlite legacy fallback. Never logged.
+    rec.api_key = crate::secrets::read_key(provider_id, &rec.api_key)?;
     Ok((state.http.clone(), rec))
 }
 

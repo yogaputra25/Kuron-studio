@@ -27,6 +27,7 @@ ndarray = "0.17"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-manual-roots"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 sha2 = "0.10"
+keyring = "3"
 # ponytail: tokio hanya untuk sleep retry 429 + #[tokio::test]; runtime utama milik tauri.
 # ponytail: manual-roots tanpa bundled roots (MSVC-safe, tanpa OpenSSL); bila HTTPS gagal verify, tambah "rustls-tls-webpki-roots".
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }

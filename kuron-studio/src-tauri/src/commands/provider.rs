@@ -37,6 +37,11 @@ pub struct ValidateResult {
     pub message: String,
 }
 
+fn has_key_of(rec: &ProviderRecord) -> bool {
+    // M4-1: keychain hit wins; sqlite legacy column is the fallback.
+    crate::secrets::has_key(&rec.id, &rec.api_key)
+}
+
 fn view_of(rec: &ProviderRecord) -> ProviderView {
     ProviderView {
         id: rec.id.clone(),
@@ -44,7 +49,7 @@ fn view_of(rec: &ProviderRecord) -> ProviderView {
         name: rec.name.clone(),
         base_url: rec.effective_base_url(),
         model: rec.model.clone(),
-        has_key: !rec.api_key.is_empty(),
+        has_key: has_key_of(rec),
         is_vision_capable: is_vision_capable(&rec.model),
     }
 }
@@ -71,9 +76,22 @@ pub fn save_provider(
     state: State<'_, AppState>,
     input: SaveProviderInput,
 ) -> Result<ProviderView, String> {
-    let rec = parse_input(input)?;
+    let mut rec = parse_input(input)?;
     let db = state.db.lock().map_err(|e| e.to_string())?;
-    cache::insert_provider(&db, &rec)?;
+    // M4-1: edit tanpa key = pertahankan key lama (jangan wipe keychain).
+    if rec.api_key.is_empty() {
+        if let Some(old) = cache::get_provider(&db, &rec.id)? {
+            rec.api_key = crate::secrets::read_key(&rec.id, &old.api_key)
+                .unwrap_or_default();
+        }
+    }
+    // Keychain write-through; sqlite keeps "" on success so no second
+    // copy of the secret exists. Keychain failure → legacy sqlite fallback.
+    let sqlite_key = match crate::secrets::save_key(&rec.id, &rec.api_key) {
+        Ok(()) => String::new(),
+        Err(_) => rec.api_key.clone(),
+    };
+    cache::insert_provider_with_key(&db, &rec, &sqlite_key)?;
     Ok(view_of(&rec))
 }
 
@@ -87,7 +105,7 @@ pub fn get_providers(state: State<'_, AppState>) -> Result<Vec<ProviderView>, St
 #[tauri::command]
 pub fn delete_provider(state: State<'_, AppState>, provider_id: String) -> Result<(), String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
-    cache::delete_provider(&db, &provider_id)
+    crate::secrets::delete_key(&db, &provider_id)
 }
 
 #[tauri::command]
@@ -116,7 +134,9 @@ fn record_of(
     provider_id: &str,
 ) -> Result<(reqwest::Client, ProviderRecord), String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
-    let rec = cache::get_provider(&db, provider_id)?
+    let mut rec = cache::get_provider(&db, provider_id)?
         .ok_or_else(|| format!("provider not found: {provider_id}"))?;
+    // M4-1: keychain first, sqlite legacy fallback. Never logged.
+    rec.api_key = crate::secrets::read_key(provider_id, &rec.api_key)?;
     Ok((state.http.clone(), rec))
 }

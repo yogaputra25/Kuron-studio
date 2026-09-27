@@ -1,5 +1,6 @@
 pub mod bubble;
 pub mod cache;
+pub mod secrets;
 pub mod detect_decode;
 pub mod detector;
 pub mod glossary;
@@ -38,7 +39,7 @@ pub struct AppState {
 
 // ponytail: M0 holds projects only. BubbleDetector (M1), reqwest client (M2),
 // rusqlite cache+glossary (M2/M3) join AppState with their tasks.
-// ponytail: no keyring dep — M4 owns secrets; api_key lives in sqlite for now.
+// ponytail: secrets (M4-1) live in OS keychain via `secrets`; sqlite keeps '' + fallback.
 fn io_err<E: ToString>(e: E) -> std::io::Error {
     std::io::Error::other(e.to_string())
 }
