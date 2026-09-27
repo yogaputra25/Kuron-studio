@@ -6,6 +6,7 @@ use tauri::State;
 use uuid::Uuid;
 
 use crate::AppState;
+use crate::bubble::BubbleBox;
 
 const IMAGE_EXTS: [&str; 4] = ["jpg", "jpeg", "png", "webp"];
 
@@ -17,6 +18,11 @@ pub struct Page {
     pub width: u32,
     pub height: u32,
     pub status: PageStatus,
+    /// Bubble hasil detect/edit canvas (original px). Kosong = belum detect.
+    #[serde(default)]
+    pub bubbles: Vec<BubbleBox>,
+    #[serde(default)]
+    pub translation: Option<crate::translation::PageTranslation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -84,6 +90,10 @@ impl ProjectStore {
         fs::write(self.dir.join("projects.json"), raw).map_err(|e| e.to_string())
     }
 
+    pub(crate) fn save_public(&self) -> Result<(), String> {
+        self.save()
+    }
+
     fn get_mut(&mut self, project_id: &str) -> Result<&mut Project, String> {
         self.projects
             .get_mut(project_id)
@@ -113,6 +123,8 @@ fn page_from_file(path: &Path) -> Page {
         width,
         height,
         status: PageStatus::Idle,
+        bubbles: Vec::new(),
+        translation: None,
     }
 }
 
@@ -254,5 +266,52 @@ mod tests {
         let dir = std::env::temp_dir().join("kuron-studio-missing-probe");
         let res = expand_input(&dir.join("nope"), &dir);
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn bubbles_survive_save_reload() {
+        // M1-12: save_bubbles → projects.json → load() → bubbles + status utuh.
+        use crate::bubble::BubbleBox;
+        let dir = std::env::temp_dir().join(format!(
+            "kuron-studio-roundtrip-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut store = ProjectStore::load(dir.clone()).unwrap();
+        let page = Page {
+            id: "p1".to_string(),
+            path: "p1.png".to_string(),
+            width: 800,
+            height: 1200,
+            status: PageStatus::Detected,
+            bubbles: vec![BubbleBox {
+                x: 10,
+                y: 20,
+                w: 60,
+                h: 40,
+                confidence: 1.0,
+                shape: Some(vec![[10, 20], [70, 20], [70, 60]]),
+                kind: Some("freeform".to_string()),
+                tail: Some(vec![[40, 60], [50, 90]]),
+            }],
+            translation: None,
+        };
+        store.projects.insert(
+            "proj".to_string(),
+            Project {
+                id: "proj".to_string(),
+                name: "t".to_string(),
+                pages: vec![page],
+            },
+        );
+        store.save().unwrap();
+        let reloaded = ProjectStore::load(dir).unwrap();
+        let pg = &reloaded.projects["proj"].pages[0];
+        assert_eq!(pg.bubbles.len(), 1);
+        assert_eq!(pg.bubbles[0].shape.as_ref().unwrap().len(), 3);
+        assert_eq!(pg.bubbles[0].tail.as_ref().unwrap().len(), 2);
+        assert_eq!(pg.status, PageStatus::Detected);
     }
 }

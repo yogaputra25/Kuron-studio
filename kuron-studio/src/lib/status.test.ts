@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { sortPagesByName, statusBadgeClass } from "./status";
 import type { Page } from "./types";
 
-const page = (path: string): Page => ({ id: path, path, width: 0, height: 0, status: "idle" });
+const page = (path: string): Page => ({ id: path, path, width: 0, height: 0, status: "idle", bubbles: [] });
 
 describe("statusBadgeClass", () => {
   it("maps every status to a badge", () => {

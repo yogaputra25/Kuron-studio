@@ -10,10 +10,10 @@ name = "kuron_studio_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = "2"
+tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = "2"
+tauri = { version = "2", features = [] }
 tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
@@ -22,3 +22,11 @@ image = "0.25"
 uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
 zip = "2"
+ort = "=2.0.0-rc.13"
+ndarray = "0.17"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-manual-roots"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+sha2 = "0.10"
+# ponytail: tokio hanya untuk sleep retry 429 + #[tokio::test]; runtime utama milik tauri.
+# ponytail: manual-roots tanpa bundled roots (MSVC-safe, tanpa OpenSSL); bila HTTPS gagal verify, tambah "rustls-tls-webpki-roots".
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }

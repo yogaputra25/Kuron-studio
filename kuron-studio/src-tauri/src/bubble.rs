@@ -121,7 +121,7 @@ mod tests {
     fn drops_giant_engulfing_box() {
         let giant = b(0, 0, 500, 500, 0.9);
         let small = b(10, 10, 50, 50, 0.8);
-        let out = post_process(vec![giant, small]);
+        let out = post_process(vec![giant, small.clone()]);
         assert_eq!(out, vec![small]);
     }
 

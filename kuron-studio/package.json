@@ -13,7 +13,8 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-dialog": "^2"
+    "@tauri-apps/plugin-dialog": "^2",
+    "konva": "^10.7.0"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5",

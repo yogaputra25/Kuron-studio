@@ -5,7 +5,7 @@ use image::ExtendedColorType;
 /// Reads full file via Rust command — no webview fs permission needed (M0).
 #[tauri::command]
 pub fn get_image_preview(path: String, max_side: Option<u32>) -> Result<String, String> {
-    let max_side = max_side.unwrap_or(512).clamp(64, 1024);
+    let max_side = max_side.unwrap_or(512).clamp(64, 2048);
     let bytes = std::fs::read(&path).map_err(|e| format!("read failed: {e}"))?;
     let img = image::load_from_memory(&bytes).map_err(|e| format!("decode failed: {e}"))?;
     let (w, h) = (img.width(), img.height());

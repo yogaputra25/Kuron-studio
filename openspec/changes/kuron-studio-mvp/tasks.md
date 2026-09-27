@@ -21,18 +21,18 @@
 
 ## M1 — Detect & Edit (Minggu 2-3) — P0
 
-- [ ] **M1-1** Port `image-ops` crate dari `kuron_native/rust` (build_mosaic, compress_page, chunk_webtoon, IMAGE_OPS_LOCK) — 2d — P0
-- [ ] **M1-2** Unit test `image-ops` (mosaic size, cap 2MB/1MB, downscale loop, compress 1280px) — 1d — P0
-- [ ] **M1-3** Bundle `bubble.onnx` ke `src-tauri/resources/models/bubble.onnx` + `ort` integration (session load, preprocess, infer) — 3d — P0
-- [ ] **M1-4** Implement `onnx-detect` crate: `BubbleDetector::new` + `detect` (spawn_blocking, intra_threads=2) — 2d — P0
-- [ ] **M1-5** Implement `post_process` (confidence >=0.25, giant-box filter 2.5x, optional NMS) — 1d — P0
-- [ ] **M1-6** Command `detect_bubbles` (single page, return Vec<BubbleBox>) — 1d — P0
-- [ ] **M1-7** Command `detect_bubbles_batch` (Vec<page_ids>, emit `detect_progress` events) — 1d — P0
-- [ ] **M1-8** Frontend: Canvas editor base (Konva, image fitWidth, coordinate mapping original px ↔ screen px) — 2d — P0
-- [ ] **M1-9** Frontend: Tools Rect/Ellipse/Freeform/Tail (draw, create BubbleBox) — 2d — P0
-- [ ] **M1-10** Frontend: Bubble interaction (drag/resize/delete, select, chip numbering RTL/LTR) — 2d — P0
-- [ ] **M1-11** Shape polygon persistence (BubbleBox.shape, tail) + overlay render (polygon clip vs rounded-rect fallback) — 1d — P0
-- [ ] **M1-12** Integration test: import 1 halaman → Detect → 5 bubbles di canvas → drag/resize/delete — 1d — P0
+- [x] **M1-1** Port `image-ops` crate dari `kuron_native/rust` (build_mosaic, compress_page, chunk_webtoon, IMAGE_OPS_LOCK) — 2d — P0
+- [x] **M1-2** Unit test `image-ops` (mosaic size, cap 2MB/1MB, downscale loop, compress 1280px) — 1d — P0
+- [x] **M1-3** Bundle `bubble.onnx` ke `src-tauri/resources/models/bubble.onnx` + `ort` integration (session load, preprocess, infer) — 3d — P0
+- [x] **M1-4** Implement `onnx-detect` crate: `BubbleDetector::new` + `detect` (spawn_blocking, intra_threads=2) — 2d — P0
+- [x] **M1-5** Implement `post_process` (confidence >=0.25, giant-box filter 2.5x, optional NMS) — 1d — P0
+- [x] **M1-6** Command `detect_bubbles` (single page, return Vec<BubbleBox>) — 1d — P0
+- [x] **M1-7** Command `detect_bubbles_batch` (Vec<page_ids>, emit `detect_progress` events) — 1d — P0
+- [x] **M1-8** Frontend: Canvas editor base (Konva, image fitWidth, coordinate mapping original px ↔ screen px) — 2d — P0
+- [x] **M1-9** Frontend: Tools Rect/Ellipse/Freeform/Tail (draw, create BubbleBox) — 2d — P0
+- [x] **M1-10** Frontend: Bubble interaction (drag/resize/delete, select, chip numbering RTL/LTR) — 2d — P0
+- [x] **M1-11** Shape polygon persistence (BubbleBox.shape, tail) + overlay render (polygon clip vs rounded-rect fallback) — 1d — P0
+- [x] **M1-12** Integration test: import 1 halaman → Detect → 5 bubbles di canvas → drag/resize/delete — 1d — P0
 
 **Exit:** Import 1 halaman → Detect <2s (1080p) → bubbles di canvas → bisa edit.
 
@@ -40,24 +40,24 @@
 
 ## M2 — Translate Single (Minggu 4-5) — P0
 
-- [ ] **M2-1** Port `prompt` crate (buildMosaicPrompt, fullImagePrompt, sfxRule, appendGlossary) — reuse Kuron 1:1 — 2d — P0
-- [ ] **M2-2** Snapshot test `prompt` (compare dengan Kuron Dart prompt output) — 0.5d — P0
-- [ ] **M2-3** Port `parser` crate (ModelJsonParser: strip markdown, parse JSON, preview 200 chars) — 1d — P0
-- [ ] **M2-4** Unit test `parser` (JSON valid, markdown wrapped, invalid, empty) — 0.5d — P0
-- [ ] **M2-5** Implement `provider` trait `AiTranslationProvider` + `AiProviderFactory` — 1d — P0
-- [ ] **M2-6** Implement `OpenAICompatibleProvider` (POST /chat/completions, base64 mosaic, temp 0.3, timeout 90s, 429 handling) — 2d — P0
-- [ ] **M2-7** Implement `GeminiProvider` (Google REST, native shape) — 1.5d — P0
-- [ ] **M2-8** Implement `CohereProvider` (POST /v2/chat, native format) — 1.5d — P0
-- [ ] **M2-9** Implement `AiProviderConfig` + `AiProviderType` (9 types, defaultBaseUrl, modelsUrl, needsKeyForListing, isVisionCapable) — 1d — P0
-- [ ] **M2-10** Command `list_models` (GET modelsUrl, parse AiModelOption) — 1d — P0
-- [ ] **M2-11** Command `validate_provider` (minimal test POST) — 0.5d — P0
-- [ ] **M2-12** Command `save_provider` / `get_providers` (redacted) / `delete_provider` (keyring integration) — 1.5d — P0
-- [ ] **M2-13** Command `translate_page` (mosaic vs fallback, POST LLM, mapMosaicResult + reattach shape + whitePatch, cache put) — 2d — P0
-- [ ] **M2-14** Implement `cache` (rusqlite, key hash(image+bubbles+lang+style), get/put/clear) — 1d — P0
-- [ ] **M2-15** Frontend: Provider settings UI (CRUD 9 types, LOV, validate, keychain status) — 3d — P0
-- [ ] **M2-16** Frontend: Translate panel (targetLang, style 7, skipSfx, mosaicQuality, readingDirection, glossary preview) — 2d — P0
-- [ ] **M2-17** Frontend: Overlay render (shape-aware, whitePatch, isUserEdited guard, per-bubble edit original/reading/translated/font) — 2d — P0
-- [ ] **M2-18** Integration test: translate_page dengan mock LLM (wiremock) → PageTranslation overlay — 1d — P0
+- [x] **M2-1** Port `prompt` crate (buildMosaicPrompt, fullImagePrompt, sfxRule, appendGlossary) — reuse Kuron 1:1 — 2d — P0
+- [x] **M2-2** Snapshot test `prompt` (compare dengan Kuron Dart prompt output) — 0.5d — P0
+- [x] **M2-3** Port `parser` crate (ModelJsonParser: strip markdown, parse JSON, preview 200 chars) — 1d — P0
+- [x] **M2-4** Unit test `parser` (JSON valid, markdown wrapped, invalid, empty) — 0.5d — P0
+- [x] **M2-5** Implement `provider` trait `AiTranslationProvider` + `AiProviderFactory` — 1d — P0
+- [x] **M2-6** Implement `OpenAICompatibleProvider` (POST /chat/completions, base64 mosaic, temp 0.3, timeout 90s, 429 handling) — 2d — P0
+- [x] **M2-7** Implement `GeminiProvider` (Google REST, native shape) — 1.5d — P0
+- [x] **M2-8** Implement `CohereProvider` (POST /v2/chat, native format) — 1.5d — P0
+- [x] **M2-9** Implement `AiProviderConfig` + `AiProviderType` (9 types, defaultBaseUrl, modelsUrl, needsKeyForListing, isVisionCapable) — 1d — P0
+- [x] **M2-10** Command `list_models` (GET modelsUrl, parse AiModelOption) — 1d — P0
+- [x] **M2-11** Command `validate_provider` (minimal test POST) — 0.5d — P0
+- [x] **M2-12** Command `save_provider` / `get_providers` (redacted) / `delete_provider` (keyring integration) — 1.5d — P0
+- [x] **M2-13** Command `translate_page` (mosaic vs fallback, POST LLM, mapMosaicResult + reattach shape + whitePatch, cache put) — 2d — P0
+- [x] **M2-14** Implement `cache` (rusqlite, key hash(image+bubbles+lang+style), get/put/clear) — 1d — P0
+- [x] **M2-15** Frontend: Provider settings UI (CRUD 9 types, LOV, validate, keychain status) — 3d — P0
+- [x] **M2-16** Frontend: Translate panel (targetLang, style 7, skipSfx, mosaicQuality, readingDirection, glossary preview) — 2d — P0
+- [x] **M2-17** Frontend: Overlay render (shape-aware, whitePatch, isUserEdited guard, per-bubble edit original/reading/translated/font) — 2d — P0
+- [x] **M2-18** Integration test: translate_page dengan mock LLM (wiremock) → PageTranslation overlay — 1d — P0
 
 **Exit:** Pilih provider → Translate <15s → overlay terjemahan → bisa edit per-bubble.
 
@@ -65,18 +65,18 @@
 
 ## M3 — Batch & Export (Minggu 6) — P1
 
-- [ ] **M3-1** Implement queue `tokio::mpsc` + semaphore 3 untuk `translate_batch` — 2d — P1
-- [ ] **M3-2** Command `translate_batch` (Vec<page_ids>, emit `translate_progress`, backoff 2s/4s/8s on 429) — 1d — P1
-- [ ] **M3-3** Command `retry_bubble` (single bubble retry) — 0.5d — P1
-- [ ] **M3-4** Frontend: Batch UI (progress bar, concurrency indicator, failed bubbles highlighted) — 2d — P1
-- [ ] **M3-5** Implement `glossary` crate (rusqlite, GlossaryEntry CRUD, `selectRelevantGlossaryEntries` limit 5 substring case-insensitive timestamp desc, `buildGlossaryBlock`, `glossaryContextFor` dengan fallback most-recent 5 saat bubbleTexts empty, true no-match → None) — 2d — P1
-- [ ] **M3-6** Glossary prompt injection (`appendGlossary` ke mosaic prompt, SAME single AI request — never extra call, null/empty → prompt unchanged, never throws) — 0.5d — P1
-- [ ] **M3-7** Frontend: Glossary panel (CRUD, import/export CSV, long-press bubble → Save to Glossary, glossary preview di translate panel) — 2d — P1
-- [ ] **M3-8** Command `export_project` JSON (PageTranslation per page via save dialog) — 1d — P1
-- [ ] **M3-9** Command `export_project` PNG overlay (burn overlay via image crate, whitePatch, shape-aware) — 2d — P1
-- [ ] **M3-10** Command `export_project` CBZ (zip PNGs, filename order) — 1d — P1
-- [ ] **M3-11** Frontend: Review grid (failed bubbles, retry, export buttons) — 1.5d — P1
-- [ ] **M3-12** Integration test: batch 10 halaman → progress → export JSON/PNG — 1d — P1
+- [x] **M3-1** Implement queue `tokio::mpsc` + semaphore 3 untuk `translate_batch` — 2d — P1
+- [x] **M3-2** Command `translate_batch` (Vec<page_ids>, emit `translate_progress`, backoff 2s/4s/8s on 429) — 1d — P1
+- [x] **M3-3** Command `retry_bubble` (single bubble retry) — 0.5d — P1
+- [x] **M3-4** Frontend: Batch UI (progress bar, concurrency indicator, failed bubbles highlighted) — 2d — P1
+- [x] **M3-5** Implement `glossary` crate (rusqlite, GlossaryEntry CRUD, `selectRelevantGlossaryEntries` limit 5 substring case-insensitive timestamp desc, `buildGlossaryBlock`, `glossaryContextFor` dengan fallback most-recent 5 saat bubbleTexts empty, true no-match → None) — 2d — P1
+- [x] **M3-6** Glossary prompt injection (`appendGlossary` ke mosaic prompt, SAME single AI request — never extra call, null/empty → prompt unchanged, never throws) — 0.5d — P1
+- [x] **M3-7** Frontend: Glossary panel (CRUD, import/export CSV, long-press bubble → Save to Glossary, glossary preview di translate panel) — 2d — P1
+- [x] **M3-8** Command `export_project` JSON (PageTranslation per page via save dialog) — 1d — P1
+- [x] **M3-9** Command `export_project` PNG overlay (burn overlay via image crate, whitePatch, shape-aware) — 2d — P1
+- [x] **M3-10** Command `export_project` CBZ (zip PNGs, filename order) — 1d — P1
+- [x] **M3-11** Frontend: Review grid (failed bubbles, retry, export buttons) — 1.5d — P1
+- [x] **M3-12** Integration test: batch 10 halaman → progress → export JSON/PNG — 1d — P1
 
 **Exit:** Batch 10 halaman <3m → progress bar → export JSON/PNG/CBZ.
 

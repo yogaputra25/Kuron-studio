@@ -3,18 +3,38 @@
   import { open } from "@tauri-apps/plugin-dialog";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { api } from "./lib/api";
+  import BatchPanel from "./lib/BatchPanel.svelte";
+  import EditorPanel from "./lib/EditorPanel.svelte";
+  import GlossaryPanel from "./lib/GlossaryPanel.svelte";
+  import ProviderSettings from "./lib/ProviderSettings.svelte";
+  import ReviewGrid from "./lib/ReviewGrid.svelte";
   import { sortPagesByName, statusBadgeClass } from "./lib/status";
-  import type { Project } from "./lib/types";
+  import type { BatchOpts, Page, Project, ReadingDirection } from "./lib/types";
 
   let projects = $state<Project[]>([]);
   let currentId = $state<string | null>(null);
   let name = $state("");
   let thumbs = $state<Record<string, string>>({});
+  let fullUrls = $state<Record<string, string>>({});
+  let selectedId = $state<string | null>(null);
+  let readingDir = $state<ReadingDirection>("rtl");
   let error = $state("");
   let dragging = $state(false);
   let busy = $state(false);
+  let showProviders = $state(false);
+  let showBatch = $state(false);
+  let showGlossary = $state(false);
+  let showReview = $state(false);
+  // Opts terakhir dari editor (provider+translate opts) — dipakai Batch/Review.
+  let batchOpts = $state<BatchOpts | null>(null);
+
+  async function refreshProject(id: string) {
+    const updated = await api.getProject(id);
+    projects = projects.map((p) => (p.id === id ? updated : p));
+  }
 
   const current = $derived(projects.find((p) => p.id === currentId) ?? null);
+  const selectedPage = $derived(current?.pages.find((p) => p.id === selectedId) ?? null);
   const fileName = (path: string) => path.split(/[/\\]/).pop() ?? path;
 
   async function refresh() {
@@ -69,6 +89,45 @@
     }
   }
 
+  async function openEditor(pg: Page) {
+    selectedId = pg.id;
+    if (!fullUrls[pg.id]) {
+      try {
+        fullUrls[pg.id] = await api.getImagePreview(pg.path, 1600);
+      } catch (e) {
+        error = String(e);
+      }
+    }
+  }
+
+  function closeEditor() {
+    selectedId = null;
+  }
+
+  function onSaved(updated: Page) {
+    if (!currentId) return;
+    projects = projects.map((p) =>
+      p.id === currentId
+        ? { ...p, pages: p.pages.map((pg) => (pg.id === updated.id ? updated : pg)) }
+        : p,
+    );
+  }
+
+  async function detectAll() {
+    if (!current) return;
+    busy = true;
+    error = "";
+    try {
+      await api.detectBatch(current.pages.map((p) => p.id));
+      const updated = await api.getProject(current.id);
+      projects = projects.map((p) => (p.id === current.id ? updated : p));
+    } catch (e) {
+      error = String(e);
+    } finally {
+      busy = false;
+    }
+  }
+
   async function importFolder() {
     const dir = await open({ directory: true });
     if (typeof dir === "string") await doImport([dir]);
@@ -114,6 +173,23 @@
       </select>
     {/if}
     <div class="ml-auto flex gap-2">
+      <button class="rounded bg-zinc-800 px-2 py-1 text-sm hover:bg-zinc-700" onclick={() => (readingDir = readingDir === "rtl" ? "ltr" : "rtl")} title="Urutan baca chip">
+        {readingDir === "rtl" ? "RTL→" : "←LTR"}
+      </button>
+      <button class="rounded bg-zinc-800 px-3 py-1 text-sm hover:bg-zinc-700" onclick={() => (showProviders = true)}>Providers</button>
+      <button
+        class="rounded bg-zinc-800 px-3 py-1 text-sm hover:bg-zinc-700 disabled:opacity-50"
+        onclick={() => (showBatch = true)}
+        disabled={!current || !batchOpts?.providerId}
+        title={batchOpts?.providerId ? "Batch translate" : "Buka satu halaman di editor + pilih provider dulu"}
+      >Batch</button>
+      <button class="rounded bg-zinc-800 px-3 py-1 text-sm hover:bg-zinc-700" onclick={() => (showGlossary = true)}>Glossary</button>
+      <button
+        class="rounded bg-zinc-800 px-3 py-1 text-sm hover:bg-zinc-700 disabled:opacity-50"
+        onclick={() => (showReview = true)}
+        disabled={!current}
+      >Review</button>
+      <button class="rounded bg-sky-800 px-3 py-1 text-sm hover:bg-sky-700 disabled:opacity-50" onclick={detectAll} disabled={!current || busy || (current?.pages.length ?? 0) === 0}>Detect semua</button>
       <button class="rounded bg-zinc-800 px-3 py-1 text-sm hover:bg-zinc-700 disabled:opacity-50" onclick={importFolder} disabled={!current || busy}>Import folder</button>
       <button class="rounded bg-zinc-800 px-3 py-1 text-sm hover:bg-zinc-700 disabled:opacity-50" onclick={importFiles} disabled={!current || busy}>Import files</button>
     </div>
@@ -143,17 +219,21 @@
       class:ring-emerald-500={dragging}
     >
       {#each sortPagesByName(current.pages) as pg (pg.id)}
-        <figure class="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900">
+        <button
+          class="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900 text-left hover:border-emerald-600"
+          onclick={() => openEditor(pg)}
+        >
           {#if thumbs[pg.id]}
             <img src={thumbs[pg.id]} alt={fileName(pg.path)} class="aspect-[3/4] w-full object-cover" loading="lazy" />
           {:else}
             <div class="aspect-[3/4] w-full animate-pulse bg-zinc-800"></div>
           {/if}
-          <figcaption class="flex items-center gap-2 px-2 py-1.5 text-xs">
+          <div class="flex items-center gap-2 px-2 py-1.5 text-xs">
             <span class="truncate" title={pg.path}>{fileName(pg.path)}</span>
             <span class={`ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold text-white ${statusBadgeClass(pg.status)}`}>{pg.status}</span>
-          </figcaption>
-        </figure>
+            {#if (pg.bubbles?.length ?? 0) > 0}<span class="shrink-0 rounded bg-sky-700 px-1.5 py-0.5 text-[10px]">⬢{pg.bubbles.length}</span>{/if}
+          </div>
+        </button>
       {/each}
     </section>
     {#if current.pages.length === 0}
@@ -161,5 +241,49 @@
         {#if dragging}Lepaskan file untuk import…{:else}Drag-drop folder/zip ke sini, atau pakai tombol Import. (M0: folder & files){/if}
       </p>
     {/if}
+  {/if}
+
+  {#if selectedPage && currentId}
+    <div class="fixed inset-0 z-50 flex flex-col bg-zinc-950">
+      {#key selectedPage.id}
+        <EditorPanel
+          projectId={currentId}
+          page={selectedPage}
+          fullImageUrl={fullUrls[selectedPage.id] ?? thumbs[selectedPage.id] ?? ""}
+          {readingDir}
+          onClose={closeEditor}
+          onSaved={onSaved}
+          onBatchOpts={(o) => (batchOpts = { providerId: o.providerId, ...o.opts, readingDirection: readingDir }) }
+        />
+      {/key}
+    </div>
+  {/if}
+
+  {#if showBatch && current && batchOpts}
+    {@const cur = current}
+    <BatchPanel
+      pages={cur.pages}
+      opts={batchOpts}
+      onDone={() => { void refreshProject(cur.id); showBatch = false; }}
+      onClose={() => (showBatch = false)}
+    />
+  {/if}
+
+  {#if showGlossary}
+    <GlossaryPanel onClose={() => (showGlossary = false)} />
+  {/if}
+
+  {#if showReview && current}
+    {@const cur = current}
+    <ReviewGrid
+      project={cur}
+      opts={batchOpts}
+      onRefresh={() => { void refreshProject(cur.id); }}
+      onClose={() => (showReview = false)}
+    />
+  {/if}
+
+  {#if showProviders}
+    <ProviderSettings onClose={() => (showProviders = false)} />
   {/if}
 </main>
