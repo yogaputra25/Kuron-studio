@@ -9,6 +9,7 @@ translate (9 AI providers) → batch → export JSON/PNG/CBZ.
 cd kuron-studio
 pnpm install
 pnpm tauri dev        # backend unreachable? run via this, not `pnpm dev`
+pnpm dev:fresh        # curiga cache lama? hapus .vite lalu tauri dev (`-- --nuke` juga reset profile WebView2; data project tidak tersentuh)
 ```
 
 Gates (must all be green):
@@ -27,7 +28,8 @@ pnpm test && pnpm check
 3. Providers → simpan key (OS keychain `id.kuron.studio`, fallback sqlite) →
    pilih model → Validate → Translate (`<15s`, overlay + per-bubble edit).
 4. Batch (3 paralel, progress bar) → Review (retry page/bubble) →
-   Export JSON / PNG overlay / CBZ.
+   Export JSON / PNG overlay / CBZ / PSD.
+   PNG export auto-typesets via system TTF with bitmap fallback.
 
 ## Config notes
 

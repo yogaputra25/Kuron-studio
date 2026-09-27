@@ -11,6 +11,7 @@
 
   interface Props {
     imageUrl: string;
+    fallbackUrl?: string;
     imgW: number;
     imgH: number;
     initial: BubbleBox[];
@@ -21,12 +22,19 @@
     showTranslation?: boolean;
   }
 
-  let { imageUrl, imgW, imgH, initial, readingDir, tool, onChange, translations = [], showTranslation = false }: Props = $props();
+  let { imageUrl, fallbackUrl = "", imgW, imgH, initial, readingDir, tool, onChange, translations = [], showTranslation = false }: Props = $props();
 
   let holder: HTMLDivElement;
   let stage: Konva.Stage | null = null;
   let overlayLayer: Konva.Layer | null = null;
+  let bgImage: Konva.Image | null = null;
   let selectedIdx = $state<number | null>(null);
+
+  // Gambar datang belakangan (App fetch async setelah mount) — lacak request
+  // terakhir agar load basi tidak menimpa, dan tandai siap/gagal untuk hint.
+  let requestedUrl = "";
+  let imgReady = $state(false);
+  let imgError = $state("");
 
   // Salinan kerja — disinkron dari `initial` via effect di bawah (remount per page
   // via {#key}, jadi sinkronisasi awal + update parent pasca-detect aman).
@@ -36,12 +44,22 @@
   // (hasil Detect/Save). Edit lokal memanggil onChange → parent mengembalikan
   // konten identik, jadi guard JSON ini mencegah reset selectedIdx tiap ketik.
   $effect(() => {
-    const incoming = structuredClone(initial);
+    const incoming = $state.snapshot(initial);
     if (JSON.stringify(incoming) !== JSON.stringify(bubbles)) {
       bubbles = incoming;
       selectedIdx = null;
       redraw();
     }
+  });
+
+  // URL gambar tiba async (App fetch get_image_preview setelah mount panel).
+  // Stage harus tercipta ulang / image di-swap saat URL berubah, kalau tidak
+  // body editor tetap hitam walau bubble sudah kedetect (overlay di atas bg kosong).
+  $effect(() => {
+    if (!imageUrl) return;
+    if (requestedUrl === imageUrl) return;
+    requestedUrl = imageUrl;
+    loadBackground(imageUrl);
   });
 
   $effect(() => {
@@ -181,7 +199,7 @@
           redrawKeep(handle);
         });
         handle.on("dragend", () => {
-          onChange(structuredClone(bubbles));
+          onChange($state.snapshot(bubbles));
         });
         handle.on("mousedown touchstart", (e) => e.cancelBubble = true);
         group.add(handle);
@@ -206,16 +224,17 @@
 
   function commit(i: number, nb: BubbleBox) {
     bubbles[i] = nb;
-    onChange(structuredClone(bubbles));
+    onChange($state.snapshot(bubbles));
     redraw();
   }
 
-  export function deleteSelected() {
-    if (selectedIdx === null) return;
+  export function deleteSelected(): boolean {
+    if (selectedIdx === null) return false;
     bubbles.splice(selectedIdx, 1);
     selectedIdx = null;
-    onChange(structuredClone(bubbles));
+    onChange($state.snapshot(bubbles));
     redraw();
+    return true;
   }
 
   export function setTailForSelected(tipOriginal: [number, number]) {
@@ -224,7 +243,7 @@
     const cx = b.x + b.w / 2;
     const cy = b.y + b.h / 2;
     bubbles[selectedIdx] = { ...b, tail: [[Math.round(cx), Math.round(cy)], tipOriginal] };
-    onChange(structuredClone(bubbles));
+    onChange($state.snapshot(bubbles));
     redraw();
   }
 
@@ -326,33 +345,126 @@
       );
     }
     selectedIdx = bubbles.length - 1;
-    onChange(structuredClone(bubbles));
+    onChange($state.snapshot(bubbles));
     redraw();
   }
 
-  onMount(() => {
+  // Antrian URL bila $effect imageUrl jalan sebelum onMount (urutan tidak
+  // dijamin); onMount mengonsumsinya di kedua cabang agar tak ada sisa basi.
+  let pendingUrl: string | null = null;
+
+  // fix-preview-hang §3: tiap request bg harus terminasi ≤15s (siap/gagal+retry).
+  // Token per-request — onload/onerror/timeout mana duluan menang, sisanya basi.
+  const BG_LOAD_TIMEOUT_MS = 15_000;
+  let bgToken = 0;
+  let bgTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function clearBgTimer() {
+    if (bgTimer) {
+      clearTimeout(bgTimer);
+      bgTimer = null;
+    }
+  }
+
+  // Retry manual tanpa remount — stage + overlay bubble selamat.
+  function retryLoad() {
+    if (requestedUrl) loadBackground(requestedUrl);
+  }
+
+  function loadBackground(url: string, triedFallback = false) {
+    // Panggil setelah stage ada; kalau stage belum dibuat (mount awal), antri.
+    if (!stage || !overlayLayer) {
+      pendingUrl = url;
+      return;
+    }
+    clearBgTimer();
+    requestedUrl = url;
+    imgReady = false;
+    imgError = "";
+    const my = ++bgToken;
     const img = new Image();
+    const fail = (msg: string) => {
+      if (my !== bgToken || requestedUrl !== url) return;
+      // Fallback otomatis sekali ke thumb sebelum menyerah.
+      if (!triedFallback && fallbackUrl && fallbackUrl !== url) {
+        loadBackground(fallbackUrl, true);
+        return;
+      }
+      clearBgTimer();
+      bgToken++; // invalidasi onload telat — yang menang tetap gagal
+      imgError = msg;
+    };
+    bgTimer = setTimeout(() => {
+      fail("Gambar timed out (15 dtk) — preview lambat, coba lagi.");
+    }, BG_LOAD_TIMEOUT_MS);
     img.onload = () => {
-      const s = holder.clientWidth / Math.max(1, imgW);
-      stage = new Konva.Stage({ container: holder, width: imgW * s, height: imgH * s });
-      const bg = new Konva.Layer();
-      const kimg = new Konva.Image({ image: img, width: imgW * s, height: imgH * s, listening: false });
-      bg.add(kimg);
-      stage.add(bg);
-      overlayLayer = new Konva.Layer();
-      stage.add(overlayLayer);
-      stage.on("mousedown touchstart", onStageDown);
-      stage.on("mousemove touchmove", onStageMove);
-      stage.on("mouseup touchend", onStageUp);
+      // Abaikan load basi (user sudah pindah halaman / retry baru menang) dan
+      // unmount (komponen dihancurkan saat load berjalan — stage sudah null).
+      if (my !== bgToken || requestedUrl !== url) return;
+      if (!stage || !overlayLayer) return;
+      clearBgTimer();
+      const s = scale();
+      if (bgImage) {
+        bgImage.image(img);
+        bgImage.size({ width: imgW * s, height: imgH * s });
+      } else {
+        const bg = new Konva.Layer();
+        bgImage = new Konva.Image({ image: img, width: imgW * s, height: imgH * s, listening: false });
+        bg.add(bgImage);
+        stage!.add(bg);
+        bg.moveToBottom();
+        // Overlay harus tetap di atas background.
+        overlayLayer!.moveToTop();
+      }
+      stage!.width(imgW * s);
+      stage!.height(imgH * s);
+      imgReady = true;
+      overlayLayer!.batchDraw();
       redraw();
     };
-    img.src = imageUrl;
+    img.onerror = () => {
+      if (my !== bgToken || requestedUrl !== url) return;
+      if (!stage) return;
+      fail("Gambar gagal dimuat (preview backend gagal).");
+    };
+    img.src = url;
+  }
+
+  onMount(() => {
+    const s = holder.clientWidth / Math.max(1, imgW);
+    stage = new Konva.Stage({ container: holder, width: imgW * s, height: imgH * s });
+    overlayLayer = new Konva.Layer();
+    stage.add(overlayLayer);
+    stage.on("mousedown touchstart", onStageDown);
+    stage.on("mousemove touchmove", onStageMove);
+    stage.on("mouseup touchend", onStageUp);
+    if (imageUrl) {
+      pendingUrl = null;
+      requestedUrl = imageUrl;
+      loadBackground(imageUrl);
+    } else if (pendingUrl) {
+      const u = pendingUrl;
+      pendingUrl = null;
+      requestedUrl = u;
+      loadBackground(u);
+    }
+    redraw();
   });
 
   onDestroy(() => {
+    bgToken++; // invalidasi onload/onerror/timeout telat
+    clearBgTimer();
     stage?.destroy();
     stage = null;
   });
 </script>
 
 <div bind:this={holder} class="w-full cursor-crosshair overflow-auto rounded border border-zinc-800 bg-black"></div>
+{#if !imgReady && !imgError}
+  <p class="mt-1 text-[11px] text-zinc-500">Memuat gambar…</p>
+{:else if imgError}
+  <p class="mt-1 text-[11px] text-rose-400">
+    {imgError}
+    <button class="ml-2 rounded bg-zinc-800 px-2 py-0.5 text-zinc-100 hover:bg-zinc-700" onclick={retryLoad}>Coba lagi</button>
+  </p>
+{/if}

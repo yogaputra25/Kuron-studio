@@ -21,8 +21,9 @@ fn file_of(path: &str) -> &str {
     path.split(['/', '\\']).next_back().unwrap_or(path)
 }
 
-/// Panjang wajar: kasar 1 char per 6px lebar (font bitmap 5x7 + spasi).
-/// `translated.len() * 6 > w` → overflow. SFX: original mengandung
+/// Panjang wajar: metrik renderer bersama (export::text_overflows) —
+/// bungkus kata + susut skala seperti paint_patch, bukan hitung char kasar.
+/// SFX: original mengandung
 /// pola SFX umum (katakana/ganda-konsonan panjang) tapi skipSfx=false
 /// dan translated kosong → sfxLeak hanya bila bubble tanpa terjemahan
 /// dan teks asli terlihat seperti SFX (non-kanji pendek / onomatope).
@@ -66,15 +67,15 @@ pub fn check_page(
             });
             continue;
         }
-        if b.translated.chars().count() as i32 * 6 > b.w.max(16) {
+        if crate::commands::export::text_overflows(&b.translated, b.w, b.h) {
             out.push(QaIssue {
                 page_file: file.clone(),
                 bubble_index: b.index as i32,
                 kind: "overflow".into(),
                 detail: format!(
-                    "teks {} char > lebar {}px",
-                    b.translated.chars().count(),
-                    b.w
+                    "teks overflow box {}x{}px",
+                    b.w,
+                    b.h
                 ),
             });
         }
@@ -134,7 +135,7 @@ mod tests {
     #[test]
     fn flags_all_three_kinds() {
         let t = pt(vec![
-            bt(0, 200, "こんにちは世界", "halo dunia yang sangat panjang melebihi lebar bubble ini jauh"),
+            bt(0, 60, "こんにちは世界", "halo dunia yang sangat panjang melebihi lebar bubble ini jauh"),
             bt(1, 200, "selamat pagi semuanya", ""),
             bt(2, 200, "ドン", ""),
         ]);

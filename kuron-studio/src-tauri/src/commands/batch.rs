@@ -98,7 +98,7 @@ async fn run_work(
     Ok(page_t)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn translate_batch(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -214,7 +214,7 @@ fn emit_progress(
     );
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn retry_bubble(
     state: State<'_, AppState>,
     input: RetryBubbleInput,

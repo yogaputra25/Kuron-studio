@@ -19,7 +19,12 @@ import type {
   ValidateResult,
 } from "./types";
 
-// NOTE: invoke keys must match Rust param names exactly (snake_case).
+// NOTE (invoke-contract): two layers, don't mix them.
+// Layer 1 — top-level invoke keys: MUST match Rust #[tauri::command] param
+// names exactly (snake_case): { project_id, page_id, page_ids, ... }.
+// Layer 2 — fields inside `{ input }` structs: camelCase per serde
+// `rename_all` (pageId, providerId, targetLang, ...). See
+// openspec/changes/fix-import-pages-project-id/specs/invoke-contract/spec.md.
 export const api = {
   listProjects: () => invoke<Project[]>("list_projects"),
   createProject: (name: string) => invoke<Project>("create_project", { name }),

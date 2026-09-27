@@ -22,6 +22,7 @@
   let selectedId = $state<string | null>(null);
   let readingDir = $state<ReadingDirection>("rtl");
   let error = $state("");
+  let openError = $state("");
   let dragging = $state(false);
   let busy = $state(false);
   let showProviders = $state(false);
@@ -100,19 +101,31 @@
     }
   }
 
-  async function openEditor(pg: Page) {
-    selectedId = pg.id;
-    if (!fullUrls[pg.id]) {
-      try {
-        fullUrls[pg.id] = await api.getImagePreview(pg.path, 1600);
-      } catch (e) {
+  // fix-preview-hang §2: mount editor LANGSUNG (thumb instan via
+  // fullUrls ?? thumbs), fetch full 1600 paralel tanpa await-before-mount.
+  // {#key selectedPage.id} stabil (id sama) → prop update tidak remount.
+  // (ponytail: ganti base64 1600 dengan `asset:`/temp-file bila tetap berat.)
+  function openEditor(pg: Page) {
+    const id = pg.id;
+    selectedId = id;
+    openError = "";
+    if (fullUrls[id]) return;
+    void api
+      .getImagePreview(pg.path, 1600)
+      .then((url) => {
+        if (selectedId !== id) return; // user sudah pindah halaman
+        fullUrls[id] = url;
+      })
+      .catch((e) => {
+        if (selectedId !== id) return;
         error = String(e);
-      }
-    }
+        openError = String(e); // thumb tetap tampil — editor usable (lihat §2.2)
+      });
   }
 
   function closeEditor() {
     selectedId = null;
+    openError = "";
   }
 
   function onSaved(updated: Page) {
@@ -264,6 +277,8 @@
           projectId={currentId}
           page={selectedPage}
           fullImageUrl={fullUrls[selectedPage.id] ?? thumbs[selectedPage.id] ?? ""}
+          fallbackUrl={thumbs[selectedPage.id] ?? ""}
+          openError={openError}
           {readingDir}
           onClose={closeEditor}
           onSaved={onSaved}

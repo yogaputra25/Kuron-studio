@@ -3,6 +3,9 @@ dist/
 target/
 *.log
 .DS_Store
+# Lokal saja — tidak dipush (catatan planning + instruksi agen)
+/docs/
+/CLAUDE.md
 # ONNX model besar (~20-50MB) — diputuskan di M1: vendor atau download on-demand
 *.onnx
 # M1-3: bubble.onnx hanya 11.3MB (YOLO11n-seg) — bundle langsung, SHA Bonne

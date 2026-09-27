@@ -14,13 +14,15 @@
     projectId: string;
     page: Page;
     fullImageUrl: string;
+    fallbackUrl?: string;
+    openError?: string;
     readingDir: ReadingDirection;
     onClose: () => void;
     onSaved: (page: Page) => void;
     onBatchOpts: (o: { providerId: string; opts: TranslateOpts }) => void;
   }
 
-  let { projectId, page, fullImageUrl, readingDir, onClose, onSaved, onBatchOpts }: Props = $props();
+  let { projectId, page, fullImageUrl, fallbackUrl = "", openError = "", readingDir, onClose, onSaved, onBatchOpts }: Props = $props();
 
   // Snapshot per halaman dibuka — App me-remount via {#key page.id},
   // jadi `page`/`projectId` stabil selama panel hidup. Effect di bawah
@@ -38,7 +40,7 @@
   let batching = $state(false);
   let detectEngine = $state("…");
   let error = $state("");
-  let editorRef = $state<{ deleteSelected: () => void } | null>(null);
+  let editorRef = $state<{ deleteSelected: () => boolean } | null>(null);
 
   // M2 translation state.
   let translation = $state<PageTranslation | null>(null);
@@ -78,7 +80,7 @@
   // Guard JSON: edit lokal → onSaved → prop `page` baru berisi konten
   // identik, jadi jangan reset dirty/bubbles karenanya.
   function syncFromPage() {
-    const incoming = structuredClone(page.bubbles ?? []);
+    const incoming = $state.snapshot(page.bubbles ?? []);
     const incomingTr = page.translation ? JSON.stringify(page.translation) : "";
     if (syncedFor !== page.id || JSON.stringify(incoming) !== JSON.stringify(bubbles)) {
       bubbles = incoming;
@@ -87,7 +89,7 @@
     }
     // Restore persisted translation (close → reopen); local edits win unless saved.
     if (incomingTr && JSON.stringify(translation) !== incomingTr) {
-      translation = structuredClone(page.translation) ?? null;
+      translation = $state.snapshot(page.translation) ?? null;
       showTranslation = !!translation;
     }
   }
@@ -154,7 +156,8 @@
       return;
     }
     if (e.key === "Delete" || e.key === "Backspace") {
-      editorRef?.deleteSelected();
+      if (saving) return;
+      if (editorRef?.deleteSelected()) void save();
     } else if (e.key === "s" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       void save();
@@ -231,15 +234,28 @@
     </div>
   </div>
 
+  {#if openError}
+    <p class="border-b border-red-900 bg-red-950 px-4 py-1.5 text-xs text-red-200">{openError}</p>
+  {/if}
   {#if error}
     <p class="border-b border-amber-900 bg-amber-950 px-4 py-1.5 text-xs text-amber-200">{error}</p>
   {/if}
 
+  {#if openError && !fullImageUrl}
+    <div class="flex flex-1 items-center justify-center p-8">
+      <div class="max-w-sm text-center text-sm text-zinc-400">
+        <p class="mb-2 font-semibold text-red-200">Gambar gagal dimuat.</p>
+        <p class="mb-4">Kembali ke grid dan coba lagi — tidak perlu reload.</p>
+        <button class="rounded bg-zinc-800 px-3 py-1.5 hover:bg-zinc-700" onclick={onClose}>← Grid</button>
+      </div>
+    </div>
+  {:else}
   <div class="flex min-h-0 flex-1">
     <div class="min-w-0 flex-1 overflow-auto p-4">
       <CanvasEditor
         bind:this={editorRef}
         imageUrl={fullImageUrl}
+        fallbackUrl={fallbackUrl}
         imgW={page.width || 800}
         imgH={page.height || 1200}
         initial={bubbles}
@@ -264,11 +280,13 @@
               <span class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold">{nums.get(i) ?? i + 1}</span>
               <span class="text-zinc-400">{b.kind ?? "rect"} {b.w}×{b.h}</span>
               <button
-                class="ml-auto text-rose-400 hover:text-rose-300"
+                class="ml-auto text-rose-400 hover:text-rose-300 disabled:opacity-50"
+                disabled={saving}
                 onclick={() => {
                   bubbles.splice(i, 1);
                   bubbles = [...bubbles];
                   dirty = true;
+                  void save();
                 }}
               >hapus</button>
             </li>
@@ -339,4 +357,5 @@
       {/if}
     </aside>
   </div>
+  {/if}
 </div>

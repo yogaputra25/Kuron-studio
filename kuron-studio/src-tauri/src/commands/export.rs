@@ -1,4 +1,6 @@
+use ab_glyph::{Font, FontVec, PxScale, ScaleFont};
 use image::{Rgb, RgbImage};
+use std::sync::OnceLock;
 use tauri::State;
 
 use crate::translation::{BubbleTranslation, PageTranslation};
@@ -56,11 +58,11 @@ fn glyph(ch: char) -> Option<[u8; 7]> {
     })
 }
 
-fn text_width(s: &str, scale: u32) -> u32 {
+fn bitmap_width(s: &str, scale: u32) -> u32 {
     (s.chars().filter(|c| glyph(*c).is_some()).count() as u32) * 6 * scale
 }
 
-fn draw_text(img: &mut RgbImage, s: &str, x0: i32, y0: i32, scale: u32) {
+fn bitmap_draw(img: &mut RgbImage, s: &str, x0: i32, y0: i32, scale: u32) {
     let mut x = x0;
     for ch in s.chars() {
         let Some(rows) = glyph(ch) else {
@@ -89,6 +91,149 @@ fn draw_text(img: &mut RgbImage, s: &str, x0: i32, y0: i32, scale: u32) {
         }
         x += 6 * scale as i32;
     }
+}
+
+// M5-4: system TTF via ab_glyph (no shaping/harfbuzz). Bitmap stays as fallback.
+static FONTS: OnceLock<Vec<FontVec>> = OnceLock::new();
+
+fn candidate_font_paths() -> Vec<&'static str> {
+    let mut out = Vec::new();
+    if cfg!(target_os = "windows") {
+        out.extend([
+            "C:/Windows/Fonts/arial.ttf",
+            "C:/Windows/Fonts/tahoma.ttf",
+            "C:/Windows/Fonts/msyh.ttc",
+            "C:/Windows/Fonts/msyhl.ttc",
+            "C:/Windows/Fonts/msgothic.ttc",
+            "C:/Windows/Fonts/segoeui.ttf",
+            "C:/Windows/Fonts/calibri.ttf",
+        ]);
+    } else if cfg!(target_os = "macos") {
+        out.extend([
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/System/Library/Fonts/Hiragino Sans GB.ttc",
+            "/System/Library/Fonts/Hiragino Kaku Gothic ProN.ttc",
+            "/Library/Fonts/Arial.ttf",
+        ]);
+    } else {
+        out.extend([
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf",
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        ]);
+    }
+    out
+}
+
+fn load_system_fonts() -> &'static Vec<FontVec> {
+    FONTS.get_or_init(|| {
+        let paths = candidate_font_paths();
+        let mut fonts = Vec::new();
+        for p in &paths {
+            if fonts.len() >= 3 {
+                break;
+            }
+            let Ok(bytes) = std::fs::read(p) else {
+                continue;
+            };
+            if p.ends_with(".ttc") {
+                for idx in 0..4u32 {
+                    if fonts.len() >= 3 {
+                        break;
+                    }
+                    if let Ok(f) = FontVec::try_from_vec_and_index(bytes.clone(), idx) {
+                        fonts.push(f);
+                    }
+                }
+            } else if let Ok(f) = FontVec::try_from_vec(bytes) {
+                fonts.push(f);
+            }
+        }
+        if fonts.is_empty() {
+            eprintln!("kuron-studio: no system TTF found (tried {} paths), bitmap fallback", paths.len());
+        }
+        fonts
+    })
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn font_for(ch: char) -> Option<&'static FontVec> {
+    load_system_fonts().iter().find(|f| f.glyph_id(ch).0 != 0)
+}
+
+fn ttf_width(s: &str, scale: u32) -> Option<u32> {
+    let px = 7.0 * scale as f32;
+    let fonts = load_system_fonts();
+    if fonts.is_empty() {
+        return None;
+    }
+    let mut w = 0u32;
+    for ch in s.chars() {
+        let Some(f) = fonts.iter().find(|f| f.glyph_id(ch).0 != 0) else {
+            w += glyph(ch).map(|_| 6 * scale).unwrap_or(0);
+            continue;
+        };
+        let gid = f.glyph_id(ch);
+        w += f.as_scaled(PxScale::from(px)).h_advance(gid).ceil() as u32;
+    }
+    Some(w)
+}
+
+fn ttf_draw(img: &mut RgbImage, s: &str, x0: i32, y0: i32, scale: u32) -> bool {
+    let fonts = load_system_fonts();
+    if fonts.is_empty() {
+        return false;
+    }
+    let px = 7.0 * scale as f32;
+    let mut x = x0 as f32;
+    let mut drew_any = false;
+    for ch in s.chars() {
+        let Some(f) = fonts.iter().find(|f| f.glyph_id(ch).0 != 0) else {
+            if glyph(ch).is_some() {
+                let single = ch.to_string();
+                bitmap_draw(img, &single, x.round() as i32, y0, scale);
+                x += 6.0 * scale as f32;
+                drew_any = true;
+            }
+            continue;
+        };
+        let scaled = f.as_scaled(PxScale::from(px));
+        let gid = f.glyph_id(ch);
+        let advance = scaled.h_advance(gid).ceil();
+        let mut glyph = scaled.scaled_glyph(ch);
+        glyph.position = ab_glyph::point(x, y0 as f32 + scaled.ascent());
+        if let Some(out) = scaled.outline_glyph(glyph) {
+            out.draw(|dx, dy, c| {
+                if c > 0.5 {
+                    let (pxi, pyi) = (dx as i32, dy as i32);
+                    if pxi >= 0 && pyi >= 0
+                        && (pxi as u32) < img.width()
+                        && (pyi as u32) < img.height()
+                    {
+                        img.put_pixel(pxi as u32, pyi as u32, Rgb([0, 0, 0]));
+                    }
+                }
+            });
+            drew_any = true;
+        } else {
+            // Space (no outline) tetap maju kursor.
+            drew_any = true;
+        }
+        x += advance;
+    }
+    drew_any
+}
+
+fn text_width(s: &str, scale: u32) -> u32 {
+    ttf_width(s, scale).unwrap_or_else(|| bitmap_width(s, scale))
+}
+
+fn draw_text(img: &mut RgbImage, s: &str, x0: i32, y0: i32, scale: u32) {
+    if ttf_draw(img, s, x0, y0, scale) {
+        return;
+    }
+    bitmap_draw(img, s, x0, y0, scale)
 }
 
 /// Bungkus kata agar muat dalam lebar patch (satuan px font).
@@ -170,7 +315,26 @@ pub fn paint_patch(img: &mut RgbImage, b: &BubbleTranslation, shape: Option<&Vec
     }
 }
 
-/// Halaman + terjemahannya → PNG bytes (patch + teks per bubble).
+/// Cek overflow memakai metrik renderer yang sama (TTF/bitmap dispatch).
+/// Mirip layout paint_patch: bungkus kata + loop susut skala.
+/// ponytail: tanpa shaping/ligatur/RTL — upgrade ke harfbuzz bila perlu.
+pub fn text_overflows(text: &str, w: i32, h: i32) -> bool {
+    if text.split_whitespace().next().is_none() {
+        return false;
+    }
+    let inner_w = (w - 8).max(8) as u32;
+    let mut scale = (w.max(16) as u32 / 90).clamp(1, 4);
+    let mut lines = wrap_words(text, inner_w, scale);
+    while lines.len() * 9 * scale as usize > (h - 6).max(9) as usize && scale > 1 {
+        scale -= 1;
+        lines = wrap_words(text, inner_w, scale);
+    }
+    if lines.len() * 9 * scale as usize > (h - 6).max(9) as usize {
+        return true;
+    }
+    lines.iter().any(|l| text_width(l, scale) > inner_w)
+}
+
 /// `shapes[i]` = polygon bubble index i (None = rect), sejajar `t.bubbles`.
 pub fn render_page_png(
     page_bytes: &[u8],
@@ -264,7 +428,7 @@ pub fn export_cbz_bytes(
     Ok(cursor.into_inner())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn export_project(
     state: State<'_, AppState>,
     project_id: String,
@@ -394,5 +558,52 @@ mod tests {
         for l in &lines {
             assert!(text_width(l, 1) <= 90);
         }
+    }
+
+    #[test]
+    fn render_ttf_latin_dark_pixels() {
+        let png = solid_png(400, 400);
+        let t = PageTranslation {
+            page_id: "p".into(), target_lang: "id".into(), style: "s".into(),
+            model: "m".into(), bubbles: vec![bt(0, 50, 50, 200, 100, "HELLO WORLD")],
+        };
+        let out = render_page_png(&png, &t, &[None]).unwrap();
+        let img = image::load_from_memory(&out).unwrap().to_rgb8();
+        let dark = img.pixels().filter(|p| p.0 == [0, 0, 0]).count();
+        assert!(dark > 20, "latin harus render, got {dark}");
+    }
+
+    #[test]
+    fn render_cjk_graceful() {
+        let png = solid_png(400, 400);
+        let t = PageTranslation {
+            page_id: "p".into(), target_lang: "id".into(), style: "s".into(),
+            model: "m".into(), bubbles: vec![bt(0, 50, 50, 200, 100, "日本語テスト")],
+        };
+        let out = render_page_png(&png, &t, &[None]).unwrap();
+        let img = image::load_from_memory(&out).unwrap().to_rgb8();
+        if font_for('日').is_some() {
+            let dark = img.pixels().filter(|p| p.0 == [0, 0, 0]).count();
+            assert!(dark > 20, "CJK font ada tapi tak render, got {dark}");
+        } else {
+            assert_eq!(img.get_pixel(150, 80).0, [255, 255, 255]);
+        }
+    }
+
+    #[test]
+    fn text_width_cjk_counts_when_font_present() {
+        if font_for('日').is_some() {
+            assert!(text_width("日本語", 1) > 0);
+        } else {
+            assert_eq!(text_width("日本語", 1), 0);
+        }
+    }
+
+    #[test]
+    fn text_overflows_mirrors_layout() {
+        assert!(text_overflows("kata ".repeat(50).trim(), 60, 30));
+        assert!(!text_overflows("HI", 200, 100));
+        assert!(!text_overflows("", 60, 30));
+        assert!(!text_overflows("   ", 60, 30));
     }
 }

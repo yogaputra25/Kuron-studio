@@ -87,7 +87,10 @@ pub fn sanitize_bubbles(boxes: Vec<BubbleBox>) -> Vec<BubbleBox> {
 pub fn model_search_paths(resource_dir: Option<std::path::PathBuf>, data_dir: &std::path::Path) -> Vec<std::path::PathBuf> {
     let mut v = Vec::new();
     if let Some(res) = resource_dir {
+        // Layout bundel: prefix `resources/` di-strip → `<res>/models/bubble.onnx`.
         v.push(res.join("models").join("bubble.onnx"));
+        // Layout dev (`tauri dev` copy mentah): `<target/debug>/resources/models/bubble.onnx`.
+        v.push(res.join("resources").join("models").join("bubble.onnx"));
     }
     v.push(data_dir.join("models").join("bubble.onnx"));
     v

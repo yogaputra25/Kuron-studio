@@ -184,7 +184,7 @@ fn extract_archive(path: &Path, extract_dir: &Path) -> Result<(Vec<PathBuf>, usi
     Ok((files, skipped))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn list_projects(state: State<'_, AppState>) -> Result<Vec<Project>, String> {
     let store = state.store.lock().map_err(|e| e.to_string())?;
     let mut projects: Vec<Project> = store.projects.values().cloned().collect();
@@ -192,7 +192,7 @@ pub fn list_projects(state: State<'_, AppState>) -> Result<Vec<Project>, String>
     Ok(projects)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn create_project(name: String, state: State<'_, AppState>) -> Result<Project, String> {
     let name = name.trim().to_string();
     if name.is_empty() {
@@ -209,7 +209,7 @@ pub fn create_project(name: String, state: State<'_, AppState>) -> Result<Projec
     Ok(project)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_project(project_id: String, state: State<'_, AppState>) -> Result<Project, String> {
     let store = state.store.lock().map_err(|e| e.to_string())?;
     store
@@ -219,7 +219,7 @@ pub fn get_project(project_id: String, state: State<'_, AppState>) -> Result<Pro
         .ok_or_else(|| format!("project not found: {project_id}"))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn import_pages(
     project_id: String,
     paths: Vec<String>,

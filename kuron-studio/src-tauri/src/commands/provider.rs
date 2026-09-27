@@ -71,7 +71,7 @@ fn parse_input(input: SaveProviderInput) -> Result<ProviderRecord, String> {
     })
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn save_provider(
     state: State<'_, AppState>,
     input: SaveProviderInput,
@@ -95,20 +95,20 @@ pub fn save_provider(
     Ok(view_of(&rec))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn get_providers(state: State<'_, AppState>) -> Result<Vec<ProviderView>, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     let recs = cache::list_providers(&db)?;
     Ok(recs.iter().map(view_of).collect())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn delete_provider(state: State<'_, AppState>, provider_id: String) -> Result<(), String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     crate::secrets::delete_key(&db, &provider_id)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn list_models(
     state: State<'_, AppState>,
     provider_id: String,
@@ -117,7 +117,7 @@ pub async fn list_models(
     provider::list_models(&client, &rec).await
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn validate_provider(
     state: State<'_, AppState>,
     provider_id: String,

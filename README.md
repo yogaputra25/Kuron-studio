@@ -3,7 +3,7 @@
 > **Tagline:** Desktop workbench untuk provider translate manga/manhwa.  
 > **Stack:** Tauri v2 (Rust) + Vite Frontend + ONNX + BYOK LLM  
 > **Bundle ID:** `id.kuron.studio`  
-> **Status:** Ideation / Pre-MVP — catatan SDD & OpenSpec siap
+> **Status:** MVP selesai (M0–M4 + sebagian besar M5)
 
 ## Apa itu Kuron Studio?
 
@@ -49,15 +49,30 @@ Studio/
 | 6 | Batch | **3 images per translate** (hemat AI), queue 50 halaman, semaphore 3 |
 | 7 | Lisensi | **Boleh share** — prompt/model Kuron boleh eksternal |
 
-## Quick Start (nanti)
+## Install, Build & Run
+
+Prasyarat: [Node.js 22](https://nodejs.org/), [pnpm](https://pnpm.io/installation),
+[Rust stable](https://rustup.rs/) (+ Linux: `libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf`).
 
 ```bash
-# scaffold Tauri (Svelte + Rust — resolved 2026-09-08)
-pnpm create tauri-app@latest kuron-studio --template svelte
 cd kuron-studio
 pnpm install
-pnpm tauri dev
+
+pnpm tauri dev      # dev run (jangan `pnpm dev` — backend tidak ikut jalan)
+pnpm tauri build    # installer .msi / .dmg / .deb
 ```
+
+Gates (wajib hijau semua, sama seperti CI):
+
+```bash
+cd kuron-studio/src-tauri && cargo test && cargo clippy --all-targets -- -D warnings
+cd kuron-studio && pnpm test && pnpm check
+```
+
+Satu test: `cargo test <substring>` (mis. `cargo test --test translate_mock retry`), `pnpm vitest run src/lib/batch.test.ts`.
+
+> Catatan Windows: bila `cargo` tidak ditemukan, awali dengan
+> `export PATH="$HOME/.cargo/bin:$PATH"` (git-bash).
 
 ## Hubungan dengan Kuron App
 
@@ -68,6 +83,6 @@ pnpm tauri dev
 
 ## Next Step
 
-1. Baca `docs/ide.md` → `docs/target.md` → `docs/flow.md`
-2. Review `openspec/changes/kuron-studio-mvp/proposal.md`
-3. Jawab 7 pertanyaan terbuka di proposal, lalu `pnpm create tauri-app`
+1. Baca detail app di `kuron-studio/README.md`
+2. Roadmap & status task: `openspec/changes/kuron-studio-mvp/tasks.md`
+   (sisa terbuka: **M5-5** plugin prompt per genre/provider)

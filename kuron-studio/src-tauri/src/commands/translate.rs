@@ -378,7 +378,7 @@ pub async fn translate_prep(
     Ok(page_t)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn translate_page(
     state: State<'_, AppState>,
     input: TranslatePageInput,
@@ -400,7 +400,7 @@ pub async fn translate_page(
     translate_prep(&state, &prep).await
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn save_translation(
     state: State<'_, AppState>,
     page_id: String,
@@ -428,7 +428,7 @@ pub fn save_translation(
     Ok(page_t)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn clear_cache(state: State<'_, AppState>) -> Result<u64, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     cache::clear_cache(&db)

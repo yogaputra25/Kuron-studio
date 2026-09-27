@@ -77,13 +77,13 @@ pub struct DetectProgress {
     pub total: usize,
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn detect_status(state: State<'_, AppState>) -> Result<DetectStatus, String> {
     Ok(state.detect.status())
 }
 
 /// Detect nyata (ort) bila model ada; tanpa model → Ok([]) seperti dulu.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn detect_bubbles(
     state: State<'_, AppState>,
     page_id: String,
@@ -108,7 +108,7 @@ pub async fn detect_bubbles(
     Ok(cleaned)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub async fn detect_bubbles_batch(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -133,7 +133,7 @@ pub async fn detect_bubbles_batch(
 
 /// Simpan bubble hasil edit canvas + update status page:
 /// >=1 bubble = detected, 0 = noBubbles.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn save_bubbles(
     state: State<'_, AppState>,
     page_id: String,

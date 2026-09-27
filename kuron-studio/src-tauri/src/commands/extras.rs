@@ -6,7 +6,7 @@ use crate::memory::{search_memory, TmHit};
 use crate::qa::{check_project, QaIssue};
 use crate::AppState;
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn tm_search(
     state: State<'_, AppState>,
     query: String,
@@ -15,7 +15,7 @@ pub fn tm_search(
     Ok(search_memory(&state, &query, limit.unwrap_or(10)))
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn qa_check(
     state: State<'_, AppState>,
     project_id: String,
@@ -25,7 +25,7 @@ pub fn qa_check(
 
 /// M5-6: export project (projects.json slice + daftar file gambar) ke zip
 /// untuk share via git/zip. `path` = file zip tujuan.
-#[tauri::command]
+#[tauri::command(rename_all = "snake_case")]
 pub fn share_project(
     state: State<'_, AppState>,
     project_id: String,
