@@ -4,13 +4,16 @@ import type {
   BubbleBox,
   BubbleTranslation,
   DetectStatus,
+  ExportFormat,
   GlossaryEntry,
   ImportResult,
   PageTranslation,
   Project,
   ProviderView,
+  QaIssue,
   RetryBubbleInput,
   SaveProviderInput,
+  TmHit,
   TranslateBatchInput,
   TranslatePageArgs,
   ValidateResult,
@@ -65,7 +68,14 @@ export const api = {
   glossaryContext: (bubble_texts: string[]) =>
     invoke<string | null>("glossary_context", { bubble_texts }),
 
-  // --- M3: export (path = file utk json/cbz, dir utk png) ---
-  exportProject: (project_id: string, format: "json" | "png" | "cbz", path: string) =>
+  // --- M3: export (path = file utk json/cbz, dir utk png/psd) ---
+  exportProject: (project_id: string, format: ExportFormat, path: string) =>
     invoke<string>("export_project", { project_id, format, path }),
+
+  // --- M5: TM + QA + share ---
+  tmSearch: (query: string, limit = 10) =>
+    invoke<TmHit[]>("tm_search", { query, limit }),
+  qaCheck: (project_id: string) => invoke<QaIssue[]>("qa_check", { project_id }),
+  shareProject: (project_id: string, path: string) =>
+    invoke<string>("share_project", { project_id, path }),
 };

@@ -291,7 +291,46 @@ pub fn export_project(
             std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
             Ok(path)
         }
-        other => Err(format!("format unknown: {other} (json|png|cbz)")),
+        // M5-3: PSD layer-per-bubble via psd::render_page_psd.
+        "psd" => {
+            let store = state.store.lock().map_err(|e| e.to_string())?;
+            let proj = store
+                .projects
+                .get(&project_id)
+                .ok_or_else(|| format!("project not found: {project_id}"))?
+                .clone();
+            drop(store);
+            let mut pages = proj.pages;
+            pages.sort_by(|a, b| a.path.cmp(&b.path));
+            std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
+            let mut n = 0;
+            for (i, pg) in pages.iter().enumerate() {
+                let Some(t) = pg.translation.clone() else {
+                    continue;
+                };
+                let page_bytes =
+                    std::fs::read(&pg.path).map_err(|e| format!("read {}: {e}", pg.path))?;
+                let max_idx = t.bubbles.iter().map(|b| b.index).max().unwrap_or(0);
+                let mut shapes: Vec<Option<Vec<[i32; 2]>>> = vec![None; max_idx + 1];
+                for (bi, bb) in pg.bubbles.iter().enumerate() {
+                    if bi < shapes.len() {
+                        shapes[bi] = bb.shape.clone();
+                    }
+                }
+                let psd = crate::psd::render_page_psd(&page_bytes, &t, &shapes)?;
+                std::fs::write(
+                    std::path::Path::new(&path).join(format!("{:03}.psd", i + 1)),
+                    psd,
+                )
+                .map_err(|e| e.to_string())?;
+                n += 1;
+            }
+            if n == 0 {
+                return Err("belum ada halaman terjemahan untuk export".to_string());
+            }
+            Ok(path)
+        }
+        other => Err(format!("format unknown: {other} (json|png|cbz|psd)")),
     }
 }
 

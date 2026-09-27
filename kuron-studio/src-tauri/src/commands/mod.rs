@@ -1,6 +1,7 @@
 pub mod batch;
 pub mod detect;
 pub mod export;
+pub mod extras;
 pub mod glossary;
 pub mod image;
 pub mod project;

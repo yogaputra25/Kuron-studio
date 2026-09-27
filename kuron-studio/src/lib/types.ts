@@ -229,4 +229,22 @@ export interface TranslateProgress {
   message: string;
 }
 
-export type ExportFormat = "json" | "png" | "cbz";
+export type ExportFormat = "json" | "png" | "cbz" | "psd";
+
+// --- M5: TM + QA + share (kontrak Rust, serde rename_all camelCase) ---
+export interface TmHit {
+  projectName: string;
+  pageFile: string;
+  bubbleIndex: number;
+  original: string;
+  translated: string;
+  score: number;
+}
+
+export interface QaIssue {
+  pageFile: string;
+  bubbleIndex: number;
+  /** "untranslated" | "overflow" | "sfxLeak" | "noBubbles" */
+  kind: string;
+  detail: string;
+}

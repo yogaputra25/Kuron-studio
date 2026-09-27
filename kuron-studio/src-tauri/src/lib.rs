@@ -1,5 +1,8 @@
 pub mod bubble;
 pub mod cache;
+pub mod memory;
+pub mod psd;
+pub mod qa;
 pub mod secrets;
 pub mod detect_decode;
 pub mod detector;
@@ -19,6 +22,7 @@ use commands::detect::{
     DetectState, detect_bubbles, detect_bubbles_batch, detect_status, save_bubbles,
 };
 use commands::export::export_project;
+use commands::extras::{qa_check, share_project, tm_search};
 use commands::glossary::{
     glossary_add, glossary_context, glossary_delete, glossary_export_csv, glossary_import_csv,
     glossary_list, glossary_update,
@@ -100,6 +104,9 @@ pub fn run() {
             glossary_export_csv,
             glossary_context,
             export_project,
+            tm_search,
+            qa_check,
+            share_project,
             save_translation,
             clear_cache
         ])
