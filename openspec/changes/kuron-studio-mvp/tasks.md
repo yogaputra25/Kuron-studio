@@ -93,8 +93,8 @@
 - [x] **M4-7** Tauri updater (plugin desktop-only + endpoint GitHub Releases + header ↻ button + signing docs; pubkey placeholder sampai `signer generate`) — 2d — P1
 - [x] **M4-8** CI matrix (pnpm check + clippy --all-targets + tauri build ubuntu/win/macos) — 1d — P1
 - [x] **M4-9** Bundle optimization (bubble.onnx 11.8MB <80MB → tetap bundled, documented) — 1d — P2
-- [ ] **M4-10** E2E test (Playwright/webDriver: import 3 pages → detect → translate mock → export) — 1.5d — P1
-- [ ] **M4-11** Docs polish (README, screenshots, release notes) — 1d — P2
+- [x] **M4-10** E2E test backend-chain (`tests/e2e_flow_mock.rs`: import 3 → detect mock → translate mock → export JSON/PNG/CBZ; Playwright webview deferred — no driver in CI) — 1.5d — P1
+- [x] **M4-11** Docs polish (README quickstart/gates/flow/config/release; screenshots deferred to `docs/`) — 1d — P2
 
 **Exit:** Build `.msi`/`.dmg`/`.deb`, updater jalan, i18n lengkap, CI green.
 
