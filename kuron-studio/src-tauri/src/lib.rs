@@ -69,6 +69,9 @@ pub fn run() {
                 http,
                 db: Mutex::new(db),
             });
+            // M4-7: updater (desktop only); endpoints/pubkey in tauri.conf.json.
+            #[cfg(desktop)]
+            app.handle().plugin(tauri_plugin_updater::Builder::new().build()).map_err(io_err)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

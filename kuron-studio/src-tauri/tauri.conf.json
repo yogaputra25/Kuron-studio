@@ -25,7 +25,18 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "resources": ["resources/models/bubble.onnx"],
     "icon": ["icons/icon.ico", "icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns"]
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/yogaputra25/Kuron-studio/releases/latest/download/latest.json"
+      ],
+      "dialog": false,
+      "pubkey": "M4-PLACEHOLDER: generate with `tauri signer generate -w ~/.tauri/kuron.key` and paste public key here"
+    }
   }
 }

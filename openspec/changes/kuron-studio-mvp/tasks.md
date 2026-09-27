@@ -90,9 +90,9 @@
 - [x] **M4-4** RTL/LTR reading direction + whitePatch heuristic (flat/wide box — done in M2/M3: `order_indices` rtl/ltr + `needs_white_patch` aspect>2.5|area>0.25 + header toggle + overlay) — 1d — P1
 - [x] **M4-5** i18n shell-level (en/id/zh flat keys `src/lib/i18n.ts` + header toggle + vitest coverage; panel strings follow-up) — 2d — P1
 - [x] **M4-6** Theming (light/dark toggle, `data-theme` + Tailwind custom variant, persisted localStorage) — 1d — P2
-- [ ] **M4-7** Tauri updater (tauri-plugin-updater + GitHub Releases) — 2d — P1
-- [ ] **M4-8** CI matrix (cargo test/clippy + pnpm test + tauri build on macOS/Win/Linux) — 1d — P1
-- [ ] **M4-9** Bundle optimization (ONNX on-demand download jika >80MB) — 1d — P2
+- [x] **M4-7** Tauri updater (plugin desktop-only + endpoint GitHub Releases + header ↻ button + signing docs; pubkey placeholder sampai `signer generate`) — 2d — P1
+- [x] **M4-8** CI matrix (pnpm check + clippy --all-targets + tauri build ubuntu/win/macos) — 1d — P1
+- [x] **M4-9** Bundle optimization (bubble.onnx 11.8MB <80MB → tetap bundled, documented) — 1d — P2
 - [ ] **M4-10** E2E test (Playwright/webDriver: import 3 pages → detect → translate mock → export) — 1.5d — P1
 - [ ] **M4-11** Docs polish (README, screenshots, release notes) — 1d — P2
 

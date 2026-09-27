@@ -3,6 +3,7 @@
   import { open } from "@tauri-apps/plugin-dialog";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { api } from "./lib/api";
+  import UpdateButton from "./lib/UpdateButton.svelte";
   import BatchPanel from "./lib/BatchPanel.svelte";
   import EditorPanel from "./lib/EditorPanel.svelte";
   import GlossaryPanel from "./lib/GlossaryPanel.svelte";
@@ -189,6 +190,7 @@
       <button class="rounded bg-zinc-800 px-2 py-1 text-sm hover:bg-zinc-700" onclick={() => theme.update((v: Theme) => (v === "dark" ? "light" : "dark"))} title="Tema gelap/terang">{$theme === "dark" ? "🌙" : "☀️"}</button>
       <button class="rounded bg-zinc-800 px-2 py-1 text-sm hover:bg-zinc-700" onclick={cycleLang} title="Bahasa / Language / 语言">{$lang.toUpperCase()}</button>
       <button class="rounded bg-zinc-800 px-3 py-1 text-sm hover:bg-zinc-700" onclick={() => (showProviders = true)}>{$t("providers")}</button>
+      <UpdateButton />
       <button
         class="rounded bg-zinc-800 px-3 py-1 text-sm hover:bg-zinc-700 disabled:opacity-50"
         onclick={() => (showBatch = true)}
