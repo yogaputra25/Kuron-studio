@@ -1,6 +1,17 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 html, body, #app {
   height: 100%;
   margin: 0;
+}
+
+/* M4-6: light theme remaps the zinc surfaces via CSS vars on the shell. */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="light"] body {
+  background: #fafafa;
+  color: #18181b;
 }

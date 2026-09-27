@@ -9,6 +9,8 @@
   import ProviderSettings from "./lib/ProviderSettings.svelte";
   import ReviewGrid from "./lib/ReviewGrid.svelte";
   import { sortPagesByName, statusBadgeClass } from "./lib/status";
+  import { lang, t, theme } from "./lib/i18n";
+  import type { Lang, Theme } from "./lib/i18n";
   import type { BatchOpts, Page, Project, ReadingDirection } from "./lib/types";
 
   let projects = $state<Project[]>([]);
@@ -46,6 +48,14 @@
       error = `Backend unreachable (jalankan via 'pnpm tauri dev'): ${e}`;
     }
   }
+
+  // M4-6: apply persisted theme before first paint of the shell.
+  $effect(() => {
+    document.documentElement.dataset.theme = $theme;
+  });
+  const cycleLang = () => {
+    lang.update((v: Lang) => (v === "id" ? "en" : v === "en" ? "zh" : "id"));
+  };
 
   async function loadThumbs(projectId: string) {
     const proj = projects.find((p) => p.id === projectId);
@@ -158,7 +168,7 @@
   });
 </script>
 
-<main class="min-h-screen bg-zinc-950 text-zinc-100">
+<main class="min-h-screen bg-zinc-950 text-zinc-100 dark:bg-zinc-950 dark:text-zinc-100" data-theme={$theme}>
   <header class="flex items-center gap-4 border-b border-zinc-800 px-6 py-3">
     <h1 class="text-lg font-bold">Kuron Studio</h1>
     {#if projects.length > 0}
@@ -176,7 +186,9 @@
       <button class="rounded bg-zinc-800 px-2 py-1 text-sm hover:bg-zinc-700" onclick={() => (readingDir = readingDir === "rtl" ? "ltr" : "rtl")} title="Urutan baca chip">
         {readingDir === "rtl" ? "RTL→" : "←LTR"}
       </button>
-      <button class="rounded bg-zinc-800 px-3 py-1 text-sm hover:bg-zinc-700" onclick={() => (showProviders = true)}>Providers</button>
+      <button class="rounded bg-zinc-800 px-2 py-1 text-sm hover:bg-zinc-700" onclick={() => theme.update((v: Theme) => (v === "dark" ? "light" : "dark"))} title="Tema gelap/terang">{$theme === "dark" ? "🌙" : "☀️"}</button>
+      <button class="rounded bg-zinc-800 px-2 py-1 text-sm hover:bg-zinc-700" onclick={cycleLang} title="Bahasa / Language / 语言">{$lang.toUpperCase()}</button>
+      <button class="rounded bg-zinc-800 px-3 py-1 text-sm hover:bg-zinc-700" onclick={() => (showProviders = true)}>{$t("providers")}</button>
       <button
         class="rounded bg-zinc-800 px-3 py-1 text-sm hover:bg-zinc-700 disabled:opacity-50"
         onclick={() => (showBatch = true)}

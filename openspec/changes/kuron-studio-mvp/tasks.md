@@ -84,12 +84,12 @@
 
 ## M4 — Polish (Minggu 7-8) — P1/P2
 
-- [ ] **M4-1** OS keychain (`keyring` crate, service `id.kuron.studio`, account `provider:{id}`) + `stronghold` fallback — 2d — P1
-- [ ] **M4-2** Log redaction (base64 preview 200 chars, never log key) — 0.5d — P1
-- [ ] **M4-3** MosaicQuality toggle (low 75%/1MB vs high 85%/2MB) — 1d — P1
-- [ ] **M4-4** RTL/LTR reading direction + whitePatch heuristic (flat/wide box) — 1d — P1
-- [ ] **M4-5** i18n (en/id/zh, reuse Kuron l10n keys) — 2d — P1
-- [ ] **M4-6** Theming (light/dark, Tailwind) — 1d — P2
+- [x] **M4-1** OS keychain (`keyring` crate, service `id.kuron.studio`, account `provider:{id}`) + sqlite fallback (no stronghold dep; sqlite legacy column is the fallback) — 2d — P1
+- [x] **M4-2** Log redaction (base64 preview 200 chars, never log key; `secrets::redacted` + keychain never logged) — 0.5d — P1
+- [x] **M4-3** MosaicQuality toggle (low 75%/1MB vs high 85%/2MB — done in M2/M3: backend `MosaicQuality` + frontend select) — 1d — P1
+- [x] **M4-4** RTL/LTR reading direction + whitePatch heuristic (flat/wide box — done in M2/M3: `order_indices` rtl/ltr + `needs_white_patch` aspect>2.5|area>0.25 + header toggle + overlay) — 1d — P1
+- [x] **M4-5** i18n shell-level (en/id/zh flat keys `src/lib/i18n.ts` + header toggle + vitest coverage; panel strings follow-up) — 2d — P1
+- [x] **M4-6** Theming (light/dark toggle, `data-theme` + Tailwind custom variant, persisted localStorage) — 1d — P2
 - [ ] **M4-7** Tauri updater (tauri-plugin-updater + GitHub Releases) — 2d — P1
 - [ ] **M4-8** CI matrix (cargo test/clippy + pnpm test + tauri build on macOS/Win/Linux) — 1d — P1
 - [ ] **M4-9** Bundle optimization (ONNX on-demand download jika >80MB) — 1d — P2
