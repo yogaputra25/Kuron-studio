@@ -102,12 +102,12 @@
 
 ## M5 — Post-MVP Backlog — P2/P3
 
-- [ ] **M5-1** TM Search (translation memory, search previous translations) — 1w — P2
-- [ ] **M5-2** QA Checks (untranslated, overflow, SFX leak) — 1w — P2
-- [ ] **M5-3** PSD export (layer per bubble) — 1w — P2
+- [x] **M5-1** TM Search (translation memory, search previous translations) — 1w — P2
+- [x] **M5-2** QA Checks (untranslated, overflow, SFX leak) — 1w — P2
+- [x] **M5-3** PSD export (layer per bubble) — 1w — P2
 - [ ] **M5-4** Auto-typeset (burned-in text rendering) — 2w — P3
 - [ ] **M5-5** Plugin prompt per genre/provider — 1w — P3
-- [ ] **M5-6** Kolaborasi (project share via git/zip) — 1w — P3
+- [x] **M5-6** Kolaborasi (zip share via share_project; git = push repo biasa) — 1w — P3
 
 ---
 
