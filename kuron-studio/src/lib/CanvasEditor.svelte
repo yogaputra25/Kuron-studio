@@ -7,7 +7,7 @@
   import { onMount, onDestroy } from "svelte";
   import Konva from "konva";
   import type { BubbleBox, BubbleTranslation, ReadingDirection, Tool } from "../lib/types";
-  import { chipNumbers, clampBubble } from "../lib/bubble";
+  import { chipNumbers, clampBubble, fitFontSize } from "../lib/bubble";
   import Button from "./ui/Button.svelte";
 
   interface Props {
@@ -30,6 +30,22 @@
   let overlayLayer: Konva.Layer | null = null;
   let bgImage: Konva.Image | null = null;
   let selectedIdx = $state<number | null>(null);
+
+  const OVERLAY_MIN_FS = 7;
+  const OVERLAY_MAX_FS = 28;
+
+  // Font overlay diambil dari token tipografi supaya mengikuti --font-sans;
+  // di-memo karena getComputedStyle tidak murah dan nilainya konstan per sesi.
+  let fontCache = "";
+  function overlayFontFamily(): string {
+    if (!fontCache) {
+      fontCache =
+        (typeof document !== "undefined"
+          ? getComputedStyle(document.documentElement).getPropertyValue("--font-sans").trim()
+          : "") || '"Inter Variable", sans-serif';
+    }
+    return fontCache;
+  }
 
   // Gambar datang belakangan (App fetch async setelah mount) — lacak request
   // terakhir agar load basi tidak menimpa, dan tandai siap/gagal untuk hint.
@@ -179,30 +195,40 @@
           const pad = 4;
           const boxW = Math.max(12, b.w * s - pad * 2);
           const boxH = Math.max(12, b.h * s - pad * 2);
-          // Font diturunkan ke bawah sampai teks benar-benar muat di dalam
-          // bubble: Konva tidak auto-shrink, jadi kita yang mengecilkan sendiri.
-          // Versi lama cuma menebak dari panjang string — teks panjang di
-          // bubble pendek keluar dari kotak dan menutup gambar.
-          let fs = 18;
-          let txt = new Konva.Text({
+
+          // Ukur dengan tinggi OTOMATIS dulu. Konva hanya menghitung tinggi
+          // blok teks lewat getHeight() selama attrs.height belum di-set;
+          // begitu height dikunci, getHeight() mengembalikan tinggi kotak.
+          const txt = new Konva.Text({
             x: pad,
             y: pad,
             width: boxW,
             text: tr.translated,
-            fontSize: fs,
-            fontFamily: "Inter Variable, Inter, sans-serif",
+            fontSize: OVERLAY_MAX_FS,
+            fontFamily: overlayFontFamily(),
             fontStyle: "600",
             lineHeight: 1.25,
             align: "center",
-            verticalAlign: "middle",
             fill: "#fff",
             listening: false,
           });
-          while (fs > 7 && (txt.height() > boxH || txt.width() > boxW * 1.02)) {
-            fs -= 0.5;
-            txt.fontSize(fs);
-            txt.height();
-          }
+
+          // Auto-fit: perbesar-kecilkan sampai teks pas muat. Konva tidak
+          // pernah melakukan ini sendiri.
+          txt.fontSize(
+            fitFontSize(boxH, (fs) => {
+              txt.fontSize(fs);
+              return txt.getHeight();
+            }, { min: OVERLAY_MIN_FS, max: OVERLAY_MAX_FS }),
+          );
+
+          // Kunci tinggi kotak SETELAH ukuran pas. Tanpa baris ini
+          // verticalAlign "middle" adalah no-op: _getTextTop() memakai
+          // getHeight() yang selama auto justru = tinggi teks, jadi ruang
+          // bebas selalu 0 dan teks nempel di tepi atas bubble.
+          txt.height(boxH);
+          txt.verticalAlign("middle");
+
           const bgR = new Konva.Rect({
             x: pad,
             y: pad,
@@ -222,8 +248,16 @@
       group.on("click tap", (e) => {
         e.cancelBubble = true;
         selectedIdx = i;
-        redraw();
-      });
+    redraw();
+    // Canvas tidak digambar ulang saat webfont selesai. Kalau redraw pertama
+    // jalan sebelum Inter siap, teks overlay terukur sekaligus tergambar pakai
+    // font fallback — dan tetap begitu sampai ada perubahan state lain.
+    // Itu sebabnya hasil terjemahan terlihat memakai font yang salah.
+    void document.fonts?.ready.then(() => {
+      fontCache = "";
+      redraw();
+    });
+  });
 
       group.on("dragend", () => {
         const nb = { ...b, x: group.x() / s, y: group.y() / s };

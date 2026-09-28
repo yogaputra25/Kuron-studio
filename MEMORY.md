@@ -1,79 +1,119 @@
-# Kuron Studio — Project Memory
+# MEMORY.md — Kuron Studio
 
-> Catatan lintas sesi. Baca di awal setiap sesi. Update setelah perubahan penting.
+Catatan lintas sesi. Yang sudah ada di kode atau di `AGENTS.md` tidak diulang di
+sini; dokumen ini khusus hal yang **tidak bisa dibaca dari repo**.
 
-## Identity
+---
 
-| Key | Value |
-|-----|-------|
-| **Name** | Kuron Studio |
-| **Tagline** | Manga Translation Workbench |
-| **Bundle ID** | `id.kuron.studio` |
-| **Repo (rencana)** | `kuron-studio` (terpisah dari `nhasixapp`) |
-| **Stack** | Tauri v2 (Rust) + Vite + Svelte/React + ONNX |
-| **Platform** | Desktop: Windows, macOS, Linux (Tauri v2 stable). Mobile: deferred (beta) |
-| **Status** | Ideation — belum scaffold `create-tauri-app` |
-| **Parent** | Kuron App (Flutter, `nhasixapp`) — reuse prompt/model/logic |
+## Identitas
 
-## Decisions Log
+| Kunci | Nilai |
+|---|---|
+| Nama | Kuron Studio |
+| Tagline | Manga Translation Workbench |
+| Bundle ID | `id.kuron.studio` |
+| Stack | Tauri v2 (Rust) + Vite + Svelte 5 + Tailwind 4 + Konva |
+| Platform | Desktop: Windows, macOS, Linux. Mobile ditunda. |
+| Induk | Kuron App (Flutter, repo `nhasixapp`) |
+| Bahasa kerja | Komentar dan commit Bahasa Indonesia, istilah teknis English |
+| Bahasa default UI | Indonesia, dengan terjemahan English dan Mandarin |
 
-| Date | Decision | Rationale |
-|------|----------|-----------|
-| 2026-09-08 | Nama `Kuron Studio` untuk awal | Manfaatkan brand Kuron, mudah rebrand nanti ke Kotoba/PanelForge |
-| 2026-09-08 | Tauri v2 + Rust sebagai source of truth | Reuse `kuron_native/rust` (image_ops, ONNX), performa batch, akses FS native |
-| 2026-09-08 | BYOK + OS keychain | Aman, tidak simpan key plaintext, konsisten dengan Kuron App |
-| 2026-09-08 | Reuse prompt Kuron 1:1 | Konsistensi hasil translate, tidak reinvent prompt |
-| 2026-09-08 | Mosaic + Fallback port 100% Rust | Hilangkan fallback Dart, cap 2MB/1MB + downscale loop |
-| 2026-09-08 | Struktur docs + openspec di `Studio/` | Catatan SDD siap sebelum scaffold, private storage (user pref) |
-| 2026-09-08 | Scope: public (provider + umum) | Jawaban Q1 — app untuk provider dan siapa saja yang mau pakai |
-| 2026-09-08 | Frontend: Svelte + Rust (benci React) | Jawaban Q2 — Svelte ringan, Rust backend, no React |
-| 2026-09-08 | ONNX: `ort` untuk MVP (rekomendasi) | Jawaban Q3 — performa <2s, bundle 50MB OK desktop; `tract` opsi lightweight nanti |
-| 2026-09-08 | Export: JSON (P0) + PNG overlay + CBZ (P1) | Jawaban Q4 — JSON wajib integrasi Kuron, PNG QA, CBZ distribusi; PSD deferred |
-| 2026-09-08 | Glossary: rusqlite local DB | Jawaban Q5 — `glossary.db` local, bukan SharedPreferences JSON |
-| 2026-09-08 | Batch: 3 images per translate | Jawaban Q6 — hemat token/AI, semaphore 3, queue tetap support 50 halaman project |
-| 2026-09-08 | Prompt/model boleh share eksternal | Jawaban Q7 — lisensi OK untuk provider eksternal |
+---
 
-## Kuron App Reuse Map
+## Keputusan produk
 
-| Kuron (Flutter/Dart) | Kuron Studio (Rust) | Catatan |
-|----------------------|---------------------|---------|
-| `MosaicBuilder.buildMosaic` | `image-ops::build_mosaic` | Crop 20% pad, 2x scale, label merah, JPEG 85/75, cap 2MB/1MB |
-| `FallbackImageHandler.compressPage` | `image-ops::compress_page` | 1280px longest, JPEG85 |
-| `image_ops_chunk_webtoon` | `image-ops::chunk_webtoon` | Long-strip split |
-| `BubbleBox` | `onnx-detect::BubbleBox` | x,y,w,h, confidence, shape, kind, tail |
-| `openai_compatible_provider.dart` | `provider::openai_compatible` | Prompt mosaic/full, sfxRule, glossary append |
-| `gemini_translation_provider.dart` | `provider::gemini` | Google REST |
-| `cohere_translation_provider.dart` | `provider::cohere` | /v2/chat |
-| `AiProviderType` + `AiProviderConfig` | `provider::config` | 9 types, defaultBaseUrl, modelsUrl |
-| `TranslationStyle` (7) | `prompt::style` | natural/genz/action/romantis/formal/kasar/literal |
-| `PageTranslation` / `BubbleTranslation` | `model::translation` | rect, original, reading, translated, shape |
-| `GlossaryEntry` | `glossary::entry` | sourceText, translatedText, reading |
-| `TranslationCacheRepository` | `cache::sqlite` | key = hash(image+bubbles+lang+style) |
+Semua ketetapan ini sudah final. Kalau ada yang battled, jawab dengan
+pertanyaan, jangan dengan implementasi.
 
-## Open Questions — RESOLVED 2026-09-08
+| Tanggal | Keputusan | Alasan |
+|---|---|---|
+| 2026-09-08 | Nama `Kuron Studio` | Manfaatkan brand Kuron, mudah rebrand ke Kotoba atau PanelForge |
+| 2026-09-08 | Scope publik | Untuk provider dan siapa saja yang mau memakai |
+| 2026-09-08 | Svelte, bukan React | Preferensi eksplisit pemilik proyek. Bukan karena React buruk secara teknis. |
+| 2026-09-08 | Rust sebagai sumber kebenaran | Reuse `kuron_native/rust`, performa batch, akses file native |
+| 2026-09-08 | BYOK plus OS keychain | Tidak menyimpan kunci dalam bentuk plaintext |
+| 2026-09-08 | Reuse prompt Kuron 1:1 | Konsistensi hasil terjemahan, tidak membuat ulang |
+| 2026-09-08 | 3 gambar per permintaan translate | Menghemat token, semaphore 3, antrean tetap bisa 50 halaman |
+| 2026-09-08 | Glossary di SQLite lokal | `glossary.db`, bukan SharedPreferences JSON |
+| 2026-09-08 | Ekspor: JSON dulu, PNG dan CBZ menyusul, PSD ditunda | JSON wajib untuk integrasi Kuron App |
+| 2026-09-08 | ONNX runtime `ort` | Di bawah 2 detik per halaman, bundel sekitar 12MB sudah cukup |
+| 2026-09-08 | Prompt dan model boleh dibagikan keluar | Lisensi tidak masalah untuk provider eksternal |
 
-| # | Pertanyaan | Jawaban | Status |
-|---|------------|---------|--------|
-| 1 | Scope provider | Public — untuk provider + siapa saja yang mau pakai app | ✅ |
-| 2 | Frontend | Svelte + Rust (benci React) — SvelteKit + Tauri Rust backend | ✅ |
-| 3 | ONNX runtime | `ort` untuk MVP (rekomendasi, lihat bawah) | ✅ |
-| 4 | Export format | JSON (P0) + PNG overlay + CBZ (P1), PSD deferred (rekomendasi) | ✅ |
-| 5 | Glossary | DB local — `rusqlite` `glossary.db` | ✅ |
-| 6 | Batch size | 3 images per translate (hemat AI), project tetap support 50 halaman queue | ✅ |
-| 7 | Lisensi prompt/model | Boleh share ke eksternal | ✅ |
+---
 
-**Rekomendasi Q3 — ONNX runtime:**
-- **MVP: `ort` (ONNX Runtime)** — performa <2s/1080p, model Kuron sudah ONNX Runtime, bundle ~50MB OK untuk desktop. `tract` (pure Rust) lebih kecil (~5MB) tapi ~2x lebih lambat dan perlu konversi model — cocok sebagai opsi lightweight nanti (M4 bundle optimization).
+## Peta reuse dari Kuron App
 
-**Rekomendasi Q4 — Export:**
-- **P0 JSON** — wajib untuk integrasi Kuron App (`PageTranslation` per page)
-- **P1 PNG overlay + CBZ** — PNG burned-in untuk QA, CBZ (zip PNGs) untuk distribusi chapter
-- **P2 PSD** — layer per bubble untuk editor profesional, deferred post-MVP
+ Dipetakan ulang: logika di Flutter yang harus punya pasangan Rust. Kalau salah
+satu berubah di sisi Flutter, sisi Rust ikut berubah.
 
-## Next Actions
+| Kuron App (Flutter/Dart) | Kuron Studio (Rust) | Yang harus sama |
+|---|---|---|
+| `MosaicBuilder.buildMosaic` | `image_ops::build_mosaic` | Crop padding 20%, skala 2x, label merah, JPEG 85/75, plafon 2MB/1MB |
+| `FallbackImageHandler.compressPage` | `image_ops::compress_page` | Sisi terpanjang 1280px, JPEG 85 |
+| `image_ops_chunk_webtoon` | `image_ops::chunk_webtoon` | Pemotongan strip panjang |
+| `BubbleBox` | `detector.rs` | x, y, w, h, confidence, shape, kind, tail |
+| `openai_compatible_provider.dart` | `provider/openai.rs` | Prompt mosaic dan full, aturan SFX, append glossary |
+| `gemini_translation_provider.dart` | `provider/gemini.rs` | REST Google |
+| `cohere_translation_provider.dart` | `provider/cohere.rs` | Endpoint `/v2/chat` |
+| `AiProviderType` dan `AiProviderConfig` | `provider/config.rs` | 9 tipe, base URL bawaan, URL model |
+| `TranslationStyle` | `prompt.rs` | 7 gaya: natural, genz, action, romantis, formal, kasar, literal |
+| `PageTranslation` dan `BubbleTranslation` | `translation.rs` | rect, original, reading, translated, shape |
+| `GlossaryEntry` | `glossary.rs` | sourceText, translatedText, reading |
+| `TranslationCacheRepository` | `cache.rs` | Kunci = hash(gambar + bubble + bahasa + gaya) |
 
-- [x] Jawab 7 pertanyaan — resolved 2026-09-08
-- [ ] `pnpm create tauri-app kuron-studio --template svelte`
-- [ ] Port `image-ops` crate dari `kuron_native/rust`
-- [ ] Bundle ONNX model `bubble.onnx` ke `src-tauri/resources/models/` (ort)
-- [ ] Implement `detect_bubbles` command + canvas editor (Konva, Svelte)
+Format glossary dan cache sengaja kompatibel dengan JSON Kuron App supaya
+bisa dimigrasi.
+
+---
+
+## Jebakan yang sudah pernah menguras waktu
+
+Hal-hal yang memakan biaya sekali saja. Tetap berlaku kecuali ada test yang
+menjaganya.
+
+- **`pnpm dev` menyesatkan.** Hanya antarmuka, tanpa backend Rust. Semua
+  tombol yang memanggil `invoke` akan gagal. Selalu `pnpm tauri dev`.
+- **`keyring` macOS gagal tanpa gelembung.** Tanpa feature `apple-native`,
+  crate memakai credential store `mock`: `set_password` mengembalikan Ok tanpa
+  error, lalu API key hilang tiap restart aplikasi. Gejalanya tidak menunjuk
+  ke penyebabnya. Feature itu dikunci di `Cargo.toml`, test
+  `keychain_backend_is_real` menjaganya.
+- **Bundel dev yang basi.** Gejalanya: perubahan `CanvasEditor.svelte` atau
+  `bubble.ts` tidak muncul padahal sudah disimpan. `pnpm dev:fresh` menghapus
+  cache Vite. `--nuke` juga mereset profil WebView2, tapi data proyek tetap
+  aman.
+- **Pratinjau gambar besar bisa menggantung.** Gambar penuh di-decode di
+  tempat. Pratinjau memakai `get_image_preview` dengan batas sisi, dan
+  thumbnail 512px untuk grid.
+- **Kontrak Rust dan TypeScript terpisah.** Nama command dan nama argumen
+  hidup di dua file berbeda. Test `invoke-contract.test.ts` dan
+  `image-ext-contract.test.ts` menjaga agar tidak menyimpang. Mengganti nama
+  di satu sisi saja sudah cukup untuk membuat semuanya gagal.
+
+---
+
+## Status per 2026-09-29
+
+- M0 sampai M4 selesai.
+- M5 sebagian. Yang masih terbuka ada di
+  `openspec/changes/kuron-studio-mvp/tasks.md` (M5-5: plugin prompt per genre,
+  dan batch size yang bisa dipilih).
+- Empat perubahan aktif masih menunggu verifikasi manual, semuanya terkait
+  alur import dan editor kanvas:
+  `fix-import-pages-project-id`, `fix-preview-hang`,
+  `fix-editor-blank-canvas`, `manual-text-before-after`. Daftar tasknya ada di
+  masing-masing `tasks.md`.
+
+---
+
+## Cara kerja yang terbukti
+
+- **Gate dulu, baru bilang selesai.** Gate ada di `AGENTS.md` bagian 2. Klaim
+  selesai tanpa menjalankan gate tidak sah.
+- **Kontrak lebih penting dari implementasi.** Test yang menjaga nama command,
+  kunci i18n, dan token warna mencegah lebih banyak regresi daripada test
+  logika.
+- **Pemangkasan sadar ditulis.** Komentar `ponytail:` menandai tempat yang
+  sengaja dibiarkan sederhana beserta plafonnya, supaya tidak diam-diam
+  menyesatkan nanti.
+- **Spesifikasi mendahului kode.** Perubahan besar mulai dari `/opsx:propose`.

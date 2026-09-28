@@ -1,88 +1,148 @@
-# Kuron Studio — Manga Translation Workbench
+# Kuron Studio
 
-> **Tagline:** Desktop workbench untuk provider translate manga/manhwa.  
-> **Stack:** Tauri v2 (Rust) + Vite Frontend + ONNX + BYOK LLM  
-> **Bundle ID:** `id.kuron.studio`  
-> **Status:** MVP selesai (M0–M4 + sebagian besar M5)
+**App desktop untuk penerjemah (translator) manga dan manhwa.**
 
-## Apa itu Kuron Studio?
+Import sejumlah halaman, aplikasi mencari balon speech secara otomatis, Anda edit, lalu kirim ke AI untuk diterjemahkan, lalu ekspor hasilnya jadi file siap pakai.
 
-Kuron Studio adalah app desktop terpisah dari Kuron App (Flutter) yang membantu **provider / tim translate** mengerjakan manga/manhwa secara batch:
+Dibuat dengan **Tauri v2 (Rust)**, antarmuka **Svelte 5**. Semua proses jalan di komputer sendiri. Kunci API disimpan di *keychain* sistem, tidak ada server di tengah.
 
-- Import puluhan halaman → deteksi bubble otomatis (ONNX on-device)
-- Edit bubble di canvas (rect/ellipse/freeform + tail)
-- Translate via BYOK vision LLM (OpenAI-compatible, Gemini, Cohere)
-- Post-edit per-bubble + glossary + export
+- **Bundle ID:** `id.kuron.studio`
+- **Platform:** Windows, macOS, Linux
+- **Status:** MVP berjalan. Fase M0 sampai M4 selesai, M5 sebagian.
 
-**Bukan:** reader, scraper, atau hosting model. Fokus ke **tooling provider**.
+> English summary: a desktop workbench for manga and manhwa translation teams.
+> Import pages, auto-detect speech bubbles on-device, translate using your own
+> AI provider key, export to JSON, PNG, CBZ, or PSD. Not a reader, not a scraper.
 
-## Struktur Folder
+---
 
-```
-Studio/
-├── README.md              # overview ini
-├── MEMORY.md              # project memory (konteks lintas sesi)
-├── docs/
-│   ├── ide.md             # ide & problem/solution
-│   ├── target.md          # target MVP & success criteria
-│   ├── roadmap.md         # phased roadmap 0-5
-│   ├── tech-stack.md      # stack & crate pilihan
-│   └── flow.md            # flow + mermaid diagrams
-└── openspec/
-    ├── config.yaml        # OpenSpec config
-    ├── specs/kuron-studio/spec.md
-    └── changes/kuron-studio-mvp/
-        ├── proposal.md
-        ├── design.md
-        └── tasks.md
-```
+## Isinya apa saja?
 
-## Keputusan — RESOLVED 2026-09-08
+| Fitur | Penjelasan singkat |
+|---|---|
+| **Import batch** | Pilih satu folder berisi puluhan halaman. Format JPG, PNG, WebP, diurutkan nama file. |
+| **Deteksi bubble** | Model ONNX jalan di komputer Anda sendiri, tidak dikirim ke internet. Di bawah 2 detik per halaman. |
+| **Editor bubble** | Geser, ubah ukuran, ubah bentuk (persegi, oval, bebas), gambar *tail* arah dialog. |
+| **Terjemahkan** | 9 provider AI (OpenAI, Gemini, Cohere, OpenRouter, dan lainnya). Kunci API Anda sendiri (*BYOK*). |
+| **Glossary** | Daftar istilah tetap untuk nama karakter dan singkatan. Konsisten di semua chapter. |
+| **Batch dan review** | Terjemahkan banyak halaman sekaligus. Satu halaman gagal tidak menggagalkan yang lain. |
+| **Ekspor** | JSON (untuk integrasi app lain), PNG dengan teks tertanam, CBZ (zip), PSD (layer per bubble). |
 
-| # | Pertanyaan | Jawaban |
-|---|------------|---------|
-| 1 | Scope | Public — provider + umum |
-| 2 | Frontend | **Svelte + Rust** (benci React) |
-| 3 | ONNX | **`ort` untuk MVP** — <2s, bundle 50MB OK; `tract` opsi lightweight M4 |
-| 4 | Export | **JSON (P0) + PNG overlay + CBZ (P1)**, PSD deferred |
-| 5 | Glossary | **DB local** — `rusqlite` `glossary.db` |
-| 6 | Batch | **3 images per translate** (hemat AI), queue 50 halaman, semaphore 3 |
-| 7 | Lisensi | **Boleh share** — prompt/model Kuron boleh eksternal |
+**Bukan** aplikasi baca manga, bukan scraper, bukan hosting model. Fokusnya **peralatan kerja translator**.
 
-## Install, Build & Run
+---
 
-Prasyarat: [Node.js 22](https://nodejs.org/), [pnpm](https://pnpm.io/installation),
-[Rust stable](https://rustup.rs/) (+ Linux: `libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf`).
+## Cara menjalankan
+
+### Yang perlu dipasang lebih dulu
+
+| Perlu | Versi | Link |
+|---|---|---|
+| Node.js | 22 | <https://nodejs.org/> |
+| pnpm | terbaru | <https://pnpm.io/installation> |
+| Rust | stable | <https://rustup.rs/> |
+
+Linux saja perlu paket sistem tambahan:
+`libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf`
+
+### Jalankan
 
 ```bash
 cd kuron-studio
 pnpm install
 
-pnpm tauri dev      # dev run (jangan `pnpm dev` — backend tidak ikut jalan)
-pnpm tauri build    # installer .msi / .dmg / .deb
+pnpm tauri dev      # mode pengembangan
 ```
 
-Gates (wajib hijau semua, sama seperti CI):
+> **Penting:** pakai `pnpm tauri dev`, **bukan** `pnpm dev`.
+> `pnpm dev` hanya menyalakan antarmuka tanpa backend Rust, jadi tombol-tombol
+> yang memanggil backend akan gagal.
+
+Kalau hasilnya terasa aneh karena bundel lama masih tersimpan, bersihkan dulu:
 
 ```bash
-cd kuron-studio/src-tauri && cargo test && cargo clippy --all-targets -- -D warnings
-cd kuron-studio && pnpm test && pnpm check
+pnpm dev:fresh        # atau: pnpm tauri dev -- --nuke
 ```
 
-Satu test: `cargo test <substring>` (mis. `cargo test --test translate_mock retry`), `pnpm vitest run src/lib/batch.test.ts`.
+### Bikin installer
 
-> Catatan Windows: bila `cargo` tidak ditemukan, awali dengan
-> `export PATH="$HOME/.cargo/bin:$PATH"` (git-bash).
+```bash
+pnpm tauri build      # menghasilkan .msi, .dmg, atau .deb
+```
 
-## Hubungan dengan Kuron App
+Detail konfigurasi, catatan rilis, dan alur kerja aplikasi ada di
+[`kuron-studio/README.md`](kuron-studio/README.md).
 
-- Reuse prompt & mapping Kuron 1:1 (`openai_compatible_provider.dart` → Rust `prompt` crate)
-- Reuse ONNX model bubble detection (`kuron_native/rust`)
-- Reuse `MosaicBuilder` / `FallbackImageHandler` logic (port ke Rust 100%)
-- Glossary & cache format kompatibel (JSON) untuk migrasi
+---
 
-## Next Step
+## Sebelum push
 
-1. Baca detail app di `kuron-studio/README.md`
-2. Roadmap & status task: `openspec/changes/kuron-studio-mvp/tasks.md`
-   (sisa terbuka: **M5-5** plugin prompt per genre/provider)
+Semua perintah ini **wajib hijau**, sama persis dengan yang dicek CI:
+
+```bash
+cd kuron-studio/src-tauri
+cargo test && cargo clippy --all-targets -- -D warnings
+
+cd ../..
+pnpm test && pnpm check
+```
+
+Cara menjalankan satu test saja:
+
+```bash
+cd kuron-studio/src-tauri && cargo test translate_mock       # backend
+cd kuron-studio && pnpm vitest run src/lib/batch.test.ts      # frontend
+```
+
+---
+
+## Struktur folder
+
+```
+Kuron-studio/
+├── README.md            # dokumen ini
+├── AGENTS.md            # aturan kerja untuk AI assistant
+├── MEMORY.md            # catatan lintas sesi
+├── kuron-studio/        # kodenya (antarmuka + backend)
+├── openspec/            # spesifikasi dan rencana kerja
+└── design/              # file desain
+```
+
+Dua folder yang paling sering dibuka:
+
+- **`kuron-studio/src/`** — antarmuka Svelte, token warna, teks multibahasa.
+- **`kuron-studio/src-tauri/src/`** — logika Rust: deteksi bubble, penerjemah, ekspor.
+
+Kunci API dan data proyek disimpan di folder data aplikasi pada sistem
+operasional, **tidak pernah** di dalam repo.
+
+---
+
+## Untuk developer dan AI assistant
+
+Baca [`AGENTS.md`](AGENTS.md) sebelum mengubah kode. Isinya:
+
+- perintah mana yang wajib dijalankan setelah perubahan apa,
+- logika harus ditaruh di frontend atau backend,
+- skill **`taste`** — aturan agar hasil desain dan UI tidak terlihat seperti
+  keluaran generator AI (gradient, emoji sebagai ikon, tombol generik, dan
+  sejenisnya).
+
+Spesifikasi perubahan kerja ada di `openspec/`, dibaca dan ditulis lewat
+perintah `/opsx:*`.
+
+---
+
+## Melaporkan bug dan meminta fitur
+
+Lewat GitHub Issues, pakai template yang sudah disiapkan:
+
+- **[Laporkan bug](.github/ISSUE_TEMPLATE/bug_report.yml)** — isi template, lampirkan screenshot, tulis langkah reproduksi.
+- **[Minta fitur](.github/ISSUE_TEMPLATE/feature_request.yml)** — jelaskan masalah yang Anda hadapi, bukan hanya solusi yang ada di kepala Anda.
+
+Template GitHub bisa diisi langsung lewat browser, jadi tidak perlu menyunting file.
+
+## Kontribusi
+
+Silakan fork dan kirim pull request. Jalankan gate di atas sebelum membuka PR.
+Lisensi belum ditetapkan.

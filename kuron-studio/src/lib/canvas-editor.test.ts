@@ -174,3 +174,59 @@ describe("manual draw tools never throw (regression)", () => {
     expect(fn).toContain("Math.min(Math.max(tipOriginal[0], 0), imgW)");
   });
 });
+
+// Overlay terjemahan: dua bug yang pernah bikin teks salah posisi + font salah
+// ukuran, keduanya dari salah baca API Konva. Dijaga secara statis karena
+// mount komponen butuh canvas sungguhan.
+//
+//  1. Posisi — `verticalAlign: "middle"` hanya bekerja bila TINGGI kotak
+//     dikunci eksplisit. `_getTextTop()` memakai getHeight(); selama height
+//     auto, getHeight() justru mengembalikan tinggi TEKS, jadi ruang bebas
+//     selalu 0 dan teks nempel di tepi atas bubble.
+//
+//  2. Font — loop auto-shrink memakai `txt.height()`, yaitu getter Node yang
+//     mengembalikan 0 selama height belum di-set. `0 > boxH` selalu false,
+//     loop tidak pernah jalan, ukuran font beku di nilai awal untuk semua
+//     bubble. Yang benar: `getHeight()`.
+describe("overlay terjemahan: posisi & ukuran font", () => {
+  const overlay = src.slice(src.indexOf("if (showTranslation) {"));
+
+  it("mengunci tinggi kotak supaya verticalAlign middle berfungsi", () => {
+    expect(
+      overlay,
+      "tanpa txt.height(boxH), teks menempel di atas bubble",
+    ).toMatch(/txt\.height\(boxH\)/);
+    expect(overlay).toMatch(/verticalAlign\("middle"\)/);
+  });
+
+  it("mengukur pakai getHeight(), bukan height()", () => {
+    expect(
+      overlay,
+      "height() = 0 selama height belum di-set → loop shrink mati",
+    ).toContain("return txt.getHeight();");
+    expect(
+      overlay,
+      "jangan kembali ke txt.height() sebagai ukuran tinggi blok",
+    ).not.toMatch(/txt\.height\(\)\s*[<>]/);
+  });
+
+  it("font size lewat fitFontSize, bukan nilai beku", () => {
+    expect(overlay).toContain("fitFontSize(");
+    expect(overlay, "font size hard-coded 18 = bug lama").not.toMatch(/fontSize:\s*18\b/);
+  });
+
+  it("font family diambil dari token --font-sans", () => {
+    expect(overlay).toContain("overlayFontFamily()");
+    expect(src).toContain('getPropertyValue("--font-sans")');
+  });
+
+  it("redraw ulang setelah webfont siap", () => {
+    // Canvas tidak digambar ulang otomatis saat font selesai dimuat.
+    expect(
+      src,
+      "tanpa gates document.fonts, teks pertama menempel di font fallback",
+    ).toMatch(/document\.fonts\?\.ready/);
+    const gate = src.slice(src.indexOf("document.fonts?.ready"));
+    expect(gate.slice(0, 200)).toContain("redraw();");
+  });
+});

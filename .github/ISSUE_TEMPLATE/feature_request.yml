@@ -1,0 +1,83 @@
+name: Permintaan Fitur
+description: Usahakan sesuatu yang belum ada, atau sederhanakan cara kerja yang sekarang ribet.
+title: "[Feat] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Yang paling membantu di sini adalah **masalahnya**, bukan solusinya.
+        Kami lebih mudah menentukan cara yang tepat kalau tahu pekerjaan apa
+        yang jadi menghambat.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Masalah apa yang Anda hadapi?
+      description: |
+        Situasi nyata ketika fitur ini akan dipakai. Kalau sekarang Anda
+        mencari-cari atau menghubungi orang lain, ceritakan cara kerjanya.
+      placeholder: |
+        Setiap habis menerjemahkan chapter panjang saya harus buka file teks
+        terpisah untuk mencari nama karakter, karena glossary hanya dipakai
+        otomatis dan tidak bisa saya pakai saat post-edit.
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-workaround
+    attributes:
+      label: Bagaimana Anda mengatasi itu sekarang?
+      description: Kalau masih ada cara lain yang Anda pakai, tuliskan. Kadang cara itu justru jadi fitur terbaik.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Usulan Anda (opsional)
+      description: |
+        Bentuk yang Anda bayangkan, dan kenapa Anda rasa ini yang benar.
+        Boleh singkat, boleh juga kosong kalau belum ada bayangan.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Bagian mana yang terdampak?
+      options:
+        - Detect bubble
+        - Editor bubble
+        - Terjemahkan
+        - Glossary
+        - Batch dan review
+        - Ekspor
+        - Import halaman
+        - Provider dan pengaturan
+        - Tampilan, tema, atau bahasa
+        - Seluruh aplikasi
+    validations:
+      required: true
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: Seberapa sering Anda butuh ini?
+      description: Membantu kami menyusun antrean pengerjaan.
+      options:
+        - Setiap chapter, jadi penghalang besar
+        - Beberapa kali sebulan
+        - Jarang, tapi akan sangat membantu kalau ada
+        - Baru kepikiran sekali saja
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: context
+    attributes:
+      label: Konteks tambahan
+      options:
+        - label: Sudah pernah melihat fitur serupa di tool lain
+        - label: Pernah request ini lewat issue sebelumnya
+        - label: Ini untuk penggunaan tim, bukan pribadi
