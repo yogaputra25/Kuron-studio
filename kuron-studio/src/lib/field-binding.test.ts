@@ -5,10 +5,14 @@ import { describe, expect, it } from "vitest";
 
 const SRC = fileURLToPath(new URL("..", import.meta.url));
 
-// Regresi: `Field` menerima `value = $bindable()` tapi TIDAK meneruskanya ke
-// <input>. Destructure membuangnya dari `...rest`, jadi input jadi uncontrolled:
-// ketikan user TERLIHAT di layar tapi state parent tetap "" — persis gejala
-// "Nama wajib diisi." padahal field berisi teks.
+// Regresi: `Field` menerima `value = $bindable()` tapi tidak mengikatnya dua
+// arah ke <input>. Dua kegagalan yang pernah terjadi, dua-duanya bikin input
+// "uncontrolled" — ketikan TERLIHAT di layar tapi state parent tetap "":
+//   1. tidak menulis apa-apa sama sekali;
+//   2. menulis `{value}` — satu arah, compiler menghasilkan set_value tanpa
+//      bind_value. Gejalanya persis: "Nama wajib diisi." walau field terisi.
+//
+// Test ini memastikan `bind:value`; bukti runtime ada di field-roundtrip.test.ts.
 
 describe("ui/Field meneruskan value ke input (controlled)", () => {
   const field = readFileSync(join(SRC, "lib/ui/Field.svelte"), "utf8");
@@ -17,37 +21,38 @@ describe("ui/Field meneruskan value ke input (controlled)", () => {
     expect(field).toMatch(/value = \$bindable\(\)/);
   });
 
-  it("MENULISKAN {value} ke <input>", () => {
-    // Wajib ada di dalam tag <input>, bukan cuma di baris props.
+  it("mengikat bind:value di <input> (dua arah)", () => {
+    // Wajib bind, bukan `{value}` — yang terakhir cuma one-way dan tidak
+    // pernah mengembalikan ketikan user ke $state.
     const inputTag = field.slice(field.indexOf("<input"));
     expect(
       inputTag.slice(0, 400),
-      "value tidak diteruskan ke input — field jadi uncontrolled",
-    ).toMatch(/\{\s*value\s*\}/);
+      "value tidak terikat dua arah — field jadi uncontrolled",
+    ).toMatch(/bind:value/);
   });
 
-  it("{value} ditulis SETELAH {...rest} agar tidak ditimpa", () => {
+  it("bind:value ditulis SETELAH {...rest} agar tidak ditimpa", () => {
     // PENTING: `indexOf(">")` di SELURUH file akan menemukan `>` dari tag
     // <label> yang muncul lebih dulu — slice jadi kosong. Ambil `>` relatif
     // terhadap posisi <input.
     const from = field.indexOf("<input");
     const inputTag = field.slice(from, field.indexOf("/>", from) + 2);
     const restAt = inputTag.indexOf("{...rest}");
-    const valueAt = inputTag.indexOf("{value}");
+    const valueAt = inputTag.indexOf("bind:value");
     expect(restAt).toBeGreaterThan(-1);
-    expect(valueAt, "{value} harus ada").toBeGreaterThan(-1);
+    expect(valueAt, "bind:value harus ada").toBeGreaterThan(-1);
     expect(
       valueAt,
-      "{value} harus setelah {...rest} — kalau sebelum, rest bisa menimpanya",
+      "bind:value harus setelah {...rest} — kalau sebelum, rest bisa menimpanya",
     ).toBeGreaterThan(restAt);
   });
 });
 
 describe("primitif lain juga meneruskan value", () => {
-  it("ui/Select meneruskan {value} ke <select>", () => {
+  it("ui/Select mengikat bind:value di <select>", () => {
     const sel = readFileSync(join(SRC, "lib/ui/Select.svelte"), "utf8");
     const tag = sel.slice(sel.indexOf("<select"));
-    expect(tag.slice(0, 400)).toMatch(/\{\s*value\s*\}/);
+    expect(tag.slice(0, 400)).toMatch(/bind:value/);
   });
 });
 
@@ -60,8 +65,8 @@ describe("tidak ada primitif yang menerima bindable tapi membuangnya", () => {
     for (const [, name] of src.matchAll(/(\w+) = \$bindable\(\)/g)) {
       expect(
         src,
-        `${f}: menerima ${name} = $bindable() tapi tidak menulis {${name}} di markup`,
-      ).toMatch(new RegExp(`\\{\\s*${name}\\s*\\}`));
+        `${f}: menerima ${name} = $bindable() tapi tidak bind:${name} di markup`,
+      ).toContain(`bind:${name}`);
     }
   });
 });

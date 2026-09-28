@@ -39,7 +39,7 @@
   {/if}
   <select
     {...rest}
-    {value}
+    bind:value
     id={selectId}
     aria-invalid={error ? "true" : undefined}
     aria-describedby={describedBy}

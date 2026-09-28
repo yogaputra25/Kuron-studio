@@ -27,7 +27,7 @@
   {/if}
   <input
     {...rest}
-    {value}
+    bind:value
     id={inputId}
     aria-invalid={error ? "true" : undefined}
     aria-describedby={describedBy}
