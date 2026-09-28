@@ -21,12 +21,15 @@ const EXPECTED: Record<string, string[]> = {
   create_project: ["name"],
   get_project: ["project_id"],
   import_pages: ["project_id", "paths"],
+  clean_pages: ["project_id"],
+  delete_project: ["project_id"],
   get_image_preview: ["path", "max_side"],
   detect_status: [],
   detect_bubbles: ["page_id"],
   detect_bubbles_batch: ["page_ids"],
   save_bubbles: ["page_id", "bubbles"],
   list_models: ["provider_id"],
+  list_models_draft: ["provider_type", "base_url", "api_key"],
   validate_provider: ["provider_id"],
   save_provider: ["input"],
   get_providers: [],
@@ -47,6 +50,8 @@ const EXPECTED: Record<string, string[]> = {
   tm_search: ["query", "limit"],
   qa_check: ["project_id"],
   share_project: ["project_id", "path"],
+  diagnostics: [],
+  read_log: ["lines"],
 };
 
 // Every frontend source as raw text (this file excluded via `!` pattern).
@@ -91,14 +96,23 @@ describe("invoke contract (top-level keys match Rust params)", () => {
   });
 
   it("no direct Tauri invoke outside the api.ts bridge", () => {
+    // `log.ts` adalah bridge yang sah — dial wraps `invoke` untuk logging,
+    // dan api.ts mengimpor `call` darinya, bukan langsung dari Tauri.
+    const ALLOWED = new Set(["./log.ts"]);
     const bad = Object.entries(SOURCES)
-      .filter(([, src]) =>
-        /from\s+["']@tauri-apps\/api\/core["']/.test(src),
+      .filter(([path, src]) =>
+        !ALLOWED.has(path) && /from\s+["']@tauri-apps\/api\/core["']/.test(src),
       )
       .map(([path]) => path);
     expect(
       bad,
       `direct Tauri invoke outside lib/api.ts: ${bad.join(", ")}`,
     ).toEqual([]);
+  });
+
+  it("api.ts tidak mengimpor invoke langsung dari Tauri", () => {
+    expect(apiSrc, "api.ts harus lewat log.call, bukan @tauri-apps/api/core").not.toMatch(
+      /from\s+["']@tauri-apps\/api\/core["']/,
+    );
   });
 });

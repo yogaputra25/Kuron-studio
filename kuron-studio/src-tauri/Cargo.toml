@@ -34,7 +34,12 @@ ndarray = "0.17"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-manual-roots"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 sha2 = "0.10"
-keyring = "3"
+# PENTING: tanpa feature "apple-native", crate keyring otomatis memakai
+# credential store `mock` di macOS — TIDAK ada persistensi, dan `security
+# find-generic-password` tidak pernah menemukan apa pun. Gejalanya deceptive:
+# set_password() tetap Ok, jadi tidak ada error sama sekali, tapi API key hilang
+# tiap restart app. Test `keychain_backend_is_real` menjaga ini.
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "linux-native"] }
 # ponytail: tokio hanya untuk sleep retry 429 + #[tokio::test]; runtime utama milik tauri.
 # ponytail: manual-roots tanpa bundled roots (MSVC-safe, tanpa OpenSSL); bila HTTPS gagal verify, tambah "rustls-tls-webpki-roots".
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }

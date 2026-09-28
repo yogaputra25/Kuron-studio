@@ -8,6 +8,7 @@
   import Konva from "konva";
   import type { BubbleBox, BubbleTranslation, ReadingDirection, Tool } from "../lib/types";
   import { chipNumbers, clampBubble } from "../lib/bubble";
+  import Button from "./ui/Button.svelte";
 
   interface Props {
     imageUrl: string;
@@ -73,9 +74,30 @@
     return w / Math.max(1, imgW);
   };
 
+  /**
+   * Konva menggambar ke <canvas>, bukan DOM — dia tidak bisa pakai class
+   * Tailwind, jadi warna harus dibaca dari CSS var yang sama dengan token
+   * app.css. Dibaca per redraw supaya ganti tema ikut: menukar tema hanya
+   * menukar nilai var, bukan hex yang di-hardcode di sini.
+   */
+  const paint = (): { accent: string; cyan: string; accentRgba: string; cyanRgba: string } => {
+    const cs = getComputedStyle(holder ?? document.body);
+    const v = (n: string, fallback: string) => cs.getPropertyValue(n).trim() || fallback;
+    const hexToRgba = (hex: string, a: number) => {
+      const h = hex.replace("#", "");
+      const full = h.length === 3 ? [...h].map((c) => c + c).join("") : h;
+      const [r, g, b] = [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16));
+      return Number.isNaN(r) ? `rgba(53,231,245,${a})` : `rgba(${r},${g},${b},${a})`;
+    };
+    const accent = v("--ks-accent", "#ff6b5a");
+    const cyan = v("--ks-cyan", "#35e7f5");
+    return { accent, cyan, accentRgba: hexToRgba(accent, 0.18), cyanRgba: hexToRgba(cyan, 0.12) };
+  };
+
   function redraw() {
     if (!stage || !overlayLayer) return;
     const s = scale();
+    const P = paint();
     stage.width(imgW * s);
     stage.height(imgH * s);
     overlayLayer.destroyChildren();
@@ -94,9 +116,9 @@
           new Konva.Line({
             points: b.shape.flatMap(([px, py]) => [px * s, py * s]),
             closed: true,
-            stroke: i === selectedIdx ? "#10b981" : "#38bdf8",
+            stroke: i === selectedIdx ? P.accent : P.cyan,
             strokeWidth: 2,
-            fill: "rgba(56,189,248,0.12)",
+            fill: P.cyanRgba,
           }),
         );
       } else if (b.kind === "ellipse") {
@@ -106,9 +128,9 @@
             y: (b.h * s) / 2,
             radiusX: (b.w * s) / 2,
             radiusY: (b.h * s) / 2,
-            stroke: i === selectedIdx ? "#10b981" : "#38bdf8",
+            stroke: i === selectedIdx ? P.accent : P.cyan,
             strokeWidth: 2,
-            fill: "rgba(56,189,248,0.12)",
+            fill: P.cyanRgba,
           }),
         );
       } else {
@@ -116,9 +138,9 @@
           new Konva.Rect({
             width: b.w * s,
             height: b.h * s,
-            stroke: i === selectedIdx ? "#10b981" : "#38bdf8",
+            stroke: i === selectedIdx ? P.accent : P.cyan,
             strokeWidth: 2,
-            fill: "rgba(56,189,248,0.12)",
+            fill: P.cyanRgba,
             cornerRadius: 6,
           }),
         );
@@ -129,7 +151,7 @@
         group.add(
           new Konva.Line({
             points: b.tail.flatMap(([px, py]) => [(px - b.x) * s, (py - b.y) * s]),
-            stroke: i === selectedIdx ? "#10b981" : "#38bdf8",
+            stroke: i === selectedIdx ? P.accent : P.cyan,
             strokeWidth: 2,
           }),
         );
@@ -137,7 +159,7 @@
 
       // Chip nomor urutan baca.
       const chip = new Konva.Group({ x: -10, y: -10 });
-      chip.add(new Konva.Circle({ radius: 11, fill: "#10b981" }));
+      chip.add(new Konva.Circle({ radius: 11, fill: P.accent }));
       chip.add(
         new Konva.Text({
           text: String(nums.get(i) ?? i + 1),
@@ -154,16 +176,41 @@
       if (showTranslation) {
         const tr = translations.find((t) => t.index === i);
         if (tr?.translated) {
-          const fs = Math.max(10, Math.min(18, (b.w * s) / Math.max(8, tr.translated.length / 2)));
-          const txt = new Konva.Text({
-            x: 2, y: 2, width: Math.max(10, b.w * s - 4),
-            text: tr.translated, fontSize: fs, fill: "#fff",
-            align: "center", listening: false,
+          const pad = 4;
+          const boxW = Math.max(12, b.w * s - pad * 2);
+          const boxH = Math.max(12, b.h * s - pad * 2);
+          // Font diturunkan ke bawah sampai teks benar-benar muat di dalam
+          // bubble: Konva tidak auto-shrink, jadi kita yang mengecilkan sendiri.
+          // Versi lama cuma menebak dari panjang string — teks panjang di
+          // bubble pendek keluar dari kotak dan menutup gambar.
+          let fs = 18;
+          let txt = new Konva.Text({
+            x: pad,
+            y: pad,
+            width: boxW,
+            text: tr.translated,
+            fontSize: fs,
+            fontFamily: "Inter Variable, Inter, sans-serif",
+            fontStyle: "600",
+            lineHeight: 1.25,
+            align: "center",
+            verticalAlign: "middle",
+            fill: "#fff",
+            listening: false,
           });
+          while (fs > 7 && (txt.height() > boxH || txt.width() > boxW * 1.02)) {
+            fs -= 0.5;
+            txt.fontSize(fs);
+            txt.height();
+          }
           const bgR = new Konva.Rect({
-            x: 0, y: 0, width: b.w * s, height: Math.max(b.h * s, txt.height() + 6),
-            fill: tr.needsWhitePatch ? "#ffffff" : "rgba(0,0,0,0.65)",
-            cornerRadius: 4, listening: false,
+            x: pad,
+            y: pad,
+            width: boxW,
+            height: boxH,
+            fill: tr.needsWhitePatch ? "#ffffff" : "rgba(0,0,0,0.78)",
+            cornerRadius: 4,
+            listening: false,
           });
           if (tr.needsWhitePatch) txt.fill("#111");
           group.add(bgR);
@@ -189,7 +236,7 @@
           x: b.w * s,
           y: b.h * s,
           radius: 6,
-          fill: "#10b981",
+          fill: P.accent,
           draggable: true,
         });
         handle.on("dragmove", () => {
@@ -237,17 +284,44 @@
     return true;
   }
 
+  /**
+   * Ekor untuk bubble terpilih. Titik melekat = titik TEPAT yang diklik user
+   * (bukan tengah bubble) — kalau dipatok ke tengah, garis ekor selalu
+   * keluar dari dalam gelembung dan tidak pernah terlihat menempel di tepi.
+   * Kalau user klik jauh dari bubble, dekati tepi terdekat.
+   */
   export function setTailForSelected(tipOriginal: [number, number]) {
     if (selectedIdx === null) return;
     const b = bubbles[selectedIdx];
-    const cx = b.x + b.w / 2;
-    const cy = b.y + b.h / 2;
-    bubbles[selectedIdx] = { ...b, tail: [[Math.round(cx), Math.round(cy)], tipOriginal] };
+    const [px, py] = tipOriginal;
+    const insideX = px >= b.x && px <= b.x + b.w;
+    const insideY = py >= b.y && py <= b.y + b.h;
+    const anchor: [number, number] = insideX && insideY
+      ? [px, py]
+      : [
+          Math.min(Math.max(px, b.x), b.x + b.w),
+          Math.min(Math.max(py, b.y), b.y + b.h),
+        ];
+    const tail = [
+      anchor,
+      [Math.min(Math.max(tipOriginal[0], 0), imgW), Math.min(Math.max(tipOriginal[1], 0), imgH)],
+    ] as [[number, number], [number, number]];
+    bubbles[selectedIdx] = { ...b, tail };
     onChange($state.snapshot(bubbles));
     redraw();
   }
 
+  /** Punya ekor? — dipakai toolbar buat disable tombol Ekor dengan jujur. */
+  export function hasTailSelected(): boolean {
+    return selectedIdx !== null && !!bubbles[selectedIdx]?.tail;
+  }
+
   // --- Drawing tools: drag di stage kosong bikin bubble baru ---
+  // Batas minimum bubble gambar, dalam px koordinat ASLI (bukan px layar).
+  // Domein allerdings: YOLO11 discard < 8px, jadi manual tidak boleh lebih
+  // kecil dari itu atau hasilnya tidak bisa dipakai translate.
+  const MIN_BUBBLE_PX = 8;
+
   let drawing: { x0: number; y0: number; node: Konva.Rect | Konva.Ellipse | Konva.Line | null; pts: [number, number][] } | null = null;
 
   function stagePos(): [number, number] {
@@ -258,21 +332,30 @@
 
   function onStageDown(e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) {
     if (tool === "select") return;
-    if (e.target !== stage) return;
-    const [x, y] = stagePos();
+    // Ekor: user mengklik TEPAT pada bubble terpilih (itu titik melekat,
+    // lalu drag keluar) atau di mana saja untuk menunjuk ujung ekor. Jadi
+    // jangan pernah reject berdasarkan target — cukup butuh bubble terpilih.
     if (tool === "tail") {
-      if (selectedIdx !== null) setTailForSelected([Math.round(x), Math.round(y)]);
+      if (selectedIdx === null || !stage) return;
+      const p = stage.getPointerPosition();
+      if (!p) return;
+      const s = scale();
+      setTailForSelected([Math.round(p.x / s), Math.round(p.y / s)]);
       return;
     }
+    // Tool gambar baru mulai dari area kosong — klik bubble = pilih/pindah.
+    if (e.target !== stage) return;
+    const [x, y] = stagePos();
     drawing = { x0: x, y0: y, node: null, pts: [[x, y]] };
     const s = scale();
+    const P = paint();
     const layer = overlayLayer!;
     if (tool === "rect") {
-      drawing.node = new Konva.Rect({ x: x * s, y: y * s, width: 0, height: 0, stroke: "#10b981", strokeWidth: 2, dash: [6, 4] });
+      drawing.node = new Konva.Rect({ x: x * s, y: y * s, width: 0, height: 0, stroke: P.accent, strokeWidth: 2, dash: [6, 4] });
     } else if (tool === "ellipse") {
-      drawing.node = new Konva.Ellipse({ x: x * s, y: y * s, radiusX: 0, radiusY: 0, stroke: "#10b981", strokeWidth: 2, dash: [6, 4] });
+      drawing.node = new Konva.Ellipse({ x: x * s, y: y * s, radiusX: 0, radiusY: 0, stroke: P.accent, strokeWidth: 2, dash: [6, 4] });
     } else {
-      drawing.node = new Konva.Line({ points: [x * s, y * s], stroke: "#10b981", strokeWidth: 2, closed: false });
+      drawing.node = new Konva.Line({ points: [x * s, y * s], stroke: P.accent, strokeWidth: 2, closed: false });
     }
     layer.add(drawing.node);
   }
@@ -308,9 +391,13 @@
     drawing.node?.destroy();
     drawing = null;
     if (tool === "freeform") {
+      // 6 = 3 titik (polyline minimal), bukan angka acak.
       if (pts.length < 6) return;
       const xs = pts.map((p) => p[0]);
       const ys = pts.map((p) => p[1]);
+      const bbW = Math.max(...xs) - Math.min(...xs);
+      const bbH = Math.max(...ys) - Math.min(...ys);
+      if (bbW < MIN_BUBBLE_PX || bbH < MIN_BUBBLE_PX) return;
       const nb: BubbleBox = {
         x: Math.floor(Math.min(...xs)),
         y: Math.floor(Math.min(...ys)),
@@ -323,10 +410,14 @@
       };
       bubbles.push(clampBubble(nb, imgW, imgH));
     } else {
+      // `pts` hanya berisi 2 titik setelah mousemove. Klik tanpa drag
+      // (atau drag yang tidak sampai ke move) menyisakan 1 titik, dan
+      // destructure di sini akan throw — jadi guard dulu.
+      if (pts.length < 2) return;
       const [[x0, y0], [x1, y1]] = pts;
       const w = Math.abs(x1 - x0);
       const h = Math.abs(y1 - y0);
-      if (w < 8 || h < 8) return;
+      if (w < MIN_BUBBLE_PX || h < MIN_BUBBLE_PX) return;
       bubbles.push(
         clampBubble(
           {
@@ -459,12 +550,15 @@
   });
 </script>
 
-<div bind:this={holder} class="w-full cursor-crosshair overflow-auto rounded border border-zinc-800 bg-black"></div>
+<!-- Latar canvas tetap gelap di kedua tema: gambar manga di atas netral gelap
+     jauh lebih terbaca daripada di atas kertas putih, dan area di luar
+     gambar tidak akan terlihat salah warna di light mode. -->
+<div bind:this={holder} class="w-full cursor-crosshair overflow-auto rounded-md border border-line bg-black"></div>
 {#if !imgReady && !imgError}
-  <p class="mt-1 text-[11px] text-zinc-500">Memuat gambar…</p>
+  <p class="mt-1 text-[11px] text-ink-3">Memuat gambar…</p>
 {:else if imgError}
-  <p class="mt-1 text-[11px] text-rose-400">
+  <p class="mt-1 text-[11px] text-danger">
     {imgError}
-    <button class="ml-2 rounded bg-zinc-800 px-2 py-0.5 text-zinc-100 hover:bg-zinc-700" onclick={retryLoad}>Coba lagi</button>
+    <Button variant="default" size="sm" class="ml-2" onclick={retryLoad}>Coba lagi</Button>
   </p>
 {/if}

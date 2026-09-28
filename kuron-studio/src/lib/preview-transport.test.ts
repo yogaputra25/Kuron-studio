@@ -35,7 +35,11 @@ describe("preview transport (fix-preview-hang §2 progressive open)", () => {
   it("EditorPanel tampilkan editor bila URL ada walau openError set", () => {
     expect(panelSrc).toContain("{#if openError && !fullImageUrl}");
     // Panel error penuh hanya tanpa URL sama sekali; banner tetap ada.
-    expect(panelSrc).toMatch(/\{#if openError\}\s*<p class="border-b border-red-900/);
+    // Dicek per bagian (bukan satu regex panjang) supaya retokenisasi UI
+    // tidak mematikan guard ini, tapi banner tetap wajib role="alert".
+    const banner = panelSrc.slice(panelSrc.indexOf("{#if openError}"));
+    expect(banner.slice(0, 200)).toContain("openError}</p>");
+    expect(banner.slice(0, 200)).toContain('role="alert"');
   });
 
   it("App teruskan thumb sebagai fallbackUrl ke EditorPanel", () => {

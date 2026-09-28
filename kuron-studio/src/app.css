@@ -1,17 +1,166 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+/* Font di-bundle via @fontsource (desktop app: harus jalan offline, jangan
+   ambil dari CDN). Variable font = satu file per family, semua weight. */
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/space-grotesk";
+@import "@fontsource-variable/jetbrains-mono";
 
-html, body, #app {
+/*
+ * Token layer.
+ *
+ * Warna hidup di CSS var (--ks-*) supaya theme bisa ganti saat runtime.
+ * `@theme inline` mendaftarkan nama var itu ke Tailwind sebagai utility —
+ * `bg-surface` jadi `background-color: var(--ks-surface)`, bukan nilai yang
+ * di-inline saat build. Itulah yang bikin dark/light tetap bisa switch.
+ *
+ * Arah visual: netral warm (bukan zinc kebiruan), aksen coral sebagai aksi
+ * utama, cyan sebagai aksen sekunder untuk hal teknis (koordinat, ID).
+ * Semua pasangan teks/latar diuji WCAG AA — lihat documen token-contrast.md.
+ */
+
+@theme inline {
+  --color-bg: var(--ks-bg);
+  --color-surface: var(--ks-surface);
+  --color-surface-2: var(--ks-surface-2);
+  --color-raised: var(--ks-raised);
+  --color-hover: var(--ks-hover);
+  --color-line: var(--ks-line);
+  --color-line-strong: var(--ks-line-strong);
+  --color-ink: var(--ks-text);
+  --color-ink-2: var(--ks-text-2);
+  --color-ink-3: var(--ks-text-3);
+  --color-accent: var(--ks-accent);
+  --color-accent-hover: var(--ks-accent-hover);
+  --color-accent-fg: var(--ks-accent-fg);
+  --color-accent-soft: var(--ks-accent-soft);
+  --color-cyan: var(--ks-cyan);
+  --color-cyan-soft: var(--ks-cyan-soft);
+  --color-success: var(--ks-success);
+  --color-success-soft: var(--ks-success-soft);
+  --color-warn: var(--ks-warn);
+  --color-warn-soft: var(--ks-warn-soft);
+  --color-danger: var(--ks-danger);
+  --color-danger-soft: var(--ks-danger-soft);
+  --color-info: var(--ks-info);
+  --color-info-soft: var(--ks-info-soft);
+
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk Variable", "Inter Variable", sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+
+  --radius-card: 0.75rem;
+}
+
+/* --- Dark (default) --- */
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --ks-bg: #0d0d10;
+  --ks-surface: #141418;
+  --ks-surface-2: #1a1a20;
+  --ks-raised: #22222a;
+  --ks-hover: #2a2a33;
+
+  --ks-line: #26262e;
+  --ks-line-strong: #35353f;
+
+  --ks-text: #ececf1;
+  --ks-text-2: #a5a6b0;
+  --ks-text-3: #71727d;
+
+  --ks-accent: #ff6b5a;
+  --ks-accent-hover: #ff8272;
+  --ks-accent-fg: #1a0a08;
+  --ks-accent-soft: #2e1614;
+
+  --ks-cyan: #35e7f5;
+  --ks-cyan-soft: #0e2a2e;
+  --ks-success: #5fd99a;
+  --ks-success-soft: #10281d;
+  --ks-warn: #ffc15e;
+  --ks-warn-soft: #2b2110;
+  --ks-danger: #ff5c5c;
+  --ks-danger-soft: #2e1416;
+  --ks-info: #6ba6ff;
+  --ks-info-soft: #111e33;
+}
+
+/* --- Light --- */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --ks-bg: #f7f6f4;
+  --ks-surface: #ffffff;
+  --ks-surface-2: #f1f0ed;
+  --ks-raised: #e8e7e3;
+  --ks-hover: #deddd8;
+
+  --ks-line: #dfdfd9;
+  --ks-line-strong: #c4c3bc;
+
+  --ks-text: #16161a;
+  --ks-text-2: #55555f;
+  --ks-text-3: #7c7c86;
+
+  --ks-accent: #c4342a;
+  --ks-accent-hover: #a62a21;
+  --ks-accent-fg: #ffffff;
+  --ks-accent-soft: #fbe9e7;
+
+  --ks-cyan: #0b6e78;
+  --ks-cyan-soft: #e0f2f4;
+  --ks-success: #1f7a4d;
+  --ks-success-soft: #e4f3ea;
+  --ks-warn: #8a5a00;
+  --ks-warn-soft: #fbf0dc;
+  --ks-danger: #b3261e;
+  --ks-danger-soft: #fde8e6;
+  --ks-info: #1f5fbf;
+  --ks-info-soft: #e5eefb;
+}
+
+html,
+body,
+#app {
   height: 100%;
   margin: 0;
 }
 
-/* M4-6: light theme remaps the zinc surfaces via CSS vars on the shell. */
-:root[data-theme="light"] {
-  color-scheme: light;
+body {
+  background: var(--ks-bg);
+  color: var(--ks-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
-:root[data-theme="light"] body {
-  background: #fafafa;
-  color: #18181b;
+
+/* Fokus keyboard harus kelihatan di mana-mana. Primitif UI sudah pasang
+   ring-nya sendiri; permukaan mentah (canvas, teks panjang) dapat ini. */
+:focus-visible {
+  outline: 2px solid var(--ks-accent);
+  outline-offset: 2px;
+}
+
+/* Angka di badge status & koordinat: rata lebar, easy di-scan. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Scrollbar tipis supaya panel yang padat tidak merebut ruang. */Israeli afeta layout. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ks-line-strong) transparent;
+}
+
+/* Respek preference user: kill semua animasi kalau diminta. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

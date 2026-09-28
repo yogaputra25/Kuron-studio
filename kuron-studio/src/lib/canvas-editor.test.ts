@@ -96,10 +96,15 @@ describe("delete autosave (fix-preview-hang §6)", () => {
   });
 
   it("tombol hapus sidebar: splice lalu save() + disabled saat saving", () => {
-    const btn = panelSrc.slice(panelSrc.indexOf(">hapus</button>") - 400, panelSrc.indexOf(">hapus</button>"));
-    expect(btn).toContain("bubbles.splice(i, 1);");
+    // Anchor di handler `bubbles.splice(i, 1)` — itu yang benar-benar
+    // membedakan tombol hapus dari guard lain, dan tahan restyling.
+    const at = panelSrc.indexOf("bubbles.splice(i, 1);");
+    expect(at, "handler hapus sidebar tidak ditemukan").toBeGreaterThan(-1);
+    const btn = panelSrc.slice(Math.max(0, at - 600), at + 200);
+    expect(btn).toContain("dirty = true;");
     expect(btn).toContain("void save();");
-    expect(btn).toContain("disabled={saving}");
+    // `disabled={saving}` ada di tag Button yang sama.
+    expect(btn.slice(-400)).toContain("disabled={saving}");
   });
 
   it("onKey Delete: abaikan saat saving, save() hanya bila deleteSelected true", () => {
@@ -111,5 +116,61 @@ describe("delete autosave (fix-preview-hang §6)", () => {
   it("kontrak tak tersentuh: onChange umum tetap lokal+dirty, guard syncFromPage utuh", () => {
     expect(panelSrc).toMatch(/onChange=\{\(nb\) => \{\s*bubbles = nb;\s*dirty = true;\s*\}\}/);
     expect(panelSrc).toContain("if (syncedFor !== page.id || JSON.stringify(incoming) !== JSON.stringify(bubbles)) {");
+  });
+});
+
+// Regresi: tool gambar manual lempar TypeError.
+// onStageUp mendestructure `const [[x0,y0],[x1,y1]] = pts`, tapi `pts`
+// hanya berisi 1 titik kalau user klik tanpa drag (onStageMove tidak pernah
+// jalan). Destructure 1-elemen = `undefined is not iterable` — semua tool
+// gambar mati karena satu kasus yang/common: klik cepat.
+describe("manual draw tools never throw (regression)", () => {
+  it("onStageUp guards pts length before destructuring", () => {
+    const up = src.slice(src.indexOf("function onStageUp"));
+    const destructureAt = up.indexOf("[[x0, y0], [x1, y1]] = pts");
+    expect(destructureAt, "baris destructure tidak ditemukan").toBeGreaterThan(-1);
+    const guardAt = up.indexOf("if (pts.length < 2) return;");
+    expect(guardAt, "guard pts.length hilang — destructure bisa throw").toBeGreaterThan(-1);
+    expect(guardAt, "guard harus SEBELUM destructure").toBeLessThan(destructureAt);
+  });
+
+  it("freeform juga punya guard panjang pts", () => {
+    const up = src.slice(src.indexOf("function onStageUp"));
+    const ff = up.slice(0, up.indexOf("if (pts.length < 2) return;"));
+    expect(ff).toContain("if (pts.length < 6) return;");
+  });
+
+  it("semua tool gambar punya batas minimum yang sama", () => {
+    expect(src).toContain("const MIN_BUBBLE_PX = 8;");
+    const up = src.slice(src.indexOf("function onStageUp"));
+    // Tidak ada literal yang的神色 bypass — semua lewat konstanta.
+    expect(up).toContain("if (w < MIN_BUBBLE_PX || h < MIN_BUBBLE_PX) return;");
+    expect(up).toContain("if (bbW < MIN_BUBBLE_PX || bbH < MIN_BUBBLE_PX) return;");
+  });
+
+  it("ekor: guard target dihapus supaya bisa klik di bubble sendiri", () => {
+    const down = src.slice(src.indexOf("function onStageDown"));
+    // Blok tail = dari `if (tool === "tail")` sampai guard e.target.
+    // Guard e.target WAJIB ada (tool gambar baru), tapi harus SESUDAH blok
+    // tail — kalau mendahului, user tidak bisa klik bubble buat nunjuk ekor.
+    const tailAt = down.indexOf('if (tool === "tail")');
+    const guardAt = down.indexOf("if (e.target !== stage) return;");
+    expect(tailAt, "blok tool tail tidak ditemukan").toBeGreaterThan(-1);
+    expect(guardAt, "guard e.target hilang — tool gambar mulai dari bubble").toBeGreaterThan(-1);
+    expect(
+      guardAt,
+      "guard e.target harus SESUDAH blok tail, tidak boleh mem-block-nya",
+    ).toBeGreaterThan(tailAt);
+  });
+
+  it("ekor: titik melekat = titik yang diklik, bukan tengah bubble", () => {
+    const fn = src.slice(src.indexOf("export function setTailForSelected"));
+    expect(fn, "anchor harus pakai koordinat klik (px, py)").toContain("[px, py]");
+    expect(fn, "anchor jangan dipatok ke tengah bubble").not.toContain("b.w / 2");
+  });
+
+  it("ekor: ujung dijepit ke bounds gambar", () => {
+    const fn = src.slice(src.indexOf("export function setTailForSelected"));
+    expect(fn).toContain("Math.min(Math.max(tipOriginal[0], 0), imgW)");
   });
 });
