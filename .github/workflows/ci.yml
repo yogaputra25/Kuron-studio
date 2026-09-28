@@ -17,6 +17,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+        with:
+          # Repo ini tidak punya package.json di root, jadi action tak bisa
+          # membaca `packageManager` sendiri dan gagal dengan "No pnpm version
+          # is specified". Versi ditulis eksplisit — jaga selaras dengan pnpm
+          # lokal yang dipakai menghasilkan pnpm-lock.yaml.
+          version: 11.9.0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -34,6 +40,19 @@ jobs:
         working-directory: kuron-studio/src-tauri
     steps:
       - uses: actions/checkout@v4
+      # Runner Ubuntu kosong: crate tauri mencari glib/gtk/webkit lewat
+      # pkg-config. Tanpa ini `cargo test` gagal di build script gobject-sys
+      # dengan "glib-2.0.pc not found" — persis yang terjadi di CI.
+      # Paketnya libayatana-*, bukan libappindicator3-*: yang terakhir sudah
+      # dihapus dari noble (24.04) dan hanya ada di jammy.
+      - name: Install Linux deps
+        run: >-
+          sudo apt-get update && sudo apt-get install -y
+          pkg-config
+          libgtk-3-dev
+          libwebkit2gtk-4.1-dev
+          librsvg2-dev
+          libayatana-appindicator3-dev
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -63,6 +82,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+        with:
+          # Repo ini tidak punya package.json di root, jadi action tak bisa
+          # membaca `packageManager` sendiri dan gagal dengan "No pnpm version
+          # is specified". Versi ditulis eksplisit — jaga selaras dengan pnpm
+          # lokal yang dipakai menghasilkan pnpm-lock.yaml.
+          version: 11.9.0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -72,7 +97,9 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: Install Linux deps
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+        # libayatana-*, bukan libappindicator3-*: paket lama sudah dihapus dari
+        # noble (24.04) yang dipakai ubuntu-latest.
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev patchelf
       - run: pnpm install --frozen-lockfile
       - name: Build Tauri bundle
         uses: tauri-apps/tauri-action@v0
