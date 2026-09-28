@@ -148,7 +148,7 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Scrollbar tipis supaya panel yang padat tidak merebut ruang. */Israeli afeta layout. */
+/* Scrollbar tipis supaya panel yang padat tidak merebut ruang. */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--ks-line-strong) transparent;
