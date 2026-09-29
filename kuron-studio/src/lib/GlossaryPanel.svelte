@@ -1,7 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { api } from "./api";
+  import { t } from "./i18n";
   import type { GlossaryEntry } from "./types";
+  import Button from "./ui/Button.svelte";
+  import Field from "./ui/Field.svelte";
+  import Panel from "./ui/Panel.svelte";
 
   interface Props {
     onClose: () => void;
@@ -98,67 +102,133 @@
   onMount(async () => { await load(); await refreshPreview(); });
 </script>
 
-<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true">
-  <div class="max-h-[90vh] w-full max-w-xl overflow-auto rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-100">
-    <div class="mb-3 flex items-center gap-2">
-      <h2 class="font-bold">Glossary ({entries.length})</h2>
-      <button class="ml-auto rounded bg-zinc-800 px-2 py-1 hover:bg-zinc-700" onclick={onClose}>Tutup</button>
-    </div>
+<Panel title={$t("glossary")} {onClose} class="max-w-3xl">
+  {#if error}
+    <p role="alert" class="mb-4 rounded-md border border-warn-soft bg-warn-soft px-3 py-2 text-xs text-warn">
+      {error}
+    </p>
+  {/if}
 
-    {#if error}<p class="mb-2 rounded bg-amber-950 px-2 py-1 text-xs text-amber-200">{error}</p>{/if}
+  <!-- Konten utama dan import CSV jadi 2 kolom: daftar entri butuh
+       lebar untuk membaca source→target, sementara CSV cukup sempit. -->
+  <div class="grid gap-6 lg:grid-cols-[1fr_18rem]">
+    <div class="min-w-0">
+      <div class="mb-2.5 flex items-baseline gap-2">
+        <h3 class="font-display text-sm font-semibold text-ink">Entri</h3>
+        <span class="tnum text-xs text-ink-3">{entries.length}</span>
+      </div>
 
-    <ul class="mb-3 max-h-56 space-y-1 overflow-auto">
-      {#each entries as e (e.id)}
-        <li class="flex items-center gap-2 rounded bg-zinc-900 px-2 py-1.5 text-xs">
-          <span class="font-semibold">{e.source}</span>
-          <span class="text-zinc-500">→</span>
-          <span class="truncate text-zinc-300">{e.target}</span>
-          <span class="ml-auto flex gap-1">
-            <button class="rounded bg-zinc-800 px-2 py-0.5 hover:bg-zinc-700" onclick={() => startEdit(e)}>Edit</button>
-            <button class="rounded bg-rose-900 px-2 py-0.5 text-rose-200 hover:bg-rose-800" onclick={() => remove(e.id)}>Hapus</button>
-          </span>
-        </li>
+      {#if entries.length === 0}
+        <div class="rounded-lg border border-dashed border-line px-4 py-10 text-center">
+          <p class="text-sm text-ink-2">Belum ada entri.</p>
+          <p class="mx-auto mt-1.5 max-w-xs text-xs leading-relaxed text-ink-3">
+            Tambah pasangan source → target di bawah, atau import CSV untuk isi banyak sekaligus.
+          </p>
+        </div>
       {:else}
-        <li class="text-xs text-zinc-500">Belum ada entri. Tambah di bawah atau import CSV.</li>
-      {/each}
-    </ul>
-
-    <div class="mb-3 rounded border border-zinc-800 bg-zinc-900 p-3">
-      <h3 class="mb-2 font-semibold">{editId ? "Edit entri" : "Entri baru"}</h3>
-      <div class="grid grid-cols-2 gap-2">
-        <label class="text-xs">Source (asli)
-          <input class="mt-0.5 w-full rounded bg-zinc-800 px-2 py-1 outline-none focus:ring-1 focus:ring-emerald-500" bind:value={fSource} placeholder="Guild" />
-        </label>
-        <label class="text-xs">Target (terjemahan)
-          <input class="mt-0.5 w-full rounded bg-zinc-800 px-2 py-1 outline-none focus:ring-1 focus:ring-emerald-500" bind:value={fTarget} placeholder="Serikat" />
-        </label>
-      </div>
-      <div class="mt-2 flex gap-2">
-        {#if editId}<button class="rounded bg-zinc-800 px-2 py-1 text-xs hover:bg-zinc-700" onclick={() => { editId = null; fSource = ""; fTarget = ""; }}>Batal</button>{/if}
-        <button class="ml-auto rounded bg-emerald-600 px-3 py-1 text-xs font-semibold hover:bg-emerald-500 disabled:opacity-50" onclick={save} disabled={busy}>{busy ? "Simpan…" : "Simpan"}</button>
-      </div>
-    </div>
-
-    <div class="mb-3 rounded border border-zinc-800 bg-zinc-900 p-3">
-      <h3 class="mb-1 font-semibold">Import / Export CSV</h3>
-      <textarea
-        class="w-full rounded bg-zinc-800 px-2 py-1 font-mono text-[11px] outline-none focus:ring-1 focus:ring-emerald-500"
-        rows="3" bind:value={csvText} placeholder={"source,target\nGuild,Serikat"}
-      ></textarea>
-      {#if csvMsg}<p class="mt-1 text-[11px] text-zinc-400">{csvMsg}</p>{/if}
-      <div class="mt-2 flex gap-2">
-        <button class="rounded bg-zinc-800 px-2 py-1 text-xs hover:bg-zinc-700 disabled:opacity-50" onclick={importCsv} disabled={busy}>Import</button>
-        <button class="rounded bg-zinc-800 px-2 py-1 text-xs hover:bg-zinc-700 disabled:opacity-50" onclick={exportCsv} disabled={busy}>Export</button>
-      </div>
-    </div>
-
-    <div class="rounded border border-zinc-800 bg-zinc-900 p-3">
-      <h3 class="mb-1 font-semibold">Preview auto-context</h3>
-      {#if preview}
-        <pre class="whitespace-pre-wrap font-mono text-[11px] text-emerald-300">{preview}</pre>
-      {:else}
-        <p class="text-[11px] text-zinc-500">Kosong — tambah entri agar prompt translate otomatis diperkaya.</p>
+        <ul class="max-h-72 space-y-1.5 overflow-y-auto pr-1">
+          {#each entries as e (e.id)}
+            <li
+              class="group flex items-center gap-3 rounded-md border border-line bg-surface-2 px-3 py-2
+                     transition-colors hover:border-line-strong"
+            >
+              <span class="max-w-40 shrink-0 truncate text-sm font-medium text-ink" title={e.source}>
+                {e.source}
+              </span>
+              <span class="text-ink-3" aria-hidden="true">→</span>
+              <span class="min-w-0 flex-1 truncate text-sm text-ink-2" title={e.target}>
+                {e.target}
+              </span>
+              <span class="flex shrink-0 gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                <Button
+                  variant="default"
+                  size="sm"
+                  onclick={() => startEdit(e)}
+                  aria-label="{$t('edit')} entri {e.source}"
+                >{$t("edit")}</Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onclick={() => remove(e.id)}
+                  aria-label="{$t('remove')} entri {e.source}"
+                >{$t("remove")}</Button>
+              </span>
+            </li>
+          {/each}
+        </ul>
       {/if}
     </div>
+
+    <div class="min-w-0 space-y-5">
+      <div class="rounded-lg border border-line bg-surface-2/60 p-4">
+        <h3 class="font-display mb-3 text-sm font-semibold text-ink">
+          {editId ? $t("edit") : $t("add")}
+        </h3>
+        <div class="space-y-3">
+          <Field label="Source (asli)" bind:value={fSource} placeholder="Guild" />
+          <Field label="Target (terjemahan)" bind:value={fTarget} placeholder="Serikat" />
+        </div>
+        <div class="mt-4 flex gap-2">
+          {#if editId}
+            <Button
+              variant="ghost"
+              size="sm"
+              onclick={() => { editId = null; fSource = ""; fTarget = ""; }}
+            >Batal</Button>
+          {/if}
+          <Button
+            variant="primary"
+            class="ml-auto"
+            onclick={save}
+            disabled={busy || !fSource.trim() || !fTarget.trim()}
+          >{busy ? "…" : $t("save")}</Button>
+        </div>
+      </div>
+
+      <div class="rounded-lg border border-line bg-surface-2/60 p-4">
+        <h3 class="font-display mb-3 text-sm font-semibold text-ink">CSV</h3>
+        <textarea
+          aria-label="CSV glossary"
+          class="w-full rounded-md border border-line bg-surface px-3 py-2.5 font-mono text-[12px]
+                 leading-relaxed text-ink placeholder:text-ink-3 outline-none transition-colors
+                 focus:border-accent focus:ring-2 focus:ring-accent/25"
+          rows="4"
+          bind:value={csvText}
+          placeholder={"source,target\nGuild,Serikat"}
+        ></textarea>
+        {#if csvMsg}
+          <p role="status" class="mt-2 text-[11px] leading-relaxed text-ink-2">{csvMsg}</p>
+        {/if}
+        <div class="mt-3 flex gap-2">
+          <Button variant="default" size="sm" onclick={importCsv} disabled={busy || !csvText.trim()}>
+            Import
+          </Button>
+          <Button
+            variant="default"
+            size="sm"
+            class="ml-auto"
+            onclick={exportCsv}
+            disabled={busy || entries.length === 0}
+          >{$t("export")}</Button>
+        </div>
+      </div>
+    </div>
   </div>
-</div>
+
+  <!-- Auto-context cuma relevan kalau ada entri — tanpa isi, block ini
+       cuma menambah tinggi panel dengan teks kosong. -->
+  {#if preview}
+    <details class="mt-6 rounded-lg border border-line bg-surface-2/60">
+      <summary
+        class="cursor-pointer list-none px-4 py-3 text-xs font-medium text-ink-2 select-none
+               transition-colors hover:text-ink"
+      >
+        Auto-context untuk prompt ({preview.split("\n").length} baris)
+      </summary>
+      <pre
+        class="max-h-56 overflow-auto whitespace-pre-wrap border-t border-line px-4 py-3
+               font-mono text-[12px] leading-relaxed text-ink-2"
+      >{preview}</pre>
+    </details>
+  {/if}
+</Panel>

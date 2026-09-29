@@ -593,7 +593,7 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        let mut store = ProjectStore::load(dir).unwrap();
+        let mut store = ProjectStore::load(dir.clone()).unwrap();
         store.projects.insert(
             "p".into(),
             Project {
@@ -617,6 +617,7 @@ mod tests {
             db: std::sync::Mutex::new(rusqlite::Connection::open_in_memory().unwrap()),
             cancel: std::sync::Mutex::new(std::collections::HashSet::new()),
             prev_status: std::sync::Mutex::new(std::collections::HashMap::new()),
+            data_dir: dir,
         }
     }
 

@@ -1,8 +1,11 @@
-import { invoke } from "@tauri-apps/api/core";
+// Semua invoke lewat `call` supaya tercatat sebagai JSON Lines.
+import { call as invoke } from "./log";
 import type {
   AiModelOption,
+  AiProviderType,
   BubbleBox,
   BubbleTranslation,
+  CleanResult,
   DetectStatus,
   ExportFormat,
   GlossaryEntry,
@@ -31,6 +34,8 @@ export const api = {
   getProject: (project_id: string) => invoke<Project>("get_project", { project_id }),
   importPages: (project_id: string, paths: string[]) =>
     invoke<ImportResult>("import_pages", { project_id, paths }),
+  cleanPages: (project_id: string) => invoke<CleanResult>("clean_pages", { project_id }),
+  deleteProject: (project_id: string) => invoke<void>("delete_project", { project_id }),
   getImagePreview: (path: string, max_side = 512) =>
     invoke<string>("get_image_preview", { path, max_side }),
   detectStatus: () => invoke<DetectStatus>("detect_status"),
@@ -42,6 +47,17 @@ export const api = {
 
   listModels: (provider_id: string) =>
     invoke<AiModelOption[]>("list_models", { provider_id }),
+  /** Model untuk form yang belum tersimpan (butuh draft, bukan id). */
+  listModelsDraft: (input: {
+    providerType: AiProviderType;
+    baseUrl: string;
+    apiKey: string;
+  }) =>
+    invoke<AiModelOption[]>("list_models_draft", {
+      provider_type: input.providerType,
+      base_url: input.baseUrl,
+      api_key: input.apiKey,
+    }),
   validateProvider: (provider_id: string) =>
     invoke<ValidateResult>("validate_provider", { provider_id }),
   saveProvider: (input: SaveProviderInput) =>
@@ -85,4 +101,18 @@ export const api = {
   qaCheck: (project_id: string) => invoke<QaIssue[]>("qa_check", { project_id }),
   shareProject: (project_id: string, path: string) =>
     invoke<string>("share_project", { project_id, path }),
+
+  // --- diagnostics: log JSON Lines + info environment ---
+  diagnostics: () => invoke<DiagnosticsInfo>("diagnostics"),
+  readLog: (lines = 200) => invoke<string>("read_log", { lines }),
 };
+
+/** Mirror Rust `logging::diagnostics` — tidak memuat secret. */
+export interface DiagnosticsInfo {
+  appVersion: string;
+  os: string;
+  arch: string;
+  /** true kalau file log berhasil dibuka; stderr tetap jalan kalau false. */
+  logActive: boolean;
+  dataDir: string;
+}

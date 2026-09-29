@@ -103,7 +103,8 @@ describe("before|split|after (3.1–3.4)", () => {
     const drag = canvasSrc.slice(canvasSrc.indexOf('group.on("dragend"'), canvasSrc.indexOf('group.on("dragend"') + 250);
     expect(drag).toContain("if (!editable) { redraw(); return; }");
     // Drawing tools mati saat read-only; resize handle hanya saat editable.
-    expect(canvasSrc).toContain("function onStageDown(e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) {\n    if (!editable) return;");
+    // \r? — file bisa CRLF di Windows, pola harus toleran.
+    expect(canvasSrc).toMatch(/function onStageDown\(e: Konva\.KonvaEventObject<MouseEvent \| TouchEvent>\) \{\r?\n    if \(!editable\) return;/);
     expect(canvasSrc).toContain("if (!b.shape && editable) {");
   });
 });

@@ -3,6 +3,9 @@
   import { api } from "./api";
   import { TARGET_LANGS, TRANSLATE_STYLES } from "./types";
   import type { MosaicQuality, PageTranslation, ProviderView, ReadingDirection, TranslateStyle } from "./types";
+  import Button from "./ui/Button.svelte";
+
+  import Select from "./ui/Select.svelte";
 
   export interface TranslateOpts {
     targetLang: string;
@@ -99,47 +102,95 @@
   }
 </script>
 
-<div class="rounded border border-zinc-800 bg-zinc-900 p-2">
-  <h3 class="mb-1 font-semibold text-zinc-300">Translate ({bubblesCount})</h3>
-  <label class="mb-1 block text-[11px] text-zinc-400">Provider
-    <select class="mt-0.5 w-full rounded bg-zinc-800 px-1.5 py-1 text-xs text-zinc-100" value={providerId} onchange={(e) => onProviderChange((e.target as HTMLSelectElement).value)}>
+<div class="rounded-lg border border-line bg-surface-2/60 p-4">
+  <h3 class="font-display mb-4 flex items-baseline gap-1.5 text-sm font-semibold text-ink">
+    Translate
+    <span class="tnum text-xs font-normal text-ink-3">· {bubblesCount} bubble</span>
+  </h3>
+
+  <div class="space-y-4">
+    <Select
+      label="Provider"
+      value={providerId}
+      onchange={(e) => onProviderChange((e.target as HTMLSelectElement).value)}
+      hint={providerId ? undefined : "Wajib pilih provider sebelum translate."}
+    >
       <option value="">— pilih —</option>
       {#each providers as p (p.id)}<option value={p.id}>{p.name} ({p.model})</option>{/each}
-    </select>
-  </label>
-  <div class="grid grid-cols-2 gap-1">
-    <label class="text-[11px] text-zinc-400">Target
-      <select class="mt-0.5 w-full rounded bg-zinc-800 px-1.5 py-1 text-xs text-zinc-100" bind:value={targetLang}>
+    </Select>
+
+    <div class="grid grid-cols-2 gap-3">
+      <Select label="Target" bind:value={targetLang}>
         {#each TARGET_LANGS as l (l.value)}<option value={l.value}>{l.label}</option>{/each}
-      </select>
-    </label>
-    <label class="text-[11px] text-zinc-400">Style
-      <select class="mt-0.5 w-full rounded bg-zinc-800 px-1.5 py-1 text-xs text-zinc-100" bind:value={style}>
+      </Select>
+      <Select label="Style" bind:value={style}>
         {#each TRANSLATE_STYLES as s (s.value)}<option value={s.value}>{s.label}</option>{/each}
-      </select>
-    </label>
-  </div>
-  <div class="mt-1 grid grid-cols-2 gap-1">
-    <label class="flex items-center gap-1 text-[11px] text-zinc-400">
-      <input type="checkbox" bind:checked={skipSfx} /> Skip SFX
-    </label>
-    <label class="text-[11px] text-zinc-400">Mosaic
-      <select class="ml-1 rounded bg-zinc-800 px-1 py-0.5 text-xs text-zinc-100" bind:value={mosaicQuality}>
+      </Select>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3">
+      <Select
+        label="Mosaic"
+        bind:value={mosaicQuality}
+        hint={mosaicQuality === "low" ? "±1MB, 75 quality" : "±2MB, 85 quality"}
+      >
         <option value="low">low</option>
         <option value="high">high</option>
-      </select>
-    </label>
+      </Select>
+      <!-- Checkbox disejajarkan dengan control Mosaic (h-9) supaya tepinya
+           rata — label::before pseudo-elemen memberi tinggi yang sama. -->
+      <label
+        class="flex cursor-pointer items-center gap-2.5 self-end rounded-md border border-line
+               bg-surface-2 px-3 text-[13px] text-ink-2 transition-colors hover:border-line-strong"
+      >
+        <input type="checkbox" class="size-4 shrink-0 accent-accent" bind:checked={skipSfx} />
+        Skip SFX
+      </label>
+    </div>
+
+    <div class="flex flex-col gap-1.5">
+      <label
+        for="glossary-override"
+        class="text-[11px] font-medium tracking-wide text-ink-2 uppercase"
+      >
+        Glossary override
+      </label>
+      <textarea
+        id="glossary-override"
+        class="w-full rounded-md border border-line bg-surface-2 px-3 py-2.5 font-mono text-[12px]
+               leading-relaxed text-ink placeholder:text-ink-3 outline-none transition-colors
+               focus:border-accent focus:ring-2 focus:ring-accent/25"
+        rows="2"
+        bind:value={glossary}
+        placeholder="Auto dari Glossary DB — override manual di sini"
+      ></textarea>
+    </div>
+
+    {#if glossaryPreview}
+      <details class="group rounded-md border border-line bg-surface-2/60">
+        <summary
+          class="cursor-pointer list-none px-3 py-2 text-[11px] font-medium text-ink-2 select-none
+                 transition-colors hover:text-ink"
+        >
+          Auto-context dari Glossary ({glossaryPreview.split("\n").length} baris)
+        </summary>
+        <pre
+          class="max-h-40 overflow-auto whitespace-pre-wrap border-t border-line px-3 py-2.5
+                 font-mono text-[11px] leading-relaxed text-ink-3"
+          title="Auto-context glossary">{glossaryPreview}</pre>
+      </details>
+    {/if}
+
+    <Button
+      variant="primary"
+      block
+      class="pt-1"
+      onclick={busy ? cancel : translate}
+      disabled={!busy && !providerId}
+    >{busy ? "Batal" : "Translate"}</Button>
+
+    {#if info}
+      <p role="status" class="text-[11px] leading-relaxed text-ink-3">{info}</p>
+    {/if}
   </div>
-  <textarea
-    class="mt-1 w-full rounded bg-zinc-800 px-1.5 py-1 text-[11px] text-zinc-100 outline-none focus:ring-1 focus:ring-emerald-500"
-    rows="2" bind:value={glossary} placeholder="Auto dari Glossary DB — override manual di sini"
-  ></textarea>
-  {#if glossaryPreview}
-    <p class="mt-1 whitespace-pre-wrap font-mono text-[10px] text-emerald-300/80" title="Auto-context glossary">{glossaryPreview}</p>
-  {/if}
-  <button
-    class="mt-1 w-full rounded bg-emerald-600 px-2 py-1 text-xs font-semibold hover:bg-emerald-500 disabled:opacity-50"
-    onclick={busy ? cancel : translate} disabled={!busy && !providerId}
-  >{busy ? "Batal" : "Translate"}</button>
-  {#if info}<p class="mt-1 text-[10px] text-zinc-500">{info}</p>{/if}
 </div>

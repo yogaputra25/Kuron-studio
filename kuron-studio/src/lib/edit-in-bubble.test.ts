@@ -66,8 +66,10 @@ describe("in-bubble edit (§2 panel)", () => {
   it("sidebar 1 kartu terpilih + placeholder bila null", () => {
     expect(panelSrc).toContain("selectedBubble");
     expect(panelSrc).not.toMatch(/\{#each translation\.bubbles as b, i/);
-    expect(panelSrc).toContain("{#if selectedBubble && selectedRow >= 0}");
-    expect(panelSrc).toContain("Klik / double-klik bubble di After untuk memilih.");
+    // Satu kartu via singleCard (fallback: translation 1 bubble) — bukan list.
+    expect(panelSrc).toMatch(/singleCard = selectedBubble && selectedRow/);
+    expect(panelSrc).toContain("{#if singleCard}");
+    expect(panelSrc).toContain("Klik bubble di After untuk memilih.");
   });
 
   it("isi kartu = 3 textarea + ↺ + badge + glossary pindah rumah", () => {
@@ -84,8 +86,10 @@ describe("in-bubble edit (§2 panel)", () => {
   });
 
   it("header translated + Save edits + hint tetap", () => {
-    expect(panelSrc).toContain("Save edits");
-    expect(panelSrc).toContain(">translated<");
+    // Pasca restyle design-system: header "Terjemahan" + tombol save lewat
+    // i18n ($t("save")), bukan literal "Save edits".
+    expect(panelSrc).toContain("$t(\"save\")");
+    expect(panelSrc).toContain(">Terjemahan (ID)<");
     expect(panelSrc).toContain("Double-klik bubble di After untuk edit langsung.");
   });
 });
