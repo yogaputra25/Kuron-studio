@@ -6,6 +6,37 @@ use crate::memory::{search_memory, TmHit};
 use crate::qa::{check_project, QaIssue};
 use crate::AppState;
 
+/// Info environment untuk bug report: versi, OS, lokasi file log.
+/// Tidak memuat secret apa pun (lihat `logging::diagnostics`).
+#[tauri::command(rename_all = "snake_case")]
+pub fn diagnostics(state: State<'_, AppState>) -> serde_json::Value {
+    let mut v = crate::logging::diagnostics();
+    // Path app data ikut dilaporkan supaya panel bisa baca log-nya sendiri
+    // tanpa menebak konvensi folder di frontend.
+    if let Some(obj) = v.as_object_mut() {
+        obj.insert("data_dir".into(), serde_json::Value::String(state.data_dir()));
+    }
+    v
+}
+
+/// N baris terakhir file log, sebagai JSON Lines mentah.
+///
+/// Dipakai panel Diagnostics di UI supaya user bisa menyalin log lalu
+/// menempelkannya ke issue tanpa harus mencari file di Finder.
+#[tauri::command(rename_all = "snake_case")]
+pub fn read_log(state: State<'_, AppState>, lines: Option<usize>) -> Result<String, String> {
+    let n = lines.unwrap_or(200).clamp(1, 5000);
+    let path = state.data_dir_path().join("kuron-studio.log");
+    let raw = match std::fs::read_to_string(&path) {
+        Ok(r) => r,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(String::new()),
+        Err(e) => return Err(format!("read {}: {e}", path.display())),
+    };
+    let all: Vec<&str> = raw.lines().collect();
+    let start = all.len().saturating_sub(n);
+    Ok(all[start..].join("\n"))
+}
+
 #[tauri::command(rename_all = "snake_case")]
 pub fn tm_search(
     state: State<'_, AppState>,

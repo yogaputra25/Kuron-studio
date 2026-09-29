@@ -98,4 +98,28 @@ mod tests {
         let v = read_key("no-such-provider-m4-test", "legacy-k").unwrap();
         assert_eq!(v, "legacy-k");
     }
+
+    /// Regresi: tanpa feature `apple-native`, crate `keyring` memakai store
+    /// `mock` di macOS — `set_password` tetap `Ok(())` (jadi tidak ada error
+    /// sama sekali), tapi tidak ada yang tersimpan. Gejalanya: API key hilang
+    /// tiap restart app. Test ini memakai entry yang sama dua kali lewat
+    /// `Entry::new` baru: mock selalu mengembalikan `NoEntry`.
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn keychain_backend_is_real() {
+        let id = "kuron-studio-backend-probe";
+        let _ = read_key(id, "").ok();
+        let e = entry(id).expect("keychain entry harus bisa dibuat");
+        e.set_password("probe-value")
+            .expect("set_password harus berhasil (store sungguhan, bukan mock)");
+        // Entry BARU ke store yang sama — mock tidak punya persistensi.
+        let again = entry(id).unwrap().get_password();
+        assert_eq!(
+            again.as_deref().ok(),
+            Some("probe-value"),
+            "credential hilang saat entry dibuat ulang = store `mock`, \
+             bukan macOS Keychain. Cek feature `apple-native` di Cargo.toml."
+        );
+        let _ = e.delete_credential();
+    }
 }

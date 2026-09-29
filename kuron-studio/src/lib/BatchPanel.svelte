@@ -3,6 +3,9 @@
   import { onMount } from "svelte";
   import { api } from "./api";
   import { initialBatchState, reduceProgress } from "./batch";
+  import { t } from "./i18n";
+  import Button from "./ui/Button.svelte";
+  import Panel from "./ui/Panel.svelte";
   import type { BatchOpts, Page, TranslateProgress } from "./types";
 
   interface Props {
@@ -15,9 +18,11 @@
   let { pages, opts, onDone, onClose }: Props = $props();
 
   let running = $state(false);
-  const pageCount = $derived(pages.length);
-  // ponytail: jangan namai `state` — svelte-check mengacaukannya dengan rune $state.
-  let batch = $state(initialBatchState(pageCount));
+  // Nilai awal dihitung dari prop saat mount, sengaja bukan $derived:
+  // `batch` di-mutate (reduceProgress) dan di-reset tiap run(), jadi harus beku.
+  // eslint-disable-next-line svelte/no-state-referenced-locally
+  // svelte-ignore state_referenced_locally
+  let batch = $state(initialBatchState(pages.length));
   let error = $state("");
 
   const targets = $derived(pages.map((p) => p.id));
@@ -52,33 +57,55 @@
   }
 </script>
 
-<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true">
-  <div class="w-full max-w-lg rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-100">
-    <div class="mb-2 flex items-center gap-2">
-      <h2 class="font-bold">Batch translate ({targets.length} halaman · 3 paralel)</h2>
-      <button class="ml-auto rounded bg-zinc-800 px-2 py-1 hover:bg-zinc-700" onclick={onClose}>Tutup</button>
-    </div>
-    <div class="mb-1 h-2 overflow-hidden rounded bg-zinc-800">
-      <div class="h-full bg-emerald-500 transition-all" style={`width: ${pct}%`}></div>
-    </div>
-    <p class="mb-2 text-xs text-zinc-400">{batch.done}/{batch.total} · gagal: {batch.failed.length}</p>
-    {#if error}<p class="mb-2 rounded bg-amber-950 px-2 py-1 text-xs text-amber-200">{error}</p>{/if}
-    {#if batch.failed.length > 0}
-      <ul class="mb-2 space-y-1">
-        {#each batch.failed as id (id)}
-          <li class="rounded bg-rose-950 px-2 py-1 text-xs text-rose-200">
-            {pages.find((p) => p.id === id)?.path.split(/[/\\]/).pop() ?? id}: {batch.messages[id] ?? ""}
-          </li>
-        {/each}
-      </ul>
-      <button
-        class="mb-2 w-full rounded bg-amber-700 px-2 py-1 text-xs font-semibold hover:bg-amber-600 disabled:opacity-50"
-        onclick={() => run(batch.failed)} disabled={running}
-      >Retry yang gagal ({batch.failed.length})</button>
-    {/if}
-    <button
-      class="w-full rounded bg-emerald-600 px-2 py-1.5 font-semibold hover:bg-emerald-500 disabled:opacity-50"
-      onclick={() => run(targets)} disabled={running || targets.length === 0}
-    >{running ? `Jalan… ${pct}%` : `Translate ${targets.length} halaman`}</button>
+<!-- snippet (bukan variabel) — Panel menerimanya sebagai prop `footer`. -->
+{#snippet footer()}
+  {#if batch.failed.length > 0}
+    <Button variant="default" size="sm" onclick={() => run(batch.failed)} disabled={running}>
+      {$t("retryFailed")} ({batch.failed.length})
+    </Button>
+  {/if}
+  <Button
+    variant="primary"
+    onclick={() => run(targets)}
+    disabled={running || targets.length === 0}
+  >
+    {running ? `${$t("running")} ${pct}%` : `${$t("batch")} ${targets.length} ${$t("pages")}`}
+  </Button>
+{/snippet}
+
+<Panel title={$t("batchTitle")} {onClose} {footer}>
+  <p class="tnum mb-2 text-xs text-ink-3">
+    {targets.length} halaman · {batch.done}/{batch.total} {$t("done")} · {$t("failed")}: {batch.failed.length}
+  </p>
+
+  <div
+    class="mb-3 h-1.5 overflow-hidden rounded-full bg-raised"
+    role="progressbar"
+    aria-valuenow={pct}
+    aria-valuemin={0}
+    aria-valuemax={100}
+    aria-label="Progres batch"
+  >
+    <div
+      class="h-full rounded-full bg-accent transition-[width] duration-200"
+      style={`width: ${pct}%`}
+    ></div>
   </div>
-</div>
+
+  {#if error}
+    <p role="alert" class="mb-3 rounded-md border border-warn-soft bg-warn-soft px-2.5 py-1.5 text-xs text-warn">
+      {error}
+    </p>
+  {/if}
+
+  {#if batch.failed.length > 0}
+    <ul class="mb-1 space-y-1">
+      {#each batch.failed as id (id)}
+        <li class="rounded-md border border-danger/30 bg-danger-soft px-2.5 py-1.5 text-xs text-danger">
+          <span class="font-medium">{pages.find((p) => p.id === id)?.path.split(/[/\\]/).pop() ?? id}</span>
+          <span class="text-danger/80"> — {batch.messages[id] ?? ""}</span>
+        </li>
+      {/each}
+    </ul>
+  {/if}
+</Panel>

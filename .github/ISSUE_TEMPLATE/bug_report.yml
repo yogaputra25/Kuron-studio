@@ -1,0 +1,117 @@
+name: Laporan Bug
+description: Ada yang tidak berjalan seperti seharusnya. Boleh diisi siapa saja.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Terima kasih sudah melapor. Bagian yang tidak relevan boleh dikosongkan,
+        tapi yang bisa diisi membuat bug lebih cepat ditangani.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Bagian mana yang bermasalah?
+      options:
+        - Detect bubble (deteksi otomatis)
+        - Editor bubble (geser, ubah bentuk, tail)
+        - Terjemahkan (provider, model, hasil terjemahan)
+        - Glossary
+        - Batch dan review
+        - Ekspor (JSON, PNG, CBZ, PSD)
+        - Import halaman
+        - Tampilan, tema, atau bahasa
+        - Tidak tahu, yang penting rusak
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: Apa yang terjadi?
+      description: |
+        Ceritakan apa yang Anda lihat. Kalau ada pesan error, tuliskan persis
+        seperti yang muncul, lengkap dengan nama tombol atau menunya.
+      placeholder: |
+        Saat menekan "Terjemahkan", spinner jalan lama lalu berhenti dan
+        muncul tulisan "Gagal memuat terjemahan" di panel kanan.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Apa yang seharusnya terjadi?
+      description: Satu atau dua kalimat saja.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Langkah untuk mengulanginya
+      description: Dari app yang baru dibuka sampai bug-nya muncul.
+      placeholder: |
+        1. Buka project "One Piece vol 1"
+        2. Klik halaman 0008.jpg
+        3. Klik tombol "Terjemahkan"
+        4.Spinner berhenti dengan pesan error
+    validations:
+      required: true
+
+  - type: textarea
+    id: sample
+    attributes:
+      label: Data yang dipakai
+      description: |
+        Sebutkan project, jumlah halaman, provider, model, dan gaya terjemahan.
+        Kalau menyangkut halaman tertentu, sebutkan nama filenya. Jangan
+        lampirkan file manga karena hak cipta.
+      placeholder: Project 42 halaman, provider Gemini, model gemini-2.5-flash, gaya Standard, file 0008.jpg
+
+  - type: input
+    id: version
+    attributes:
+      label: Versi aplikasi
+      description: Ada di menu Tentang.
+      placeholder: 0.1.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Sistem operasi
+      options:
+        - Windows
+        - macOS
+        - Linux
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot atau rekaman layar
+      description: Tarik file ke sini lewat ikon kertas klip di pojok kanan atas kotak ini.
+      value: |
+        Screenshot sangat membantu, tapi opsional. Kalau pesan errornya muncul
+        sesaat saja, rekam layar lebih berguna daripada screenshot.
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Isi log (opsional)
+      description: |
+        App punya Diagnostics di header. Buka, salin isinya, tempel di sini.
+        Hapus API key bila ada.
+      render: text
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Cek dulu sebelum mengirim
+      options:
+        - label: Saya sudah mencoba aplikasi versi terbaru
+        - label: Saya sudah mencoba `pnpm dev:fresh` (bila menjalankan dari sumber)

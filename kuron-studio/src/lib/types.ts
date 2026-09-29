@@ -23,9 +23,39 @@ export interface Project {
   pages: Page[];
 }
 
+// --- M0: import contract (values, bukan type) ---
+// Wajib sinkron dengan `IMAGE_EXTS` / `is_archive` di
+// src-tauri/src/commands/project.rs — dicek image-ext-contract.test.ts yang
+// membaca dua-duanya. Jangan tambah ekstensi di sini saja: kalau formatnya
+// tidak bisa di-decode, import diam-diam jadi halaman rusak.
+export const IMAGE_EXTS = [
+  "jpg",
+  "jpeg",
+  "jpe",
+  "jfif",
+  "png",
+  "webp",
+  "bmp",
+  "gif",
+  "tiff",
+  "tif",
+] as const;
+
+export const ARCHIVE_EXTS = ["zip", "cbz"] as const;
+
 export interface ImportResult {
   pages: Page[];
   skipped: number;
+}
+
+/** Mirror Rust `CleanResult` — hasil `clean_pages`. */
+export interface CleanResult {
+  /** Halaman yang dibuang (file hilang / tidak bisa di-decode). */
+  removed: number;
+  /** Halaman yang masih tertinggal setelah bersih. */
+  kept: number;
+  /** Berapa file fisik yang ikut terhapus (hanya yang ada di store dir). */
+  removedFiles: number;
 }
 
 /** Mirror Rust `BubbleBox` — koordinat px original image. */
@@ -112,6 +142,10 @@ export interface BubbleTranslation {
   original: string;
   reading: string;
   translated: string;
+  /** Baseline AI terakhir (reset-translation): diisi jalur AI, manual tak sentuh. */
+  aiOriginal: string;
+  aiReading: string;
+  aiTranslated: string;
   needsWhitePatch: boolean;
   isUserEdited: boolean;
 }

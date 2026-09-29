@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Button from "./ui/Button.svelte";
   // M4-7: check GitHub Releases via updater plugin; graceful no-op when
   // pubkey placeholder belum diganti atau plugin tak tersedia (dev browser).
   let status = $state<"idle" | "checking" | "ready" | "done" | "error">("idle");
@@ -24,9 +25,14 @@
   }
 </script>
 
-<button
-  class="rounded bg-zinc-800 px-2 py-1 text-sm hover:bg-zinc-700 disabled:opacity-50"
-  onclick={check} disabled={status === "checking"}
+<Button
+  variant="ghost"
+  size="icon"
+  onclick={check}
+  disabled={status === "checking"}
   title="Cek update dari GitHub Releases"
->↻</button>
-{#if msg}<span class="text-xs text-zinc-400">{msg}</span>{/if}
+  aria-label="Cek update"
+>↻</Button>
+{#if msg}
+  <span class="text-xs text-ink-2" role="status">{msg}</span>
+{/if}

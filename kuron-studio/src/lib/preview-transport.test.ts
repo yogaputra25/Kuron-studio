@@ -16,7 +16,10 @@ import panelSrc from "./EditorPanel.svelte?raw";
 describe("preview transport (fix-preview-hang §2 progressive open)", () => {
   it("openEditor set selectedId langsung tanpa await-before-mount", () => {
     const fn = appSrc.slice(appSrc.indexOf("function openEditor"));
-    const body = fn.slice(0, fn.indexOf("\n  }\n") + 4);
+    // \r? — file bisa CRLF di Windows; indexOf("\n  }\n") mepet jadi -1.
+    const end = fn.match(/\r?\n  \}\r?\n/);
+    expect(end, "akhir function openEditor tidak ditemukan").not.toBeNull();
+    const body = fn.slice(0, end!.index! + end![0].length);
     expect(body).toContain("selectedId = id;");
     expect(body).not.toMatch(/await api\.getImagePreview/);
     expect(body).toMatch(/void api\s*\n?\s*\.getImagePreview\(pg\.path, 1600\)/);
@@ -35,7 +38,11 @@ describe("preview transport (fix-preview-hang §2 progressive open)", () => {
   it("EditorPanel tampilkan editor bila URL ada walau openError set", () => {
     expect(panelSrc).toContain("{#if openError && !fullImageUrl}");
     // Panel error penuh hanya tanpa URL sama sekali; banner tetap ada.
-    expect(panelSrc).toMatch(/\{#if openError\}\s*<p class="border-b border-red-900/);
+    // Dicek per bagian (bukan satu regex panjang) supaya retokenisasi UI
+    // tidak mematikan guard ini, tapi banner tetap wajib role="alert".
+    const banner = panelSrc.slice(panelSrc.indexOf("{#if openError}"));
+    expect(banner.slice(0, 200)).toContain("openError}</p>");
+    expect(banner.slice(0, 200)).toContain('role="alert"');
   });
 
   it("App teruskan thumb sebagai fallbackUrl ke EditorPanel", () => {
