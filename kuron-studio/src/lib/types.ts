@@ -112,6 +112,10 @@ export interface BubbleTranslation {
   original: string;
   reading: string;
   translated: string;
+  /** Baseline AI terakhir (reset-translation): diisi jalur AI, manual tak sentuh. */
+  aiOriginal: string;
+  aiReading: string;
+  aiTranslated: string;
   needsWhitePatch: boolean;
   isUserEdited: boolean;
 }

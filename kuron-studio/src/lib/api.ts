@@ -51,6 +51,8 @@ export const api = {
     invoke<void>("delete_provider", { provider_id }),
   translatePage: (input: TranslatePageArgs) =>
     invoke<PageTranslation>("translate_page", { input }),
+  cancelTranslate: (page_id: string) =>
+    invoke<void>("cancel_translate", { page_id }),
   saveTranslation: (page_id: string, bubbles: BubbleTranslation[]) =>
     invoke<PageTranslation>("save_translation", { page_id, bubbles }),
   clearCache: () => invoke<number>("clear_cache"),

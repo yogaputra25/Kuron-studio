@@ -1,6 +1,6 @@
 <script lang="ts">
   import { listen } from "@tauri-apps/api/event";
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { api } from "../lib/api";
   import CanvasEditor from "../lib/CanvasEditor.svelte";
   import TranslatePanel from "../lib/TranslatePanel.svelte";
@@ -46,9 +46,26 @@
   let translation = $state<PageTranslation | null>(null);
   let providerId = $state("");
   let lastOpts = $state<TranslateOpts | null>(null);
-  let showTranslation = $state(false);
   let savingTr = $state(false);
   let glossMsg = $state("");
+  let manualSel = $state<number | null>(null);
+
+  // Draft lokal kartu (fix-edit-stuck D1): ketikan ditahan di sini, BUKAN di
+  // translation.bubbles — jadi value textarea tak di-set ulang per huruf dan
+  // kursor stabil. Commit sekali via editTr existing (blur/debounce/pindah).
+  let draft = $state<{ row: number; original: string; reading: string; translated: string } | null>(null);
+  let draftTimer = $state<ReturnType<typeof setTimeout> | null>(null);
+
+  // Before|Split|After — after-lite: overlay Konva, bukan PNG typeset
+  // (ponytail: after-true via command render_page_png bila diprotes).
+  type PaneMode = "before" | "split" | "after";
+  let mode = $state<PaneMode>("before");
+  let beforeScroll: HTMLDivElement | null = $state(null);
+  let afterScroll: HTMLDivElement | null = $state(null);
+  let syncing = false;
+  let saveTimer = $state<ReturnType<typeof setTimeout> | null>(null);
+  // §4 last-write-wins: naik tiap kirim; respons hanya menang bila gen-nya kini.
+  let saveGen = 0;
 
   const originals = $derived(
     (translation?.bubbles ?? []).map((b) => b.original).filter((s) => s.trim()),
@@ -90,7 +107,6 @@
     // Restore persisted translation (close → reopen); local edits win unless saved.
     if (incomingTr && JSON.stringify(translation) !== incomingTr) {
       translation = $state.snapshot(page.translation) ?? null;
-      showTranslation = !!translation;
     }
   }
 
@@ -167,11 +183,15 @@
   }
 
   async function saveTranslationEdits() {
+    if (draft) commitDraft();
     if (!translation) return;
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    const my = ++saveGen;
     savingTr = true;
     error = "";
     try {
       const out = await api.saveTranslation(page.id, translation.bubbles);
+      if (my !== saveGen) return; // respons basi: save lebih baru sudah dikirim
       translation = out;
       onSaved({ ...page, status: "translated", translation: out });
     } catch (e) {
@@ -181,20 +201,126 @@
     }
   }
 
+  /** Debounce ~500ms: ketik → save → prop ikut → guard JSON diam (§6). */
+  function queueSaveTranslationEdits() {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => { saveTimer = null; void saveTranslationEdits(); }, 500);
+  }
+
+  onDestroy(() => { if (saveTimer) clearTimeout(saveTimer); if (draftTimer) clearTimeout(draftTimer); });
+
+  /** "Isi manual": translation null → bangun kosong lokal → save_translation. */
+  async function createEmptyTranslation() {
+    if (translation) return;
+    if (bubbles.length === 0) { error = "Belum ada bubble — Detect atau gambar manual dulu."; return; }
+    // Validasi ringan: index unik ikut urutan bubble (backend tanpa validasi).
+    const idx = bubbles.map((_, i) => i);
+    if (new Set(idx).size !== idx.length) { error = "Index bubble duplikat — simpan bubble dulu."; return; }
+    const empty = {
+      pageId: page.id, targetLang: "id", style: lastOpts?.style ?? "standard", model: "",
+      bubbles: bubbles.map((b, i) => ({
+        index: i, x: b.x, y: b.y, w: b.w, h: b.h,
+        original: "", reading: "", translated: "",
+        aiOriginal: "", aiReading: "", aiTranslated: "",
+        needsWhitePatch: false, isUserEdited: false,
+      })),
+    };
+    savingTr = true;
+    error = "";
+    try {
+      const out = await api.saveTranslation(page.id, empty.bubbles);
+      translation = out;
+      onSaved({ ...page, status: "translated", translation: out });
+    } catch (e) {
+      error = String(e);
+    } finally {
+      savingTr = false;
+    }
+  }
+
+  function syncScroll(from: HTMLDivElement | null, to: HTMLDivElement | null) {
+    if (!from || !to || syncing) return;
+    syncing = true;
+    to.scrollTop = from.scrollTop;
+    to.scrollLeft = from.scrollLeft;
+    syncing = false;
+  }
+
   function onTranslated(t: PageTranslation) {
+    // Draft kartu yang sedang diketik jadi edited + ikut mergeUserEdits
+    // (tanpa ini draft basi menimpa hasil AI baru / hilang).
+    if (draft) commitDraft();
     translation = {
       ...t,
       bubbles: mergeUserEdits(translation?.bubbles, t.bubbles),
     };
-    showTranslation = true;
     onSaved({ ...page, status: "translated", translation });
   }
+
+  const selectedBubble = $derived(
+    translation && manualSel !== null
+      ? (translation.bubbles.find((b) => b.index === manualSel) ?? null)
+      : null,
+  );
+  const selectedRow = $derived(
+    selectedBubble ? translation!.bubbles.findIndex((b) => b.index === selectedBubble.index) : -1,
+  );
 
   function editTr(i: number, field: "translated" | "reading" | "original", v: string) {
     if (!translation) return;
     translation.bubbles = translation.bubbles.map((b, j) =>
-      j === i ? { ...b, [field]: v, isUserEdited: field === "translated" ? true : b.isUserEdited } : b,
+      j === i ? { ...b, [field]: v, isUserEdited: true } : b,
     );
+    manualSel = translation.bubbles[i]?.index ?? null;
+    queueSaveTranslationEdits();
+  }
+
+  type DraftField = "original" | "reading" | "translated";
+
+  /** Tulis ketikan kartu ke draft saja — translation.bubbles tak tersentuh. */
+  function draftInput(field: DraftField, v: string) {
+    if (!translation || selectedRow < 0) return;
+    if (!draft || draft.row !== selectedRow) {
+      const cur = translation.bubbles[selectedRow];
+      if (!cur) return;
+      draft = { row: selectedRow, original: cur.original, reading: cur.reading, translated: cur.translated };
+    }
+    draft[field] = v;
+    // Ketik-tanpa-blur: debounce ~500ms commit (ritme autosave existing).
+    if (draftTimer) clearTimeout(draftTimer);
+    draftTimer = setTimeout(() => { draftTimer = null; commitDraft(); }, 500);
+  }
+
+  /** Commit field kotor via editTr existing (sekali, bukan per huruf). */
+  function commitDraft() {
+    if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; }
+    if (!draft || !translation) return;
+    const { row, original, reading, translated } = draft;
+    draft = null;
+    const cur = translation.bubbles[row];
+    if (!cur) return;
+    if (cur.original !== original) editTr(row, "original", original);
+    if (cur.reading !== reading) editTr(row, "reading", reading);
+    if (cur.translated !== translated) editTr(row, "translated", translated);
+  }
+
+  /** Pindah seleksi saat draft kotor → commit otomatis dulu (D2). */
+  function selectBubble(idx: number | null) {
+    if (draft) commitDraft();
+    manualSel = idx;
+    if (idx === null) draft = null;
+  }
+
+  /** ↺ opsi A: current = baseline AI terakhir, kirim LANGSUNG (§4 D7). */
+  function resetBubble(i: number) {
+    if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; }
+    draft = null;
+    if (!translation) return;
+    translation.bubbles = translation.bubbles.map((b, j) =>
+      j === i ? { ...b, original: b.aiOriginal, reading: b.aiReading, translated: b.aiTranslated, isUserEdited: false } : b,
+    );
+    // Sinkron, bukan queueSave: generasi baru membuat respons save lama basi.
+    void saveTranslationEdits();
   }
 
   onMount(async () => {
@@ -217,6 +343,14 @@
     <span class={`rounded px-1.5 py-0.5 text-[10px] font-semibold text-white ${statusBadgeClass(page.status)}`}>{page.status}</span>
     <span class="text-xs text-zinc-500">engine: {detectEngine} · {bubbles.length} bubble</span>
     <div class="ml-auto flex items-center gap-1">
+      <div class="mr-1 flex overflow-hidden rounded text-[11px]">
+        {#each [["before", "Before"], ["split", "Split"], ["after", "After"]] as [m, label]}
+          <button
+            class={`px-2 py-1 ${mode === m ? "bg-sky-600 font-semibold text-white" : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"}`}
+            onclick={() => (mode = m as PaneMode)}
+          >{label}</button>
+        {/each}
+      </div>
       {#each [["select", "Pilih"], ["rect", "Rect"], ["ellipse", "Elips"], ["freeform", "Bebas"], ["tail", "Ekor"]] as [t, label]}
         <button
           class={`rounded px-2 py-1 ${tool === t ? "bg-emerald-600 font-semibold" : "bg-zinc-800 hover:bg-zinc-700"}`}
@@ -251,24 +385,59 @@
     </div>
   {:else}
   <div class="flex min-h-0 flex-1">
-    <div class="min-w-0 flex-1 overflow-auto p-4">
-      <CanvasEditor
-        bind:this={editorRef}
-        imageUrl={fullImageUrl}
-        fallbackUrl={fallbackUrl}
-        imgW={page.width || 800}
-        imgH={page.height || 1200}
-        initial={bubbles}
-        {readingDir}
-        {tool}
-        translations={translation?.bubbles ?? []}
-        {showTranslation}
-        onChange={(nb) => {
-          bubbles = nb;
-          dirty = true;
-        }}
-      />
-    </div>
+    {#if mode === "before" || mode === "split"}
+      <div
+        class="min-w-0 flex-1 overflow-auto p-4"
+        bind:this={beforeScroll}
+        onscroll={() => syncScroll(beforeScroll, afterScroll)}
+      >
+        <CanvasEditor
+          bind:this={editorRef}
+          imageUrl={fullImageUrl}
+          fallbackUrl={fallbackUrl}
+          imgW={page.width || 800}
+          imgH={page.height || 1200}
+          initial={bubbles}
+          {readingDir}
+          {tool}
+          translations={translation?.bubbles ?? []}
+          showTranslation={false}
+          editable={true}
+          externalSelected={manualSel}
+          onSelectForward={(i) => selectBubble(i)}
+          onChange={(nb) => {
+            bubbles = nb;
+            dirty = true;
+          }}
+        />
+      </div>
+    {/if}
+    {#if mode === "after" || mode === "split"}
+      <div
+        class="min-w-0 flex-1 overflow-auto p-4"
+        class:border-l={mode === "split"}
+        class:border-zinc-800={mode === "split"}
+        bind:this={afterScroll}
+        onscroll={() => syncScroll(afterScroll, beforeScroll)}
+      >
+        <CanvasEditor
+          imageUrl={fullImageUrl}
+          fallbackUrl={fallbackUrl}
+          imgW={page.width || 800}
+          imgH={page.height || 1200}
+          initial={bubbles}
+          {readingDir}
+          tool="select"
+          translations={translation?.bubbles ?? []}
+          showTranslation={true}
+          editable={false}
+          externalSelected={manualSel}
+          onSelectForward={(i) => selectBubble(i)}
+          onEditTranslation={(i, v) => editTr(i, "translated", v)}
+          onChange={() => {}}
+        />
+      </div>
+    {/if}
     <aside class="w-64 shrink-0 overflow-auto border-l border-zinc-800 p-3 text-xs">
       <h3 class="mb-2 font-semibold text-zinc-300">Bubble ({bubbles.length})</h3>
       {#if bubbles.length === 0}
@@ -322,38 +491,77 @@
         <div class="mt-2 flex items-center gap-2">
           <span class={`rounded px-1.5 py-0.5 text-[10px] font-semibold text-white ${statusBadgeClass("translated")}`}>translated</span>
           <button
-            class={`rounded px-2 py-0.5 ${showTranslation ? "bg-emerald-600" : "bg-zinc-800 hover:bg-zinc-700"}`}
-            onclick={() => (showTranslation = !showTranslation)}
-          >Overlay T</button>
-          <button
             class="ml-auto rounded bg-emerald-600 px-2 py-0.5 font-semibold hover:bg-emerald-500 disabled:opacity-50"
-            onclick={saveTranslationEdits} disabled={savingTr}
+            onclick={() => void saveTranslationEdits()} disabled={savingTr}
           >{savingTr ? "Simpan…" : "Save edits"}</button>
         </div>
+        {#if mode !== "before"}
+          <p class="mt-1 text-[10px] text-zinc-500">Double-klik bubble di After untuk edit langsung.</p>
+        {/if}
         <ol class="mt-2 space-y-1.5">
-          {#each translation.bubbles as b, i (b.index)}
+          {#if selectedBubble && selectedRow >= 0}
+            {@const b = selectedBubble}
+            {@const i = selectedRow}
             <li
-              class="rounded bg-zinc-900 p-1.5"
+              class="rounded bg-zinc-900 p-1.5 ring-1 ring-emerald-500"
               onpointerdown={() => pressStart(b.original, b.translated)}
               onpointerup={pressEnd}
               onpointerleave={pressEnd}
               title="Tahan 0.5 dtk untuk simpan ke Glossary"
             >
               <div class="mb-0.5 flex items-center gap-1 text-[10px] text-zinc-500">
-                <span>#{b.index + 1}</span>
+                <button
+                  class="rounded px-1 hover:bg-zinc-700 hover:text-zinc-200"
+                  onclick={() => selectBubble(manualSel === b.index ? null : b.index)}
+                  title="Pilih bubble ini"
+                >#{b.index + 1}</button>
                 {#if b.isUserEdited}<span class="rounded bg-amber-700 px-1 text-white">edited</span>{/if}
+                {#if b.isUserEdited && b.aiTranslated}
+                  <button
+                    class="ml-auto rounded px-1 hover:bg-zinc-700 hover:text-zinc-200"
+                    onclick={() => resetBubble(i)}
+                    title="Kembalikan ke hasil AI terakhir"
+                  >↺</button>
+                {/if}
               </div>
-              <p class="truncate text-zinc-500" title={b.original}>O: {b.original || "—"}</p>
-              {#if b.reading}<p class="truncate text-zinc-400" title={b.reading}>R: {b.reading}</p>{/if}
-              <input
-                class="mt-0.5 w-full rounded bg-zinc-800 px-1.5 py-1 text-xs text-zinc-100 outline-none focus:ring-1 focus:ring-emerald-500"
-                value={b.translated}
-                oninput={(e) => editTr(i, "translated", (e.target as HTMLInputElement).value)}
-              />
+              <p class="mt-0.5 block text-[10px] text-zinc-500">Original (JP)</p>
+              <textarea
+                rows="2"
+                class="w-full rounded bg-zinc-800 px-1.5 py-1 text-xs text-zinc-100 outline-none focus:ring-1 focus:ring-emerald-500"
+                value={draft && draft.row === i ? draft.original : b.original}
+                oninput={(e) => draftInput("original", (e.target as HTMLTextAreaElement).value)}
+                onblur={commitDraft}
+              ></textarea>
+              <p class="mt-0.5 block text-[10px] text-zinc-500">Reading</p>
+              <textarea
+                rows="1"
+                class="w-full rounded bg-zinc-800 px-1.5 py-1 text-xs text-zinc-100 outline-none focus:ring-1 focus:ring-emerald-500"
+                value={draft && draft.row === i ? draft.reading : b.reading}
+                oninput={(e) => draftInput("reading", (e.target as HTMLTextAreaElement).value)}
+                onblur={commitDraft}
+              ></textarea>
+              <p class="mt-0.5 block text-[10px] text-zinc-500">Terjemahan (ID)</p>
+              <textarea
+                rows="2"
+                class="w-full rounded bg-zinc-800 px-1.5 py-1 text-xs text-zinc-100 outline-none focus:ring-1 focus:ring-emerald-500"
+                value={draft && draft.row === i ? draft.translated : b.translated}
+                oninput={(e) => draftInput("translated", (e.target as HTMLTextAreaElement).value)}
+                onblur={commitDraft}
+              ></textarea>
               {#if glossMsg}<p class="mt-0.5 text-[10px] text-emerald-300">{glossMsg}</p>{/if}
             </li>
-          {/each}
+          {:else}
+            <p class="rounded bg-zinc-900 p-2 text-zinc-500">Klik / double-klik bubble di After untuk memilih.</p>
+          {/if}
         </ol>
+      {:else}
+        <div class="mt-2">
+          <button
+            class="w-full rounded bg-sky-700 px-2 py-1 font-semibold hover:bg-sky-600 disabled:opacity-50"
+            onclick={() => void createEmptyTranslation()} disabled={savingTr || bubbles.length === 0}
+          >{savingTr ? "Simpan…" : "Isi manual"}</button>
+          <p class="mt-1 text-[10px] text-zinc-500">Buat translation kosong tanpa AI, lalu ketik per bubble.</p>
+        </div>
       {/if}
     </aside>
   </div>

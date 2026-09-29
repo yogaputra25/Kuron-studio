@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::commands::translate::{
-    apply_cached, backoff_translate, cache_lookup, claim_page, effective_glossary,
+    CANCELLED_MSG, apply_cached, backoff_translate, cache_lookup, cancel_or_fail, claim_page, effective_glossary,
     fail_page, load_provider, load_snapshot, map_text, persist_translation, store_result, PagePrep,
     PageWork, PrepOpts,
 };
@@ -75,23 +75,23 @@ struct PageOutcome {
 /// Terjemahkan satu halaman penuh dari PageWork (dipakai worker batch).
 /// Never panics: semua Err jadi PageOutcome::Err oleh caller.
 async fn run_work(
-    state: &State<'_, AppState>,
+    state: &AppState,
     prep: &PagePrep,
     work: &PageWork,
 ) -> Result<PageTranslation, String> {
     if let Some(payload) = cache_lookup(state, &prep.cache_key)? {
         return apply_cached(state, &prep.page_id, &payload, prep.prev.as_ref());
     }
-    let text = backoff_translate(&work.client, &work.rec, &work.prompt, &work.jpeg)
+    let text = backoff_translate(state, &prep.page_id, &work.client, &work.rec, &work.prompt, &work.jpeg)
         .await
-        .map_err(|e| fail_page(state, &prep.page_id, e))?;
+        .map_err(|e| cancel_or_fail(state, &prep.page_id, e))?;
     let page_t = match map_text(prep, &text) {
         Ok(p) => p,
         Err(first) => {
-            let text2 = backoff_translate(&work.client, &work.rec, &work.prompt, &work.jpeg)
+            let text2 = backoff_translate(state, &prep.page_id, &work.client, &work.rec, &work.prompt, &work.jpeg)
                 .await
-                .map_err(|e| fail_page(state, &prep.page_id, e))?;
-            map_text(prep, &text2).map_err(|_| fail_page(state, &prep.page_id, first))?
+                .map_err(|e| cancel_or_fail(state, &prep.page_id, e))?;
+            map_text(prep, &text2).map_err(|_| cancel_or_fail(state, &prep.page_id, first))?
         }
     };
     store_result(state, prep, &page_t)?;
@@ -114,7 +114,7 @@ pub async fn translate_batch(
     let mut pending: Vec<PageOutcome> = Vec::new();
     for id in &input.page_ids {
         match crate::commands::translate::prepare_page(
-            &state,
+            state.inner(),
             PrepOpts {
                 page_id: id,
                 provider_id: &input.provider_id,
@@ -152,7 +152,7 @@ pub async fn translate_batch(
             let state_ref: State<'_, AppState> = handle.state();
             let outcome = PageOutcome {
                 page_id: prep.page_id.clone(),
-                result: run_work(&state_ref, &prep, &work).await,
+                result: run_work(state_ref.inner(), &prep, &work).await,
             };
             let _ = tx.send(outcome).await;
         });
@@ -219,7 +219,7 @@ pub async fn retry_bubble(
     state: State<'_, AppState>,
     input: RetryBubbleInput,
 ) -> Result<PageTranslation, String> {
-    let snap = load_snapshot(&state, &input.page_id)?;
+    let snap = load_snapshot(state.inner(), &input.page_id)?;
     if input.bubble_index >= snap.bubbles.len() {
         return Err(format!(
             "bubble index {} di luar {} bubble",
@@ -233,12 +233,12 @@ pub async fn retry_bubble(
             input.page_id
         )
     })?;
-    claim_page(&state, &input.page_id)?;
+    claim_page(state.inner(), &input.page_id)?;
 
     let style = TranslateStyle::from_str(&input.style);
     let target = &snap.bubbles[input.bubble_index];
     let page_bytes = std::fs::read(&snap.path)
-        .map_err(|e| fail_page(&state, &input.page_id, format!("read: {e}")))?;
+        .map_err(|e| fail_page(state.inner(), &input.page_id, format!("read: {e}")))?;
     let chip = target.clone();
     let jpeg = tauri::async_runtime::spawn_blocking(move || {
         crate::image_ops::build_mosaic(&page_bytes, &[chip], crate::commands::translate::quality_of(&input.mosaic_quality))
@@ -246,19 +246,19 @@ pub async fn retry_bubble(
     .await
     .map_err(|e| format!("image task: {e}"))
     .and_then(|r| r)
-    .map_err(|e| fail_page(&state, &input.page_id, e))?;
+    .map_err(|e| fail_page(state.inner(), &input.page_id, e))?;
 
-    let gloss = effective_glossary(&state, input.glossary.as_deref(), snap.prev.as_ref());
+    let gloss = effective_glossary(state.inner(), input.glossary.as_deref(), snap.prev.as_ref());
     let prompt = append_glossary(
         build_mosaic_prompt(&input.target_lang, style, input.skip_sfx, 1),
         gloss.as_deref(),
     );
-    let (client, rec) = load_provider(&state, &input.provider_id)?;
-    let text = backoff_translate(&client, &rec, &prompt, &jpeg)
+    let (client, rec) = load_provider(state.inner(), &input.provider_id)?;
+    let text = backoff_translate(state.inner(), &input.page_id, &client, &rec, &prompt, &jpeg)
         .await
-        .map_err(|e| fail_page(&state, &input.page_id, e))?;
+        .map_err(|e| cancel_or_fail(state.inner(), &input.page_id, e))?;
     let results = crate::parser::parse_mosaic_json(&text)
-        .map_err(|e| fail_page(&state, &input.page_id, format!("parse retry failed: {e} ({})", preview_200(&text))))?;
+        .map_err(|e| cancel_or_fail(state.inner(), &input.page_id, format!("parse retry failed: {e} ({})", preview_200(&text))))?;
     let r = results
         .first()
         .map(|(_, r)| r.clone())
@@ -275,9 +275,13 @@ pub async fn retry_bubble(
     merged.style = input.style.clone();
     merged.model = rec.model.clone();
     if let Some(b) = merged.bubbles.iter_mut().find(|b| b.index == input.bubble_index) {
-        b.original = r.original;
-        b.reading = r.reading;
-        b.translated = r.translated;
+        b.original = r.original.clone();
+        b.reading = r.reading.clone();
+        b.translated = r.translated.clone();
+        // Retry = user minta AI baru → hasilnya jadi baseline baru + normal.
+        b.ai_original = r.original.clone();
+        b.ai_reading = r.reading.clone();
+        b.ai_translated = r.translated.clone();
         b.is_user_edited = false;
     } else {
         merged.bubbles.push(crate::translation::BubbleTranslation {
@@ -286,9 +290,12 @@ pub async fn retry_bubble(
             y: target.y,
             w: target.w,
             h: target.h,
-            original: r.original,
-            reading: r.reading,
-            translated: r.translated,
+            original: r.original.clone(),
+            reading: r.reading.clone(),
+            translated: r.translated.clone(),
+            ai_original: r.original.clone(),
+            ai_reading: r.reading.clone(),
+            ai_translated: r.translated.clone(),
             needs_white_patch: crate::translation::needs_white_patch(
                 target.w, target.h, snap.page_w, snap.page_h,
             ),
@@ -297,6 +304,12 @@ pub async fn retry_bubble(
         merged.bubbles.sort_by_key(|b| b.index);
     }
     let merged = crate::translation::preserve_user_edits_except(merged, &prev, input.bubble_index);
-    persist_translation(&state, &input.page_id, &merged)?;
+    // Cancel pasca-POST: hasil retry yg keburu jadi DIBUANG (sadar 1 token),
+    // status pulih pra-klaim, tanpa persist.
+    if state.inner().is_cancelled(&input.page_id) {
+        let _ = crate::commands::translate::restore_cancelled(state.inner(), &input.page_id);
+        return Err(CANCELLED_MSG.to_string());
+    }
+    persist_translation(state.inner(), &input.page_id, &merged)?;
     Ok(merged)
 }

@@ -9,8 +9,8 @@ use crate::prompt::{append_glossary, build_mosaic_prompt, full_image_prompt, Tra
 use crate::provider;
 use crate::provider::config::ProviderRecord;
 use crate::translation::{
-    map_full_image, map_mosaic, order_indices, preserve_user_edits, BubbleTranslation,
-    PageTranslation,
+    map_full_image, map_mosaic, merge_ai_baseline, order_indices, preserve_user_edits,
+    BubbleTranslation, PageTranslation,
 };
 use crate::AppState;
 
@@ -89,7 +89,7 @@ pub struct PageSnapshot {
 }
 
 pub fn load_snapshot(
-    state: &State<'_, AppState>,
+    state: &AppState,
     page_id: &str,
 ) -> Result<PageSnapshot, String> {
     let store = state.store.lock().map_err(|e| e.to_string())?;
@@ -111,27 +111,75 @@ pub fn load_snapshot(
 }
 
 /// Klaim atomik: halaman Translating ditolak ("busy") oleh penelepon kedua.
-pub fn claim_page(state: &State<'_, AppState>, page_id: &str) -> Result<(), String> {
-    let mut store = state.store.lock().map_err(|e| e.to_string())?;
-    let page = store
-        .projects
-        .values_mut()
-        .flat_map(|p| p.pages.iter_mut())
-        .find(|pg| pg.id == page_id)
-        .ok_or_else(|| format!("page not found: {page_id}"))?;
-    match page.status {
-        crate::commands::project::PageStatus::Translating => {
-            Err(format!("page busy (already translating): {page_id}"))
+/// Stash status pra-klaim ke `AppState::prev_status` (path cancel restore ini,
+/// bukan `fail_page`). `&AppState` (bukan `&State`) agar unit-test tanpa
+/// runtime Tauri. Flag cancel basi SENGAJA tak dibuang di sini.
+pub fn claim_page(state: &AppState, page_id: &str) -> Result<(), String> {
+    let prev = {
+        let mut store = state.store.lock().map_err(|e| e.to_string())?;
+        let page = store
+            .projects
+            .values_mut()
+            .flat_map(|p| p.pages.iter_mut())
+            .find(|pg| pg.id == page_id)
+            .ok_or_else(|| format!("page not found: {page_id}"))?;
+        match page.status {
+            crate::commands::project::PageStatus::Translating => {
+                return Err(format!("page busy (already translating): {page_id}"));
+            }
+            _ => {
+                let prev = page.status.clone();
+                page.status = crate::commands::project::PageStatus::Translating;
+                store.save_public()?;
+                prev
+            }
         }
-        _ => {
-            page.status = crate::commands::project::PageStatus::Translating;
-            store.save_public()
+    };
+    state.stash_prev(page_id, prev);
+    // NOTE: flag cancel SENGAJA tak dibuang di sini — Batal bisa datang
+    // sebelum claim (frontend busy=true duluan); backoff yang konsumsi.
+    // Stale flag sekali self-healing (satu abort) lalu dibersihkan.
+    Ok(())
+}
+
+/// Error cancel ("dibatalkan oleh user") — satu-satunya string yang memicu
+/// path restore, bukan `fail_page`.
+pub const CANCELLED_MSG: &str = "dibatalkan oleh user";
+
+/// Path cancel: kembalikan status pra-klaim + buang flag. Bukan `fail_page`.
+/// Tanpa stash (tak pernah klaim) = no-op status, flag tetap dibuang.
+pub fn restore_cancelled(state: &AppState, page_id: &str) -> Result<(), String> {
+    let prev = state.take_prev(page_id);
+    state.clear_cancel(page_id);
+    if let Some(st) = prev {
+        let mut store = state.store.lock().map_err(|e| e.to_string())?;
+        if let Some(page) = store
+            .projects
+            .values_mut()
+            .flat_map(|p| p.pages.iter_mut())
+            .find(|pg| pg.id == page_id)
+        {
+            page.status = st;
+            store.save_public()?;
         }
+    }
+    Ok(())
+}
+
+/// Error cancel → restore; error lain → `fail_page` (+bersihkan stash/flag).
+pub fn cancel_or_fail(state: &AppState, page_id: &str, e: String) -> String {
+    if e == CANCELLED_MSG {
+        let _ = restore_cancelled(state, page_id);
+        e
+    } else {
+        state.clear_cancel(page_id);
+        state.take_prev(page_id);
+        fail_page(state, page_id, e)
     }
 }
 
 pub fn load_provider(
-    state: &State<'_, AppState>,
+    state: &AppState,
     provider_id: &str,
 ) -> Result<(reqwest::Client, ProviderRecord), String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
@@ -145,7 +193,7 @@ pub fn load_provider(
 /// Glossary efektif: override eksplisit menang; None → auto-context
 /// (most-recent-5 bila tak ada teks relevan). Never throws: DB error → None.
 pub fn effective_glossary(
-    state: &State<'_, AppState>,
+    state: &AppState,
     explicit: Option<&str>,
     prev: Option<&PageTranslation>,
 ) -> Option<String> {
@@ -165,8 +213,13 @@ pub fn effective_glossary(
 }
 
 /// Satu POST dengan backoff 2s/4s/8s khusus 429 (di atas retry internal
-/// provider). Error non-429 langsung pulang.
+/// provider). Error non-429 langsung pulang. `page_id` kosong = tanpa cek
+/// cancel (kompat); non-kosong = cek flag tiap iterasi + `select!` saat sleep.
+/// Cek ulang pasca-parse: POST yg keburu selesai saat cancel DIBUANG (satu
+/// call token tetap kepakai — sadar, bukan refund).
 pub async fn backoff_translate(
+    state: &AppState,
+    page_id: &str,
     client: &reqwest::Client,
     rec: &ProviderRecord,
     prompt: &str,
@@ -174,11 +227,32 @@ pub async fn backoff_translate(
 ) -> Result<String, String> {
     let mut last = String::from("rate_limited: retry later");
     for (n, wait) in [0u64, 2, 4, 8].iter().enumerate() {
+        if state.is_cancelled(page_id) {
+            state.clear_cancel(page_id);
+            return Err(CANCELLED_MSG.to_string());
+        }
         if *wait > 0 {
-            tokio::time::sleep(std::time::Duration::from_secs(*wait)).await;
+            tokio::select! {
+                _ = tokio::time::sleep(std::time::Duration::from_secs(*wait)) => {}
+                _ = async {
+                    loop {
+                        if state.is_cancelled(page_id) { break; }
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    }
+                } => {
+                    state.clear_cancel(page_id);
+                    return Err(CANCELLED_MSG.to_string());
+                }
+            }
         }
         match provider::translate_image(client, rec, prompt, jpeg).await {
-            Ok(t) => return Ok(t),
+            Ok(t) => {
+                if state.is_cancelled(page_id) {
+                    state.clear_cancel(page_id);
+                    return Err(CANCELLED_MSG.to_string());
+                }
+                return Ok(t);
+            }
             Err(e) if e.contains("rate_limited") && n < 3 => {
                 last = e;
             }
@@ -240,7 +314,7 @@ impl From<&PagePrep> for PageWork {
 
 /// Snapshot → claim → jpeg → prompt+glossary → provider → cache key.
 pub async fn prepare_page(
-    state: &State<'_, AppState>,
+    state: &AppState,
     opts: PrepOpts<'_>,
 ) -> Result<PagePrep, String> {
     let snap = load_snapshot(state, opts.page_id)?;
@@ -306,14 +380,14 @@ pub async fn prepare_page(
     })
 }
 
-pub fn cache_lookup(state: &State<'_, AppState>, key: &str) -> Result<Option<String>, String> {
+pub fn cache_lookup(state: &AppState, key: &str) -> Result<Option<String>, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     cache::cache_get(&db, key)
 }
 
 /// Terapkan payload cache: preservasi edit user + persist translated.
 pub fn apply_cached(
-    state: &State<'_, AppState>,
+    state: &AppState,
     page_id: &str,
     payload: &str,
     prev: Option<&PageTranslation>,
@@ -322,8 +396,10 @@ pub fn apply_cached(
         serde_json::from_str(payload).map_err(|e| format!("cache corrupt: {e}"))?;
     page_t.bubbles = preserve_user_edits(page_t.bubbles, prev);
     page_t.page_id = page_id.to_string();
-    persist(state, page_id, &page_t, "translated")?;
-    Ok(page_t)
+    let r = persist(state, page_id, &page_t, "translated");
+    state.clear_cancel(page_id);
+    state.take_prev(page_id);
+    r.map(|_| page_t)
 }
 
 /// Petakan teks provider → PageTranslation memakai geometri prep.
@@ -344,34 +420,37 @@ pub fn map_text(prep: &PagePrep, text: &str) -> Result<PageTranslation, String> 
 
 /// Simpan hasil ke cache + persist translated.
 pub fn store_result(
-    state: &State<'_, AppState>,
+    state: &AppState,
     prep: &PagePrep,
     page_t: &PageTranslation,
 ) -> Result<(), String> {
     let payload = serde_json::to_string(page_t).map_err(|e| e.to_string())?;
     let db = state.db.lock().map_err(|e| e.to_string())?;
     cache::cache_set(&db, &prep.cache_key, &payload)?;
-    persist(state, &prep.page_id, page_t, "translated")
+    let r = persist(state, &prep.page_id, page_t, "translated");
+    state.clear_cancel(&prep.page_id);
+    state.take_prev(&prep.page_id);
+    r
 }
 
 /// POST (backoff) → map → retry POST sekali saat parse gagal → store.
 pub async fn translate_prep(
-    state: &State<'_, AppState>,
+    state: &AppState,
     prep: &PagePrep,
 ) -> Result<PageTranslation, String> {
     if let Some(payload) = cache_lookup(state, &prep.cache_key)? {
         return apply_cached(state, &prep.page_id, &payload, prep.prev.as_ref());
     }
-    let text = backoff_translate(&prep.client, &prep.rec, &prep.prompt, &prep.jpeg)
+    let text = backoff_translate(state, &prep.page_id, &prep.client, &prep.rec, &prep.prompt, &prep.jpeg)
         .await
-        .map_err(|e| fail_page(state, &prep.page_id, e))?;
+        .map_err(|e| cancel_or_fail(state, &prep.page_id, e))?;
     let page_t = match map_text(prep, &text) {
         Ok(p) => p,
         Err(first) => {
-            let text2 = backoff_translate(&prep.client, &prep.rec, &prep.prompt, &prep.jpeg)
+            let text2 = backoff_translate(state, &prep.page_id, &prep.client, &prep.rec, &prep.prompt, &prep.jpeg)
                 .await
-                .map_err(|e| fail_page(state, &prep.page_id, e))?;
-            map_text(prep, &text2).map_err(|_| fail_page(state, &prep.page_id, first))?
+                .map_err(|e| cancel_or_fail(state, &prep.page_id, e))?;
+            map_text(prep, &text2).map_err(|_| cancel_or_fail(state, &prep.page_id, first))?
         }
     };
     store_result(state, prep, &page_t)?;
@@ -384,7 +463,7 @@ pub async fn translate_page(
     input: TranslatePageInput,
 ) -> Result<PageTranslation, String> {
     let prep = prepare_page(
-        &state,
+        state.inner(),
         PrepOpts {
             page_id: &input.page_id,
             provider_id: &input.provider_id,
@@ -397,7 +476,19 @@ pub async fn translate_page(
         },
     )
     .await?;
-    translate_prep(&state, &prep).await
+    translate_prep(state.inner(), &prep).await
+}
+
+/// Batalkan translate berjalan untuk satu halaman (opsi B cancel): set flag di
+/// `AppState::cancel`; worker berhenti di cek berikut tanpa persist tanpa fail,
+/// status dikembalikan ke pra-klaim. Idempotent; halaman tak dikenal = Ok.
+#[tauri::command(rename_all = "snake_case")]
+pub fn cancel_translate(
+    state: State<'_, AppState>,
+    page_id: String,
+) -> Result<(), String> {
+    state.request_cancel(&page_id);
+    Ok(())
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -421,7 +512,7 @@ pub fn save_translation(
         bubbles: Vec::new(),
     });
     page_t.page_id = page_id.clone();
-    page_t.bubbles = bubbles;
+    page_t.bubbles = merge_ai_baseline(&page_t.bubbles, bubbles);
     page.translation = Some(page_t.clone());
     page.status = crate::commands::project::PageStatus::Translated;
     store.save_public()?;
@@ -434,7 +525,7 @@ pub fn clear_cache(state: State<'_, AppState>) -> Result<u64, String> {
     cache::clear_cache(&db)
 }
 
-fn persist(state: &State<'_, AppState>, page_id: &str, t: &PageTranslation, status: &str) -> Result<(), String> {
+fn persist(state: &AppState, page_id: &str, t: &PageTranslation, status: &str) -> Result<(), String> {
     let mut store = state.store.lock().map_err(|e| e.to_string())?;
     let page = store
         .projects
@@ -454,14 +545,17 @@ fn persist(state: &State<'_, AppState>, page_id: &str, t: &PageTranslation, stat
 
 /// Persist PageTranslation penuh sebagai translated (dipakai retry/export flow).
 pub fn persist_translation(
-    state: &State<'_, AppState>,
+    state: &AppState,
     page_id: &str,
     t: &PageTranslation,
 ) -> Result<(), String> {
-    persist(state, page_id, t, "translated")
+    let r = persist(state, page_id, t, "translated");
+    state.clear_cancel(page_id);
+    state.take_prev(page_id);
+    r
 }
 
-fn persist_status_only(state: &State<'_, AppState>, page_id: &str, status: &str) -> Result<(), String> {
+fn persist_status_only(state: &AppState, page_id: &str, status: &str) -> Result<(), String> {
     let mut store = state.store.lock().map_err(|e| e.to_string())?;
     let page = store
         .projects
@@ -478,7 +572,7 @@ fn persist_status_only(state: &State<'_, AppState>, page_id: &str, status: &str)
     store.save_public()
 }
 
-pub fn fail_page(state: &State<'_, AppState>, page_id: &str, e: String) -> String {
+pub fn fail_page(state: &AppState, page_id: &str, e: String) -> String {
     let _ = persist_status_only(state, page_id, "failed");
     e
 }
@@ -487,6 +581,120 @@ pub fn fail_page(state: &State<'_, AppState>, page_id: &str, e: String) -> Strin
 mod tests {
     use super::*;
     use crate::bubble::BubbleBox;
+    use crate::commands::detect::DetectState;
+    use crate::commands::project::{Page, PageStatus, Project, ProjectStore};
+
+    fn test_state_with_page(id: &str, status: PageStatus) -> AppState {
+        let dir = std::env::temp_dir().join(format!(
+            "kuron-cancel-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut store = ProjectStore::load(dir).unwrap();
+        store.projects.insert(
+            "p".into(),
+            Project {
+                id: "p".into(),
+                name: "ch".into(),
+                pages: vec![Page {
+                    id: id.into(),
+                    path: "ch/001.png".into(),
+                    width: 800,
+                    height: 1200,
+                    status,
+                    bubbles: vec![],
+                    translation: None,
+                }],
+            },
+        );
+        AppState {
+            store: std::sync::Mutex::new(store),
+            detect: DetectState::default(),
+            http: reqwest::Client::new(),
+            db: std::sync::Mutex::new(rusqlite::Connection::open_in_memory().unwrap()),
+            cancel: std::sync::Mutex::new(std::collections::HashSet::new()),
+            prev_status: std::sync::Mutex::new(std::collections::HashMap::new()),
+        }
+    }
+
+    fn page_status_of(state: &AppState, id: &str) -> PageStatus {
+        state
+            .store
+            .lock()
+            .unwrap()
+            .projects
+            .values()
+            .flat_map(|p| p.pages.iter())
+            .find(|pg| pg.id == id)
+            .unwrap()
+            .status
+            .clone()
+    }
+
+    #[test]
+    fn cancel_restores_preclaim_status_translated() {
+        let st = test_state_with_page("p0", PageStatus::Translated);
+        claim_page(&st, "p0").unwrap();
+        assert_eq!(page_status_of(&st, "p0"), PageStatus::Translating);
+        st.request_cancel("p0");
+        let msg = cancel_or_fail(&st, "p0", CANCELLED_MSG.to_string());
+        assert_eq!(msg, CANCELLED_MSG);
+        assert_eq!(page_status_of(&st, "p0"), PageStatus::Translated);
+        assert!(!st.is_cancelled("p0"));
+        assert!(st.take_prev("p0").is_none());
+    }
+
+    #[test]
+    fn cancel_restores_preclaim_status_detected() {
+        let st = test_state_with_page("p0", PageStatus::Detected);
+        claim_page(&st, "p0").unwrap();
+        st.request_cancel("p0");
+        cancel_or_fail(&st, "p0", CANCELLED_MSG.to_string());
+        assert_eq!(page_status_of(&st, "p0"), PageStatus::Detected);
+    }
+
+    #[test]
+    fn cancel_without_claim_is_noop_status_but_clears_flag() {
+        let st = test_state_with_page("p0", PageStatus::Idle);
+        st.request_cancel("p0");
+        let msg = cancel_or_fail(&st, "p0", CANCELLED_MSG.to_string());
+        assert_eq!(msg, CANCELLED_MSG);
+        assert_eq!(page_status_of(&st, "p0"), PageStatus::Idle);
+        assert!(!st.is_cancelled("p0"));
+    }
+
+    #[test]
+    fn noncancel_error_still_fails_and_cleans_stash() {
+        let st = test_state_with_page("p0", PageStatus::Detected);
+        claim_page(&st, "p0").unwrap();
+        let e = cancel_or_fail(&st, "p0", "boom".to_string());
+        assert_eq!(e, "boom");
+        assert_eq!(page_status_of(&st, "p0"), PageStatus::Failed);
+        assert!(st.take_prev("p0").is_none());
+        assert!(!st.is_cancelled("p0"));
+    }
+
+    #[tokio::test]
+    async fn backoff_aborts_on_preset_flag_without_provider_call() {
+        let st = test_state_with_page("p0", PageStatus::Detected);
+        st.request_cancel("p0");
+        // base_url tak-routable: bila provider sempat dipanggil, Err non-cancel.
+        let rec = ProviderRecord {
+            id: "x".into(),
+            provider_type: crate::provider::config::AiProviderType::OpenAi,
+            name: "x".into(),
+            base_url: "http://127.0.0.1:1".into(),
+            api_key: "k".into(),
+            model: "m".into(),
+        };
+        let client = reqwest::Client::new();
+        let r = backoff_translate(&st, "p0", &client, &rec, "p", &[]).await;
+        assert_eq!(r, Err(CANCELLED_MSG.to_string()));
+        assert!(!st.is_cancelled("p0"));
+    }
 
     #[test]
     fn core_mosaic_maps_geometry() {

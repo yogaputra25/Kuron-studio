@@ -113,6 +113,7 @@ mod tests {
         BubbleTranslation {
             index: i, x: 50, y: 50, w: 200, h: 100,
             original: "o".into(), reading: "".into(), translated: t.into(),
+            ai_original: "o".into(), ai_reading: "".into(), ai_translated: t.into(),
             needs_white_patch: true, is_user_edited: false,
         }
     }

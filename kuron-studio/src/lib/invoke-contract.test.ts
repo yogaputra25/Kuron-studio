@@ -32,6 +32,7 @@ const EXPECTED: Record<string, string[]> = {
   get_providers: [],
   delete_provider: ["provider_id"],
   translate_page: ["input"],
+  cancel_translate: ["page_id"],
   save_translation: ["page_id", "bubbles"],
   clear_cache: [],
   translate_batch: ["input"],

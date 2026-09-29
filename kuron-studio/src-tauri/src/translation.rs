@@ -17,6 +17,14 @@ pub struct BubbleTranslation {
     pub reading: String,
     #[serde(default)]
     pub translated: String,
+    /// Baseline AI terakhir (opsi A reset-translation): diisi jalur AI saja,
+    /// TAK disentuh manual. `save_translation` merge dari stored by index.
+    #[serde(default)]
+    pub ai_original: String,
+    #[serde(default)]
+    pub ai_reading: String,
+    #[serde(default)]
+    pub ai_translated: String,
     #[serde(default)]
     pub needs_white_patch: bool,
     #[serde(default)]
@@ -100,6 +108,9 @@ pub fn map_mosaic(
                 original: r.map(|x| x.original.clone()).unwrap_or_default(),
                 reading: r.map(|x| x.reading.clone()).unwrap_or_default(),
                 translated: r.map(|x| x.translated.clone()).unwrap_or_default(),
+                ai_original: r.map(|x| x.original.clone()).unwrap_or_default(),
+                ai_reading: r.map(|x| x.reading.clone()).unwrap_or_default(),
+                ai_translated: r.map(|x| x.translated.clone()).unwrap_or_default(),
                 needs_white_patch: patch_for(b, page_w, page_h),
                 is_user_edited: false,
             }
@@ -128,6 +139,9 @@ pub fn map_full_image(page_w: i32, page_h: i32, items: &[FullBubble]) -> Vec<Bub
                 original: f.original.clone(),
                 reading: f.reading.clone(),
                 translated: f.translated.clone(),
+                ai_original: f.original.clone(),
+                ai_reading: f.reading.clone(),
+                ai_translated: f.translated.clone(),
                 needs_white_patch: needs_white_patch(w, h, page_w, page_h),
                 is_user_edited: false,
             }
@@ -172,7 +186,14 @@ fn preserve_user_edits_except_vec(
                 .map(|mut b| {
                     if Some(b.index) != except_index {
                         if let Some(old) = edited.get(&b.index) {
+                            b.original = old.original.clone();
+                            b.reading = old.reading.clone();
                             b.translated = old.translated.clone();
+                            // Baseline lama ikut: AI baru untuk bubble ini memang
+                            // ditolak user, jadi "AI terakhir yg dilihat" = yg lama.
+                            b.ai_original = old.ai_original.clone();
+                            b.ai_reading = old.ai_reading.clone();
+                            b.ai_translated = old.ai_translated.clone();
                             b.is_user_edited = true;
                         }
                     }
@@ -181,6 +202,29 @@ fn preserve_user_edits_except_vec(
                 .collect()
         }
     }
+}
+
+/// Merge baseline AI dari stored ke kiriman `save_translation` (match by index).
+/// ANTI-TAMPER: frontend TAK dipercaya mengeset `ai*` — kiriman bisa kosong/stale
+/// (race debounce); hanya stored yang jadi sumber baseline. Jangan "perbaiki"
+/// jadi pass-through.
+pub fn merge_ai_baseline(
+    stored: &[BubbleTranslation],
+    incoming: Vec<BubbleTranslation>,
+) -> Vec<BubbleTranslation> {
+    let base: std::collections::HashMap<usize, &BubbleTranslation> =
+        stored.iter().map(|b| (b.index, b)).collect();
+    incoming
+        .into_iter()
+        .map(|mut b| {
+            if let Some(s) = base.get(&b.index) {
+                b.ai_original = s.ai_original.clone();
+                b.ai_reading = s.ai_reading.clone();
+                b.ai_translated = s.ai_translated.clone();
+            }
+            b
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -208,10 +252,55 @@ mod tests {
 
     #[test]
     fn edits_preserved() {
-        let mk = |t: &str, e: bool| BubbleTranslation { index: 0, x: 0, y: 0, w: 10, h: 10, original: "".into(), reading: "".into(), translated: t.into(), needs_white_patch: false, is_user_edited: e };
-        let prev = PageTranslation { page_id: "p".into(), target_lang: "id".into(), style: "".into(), model: "".into(), bubbles: vec![mk("user", true)] };
-        let out = preserve_user_edits(vec![mk("ai", false)], Some(&prev));
+        let mk = |o: &str, r: &str, t: &str, e: bool| BubbleTranslation { index: 0, x: 0, y: 0, w: 10, h: 10, original: o.into(), reading: r.into(), translated: t.into(), ai_original: "ai-O".into(), ai_reading: "ai-R".into(), ai_translated: "ai".into(), needs_white_patch: false, is_user_edited: e };
+        let prev = PageTranslation { page_id: "p".into(), target_lang: "id".into(), style: "".into(), model: "".into(), bubbles: vec![mk("manual-O", "manual-R", "user", true)] };
+        let out = preserve_user_edits(vec![mk("ai-O", "ai-R", "ai", false)], Some(&prev));
+        assert_eq!(out[0].original, "manual-O");
+        assert_eq!(out[0].reading, "manual-R");
         assert_eq!(out[0].translated, "user");
         assert!(out[0].is_user_edited);
+    }
+
+    #[test]
+    fn unedited_bubbles_still_update() {
+        let mk = |i: usize, t: &str, e: bool| BubbleTranslation { index: i, x: 0, y: 0, w: 10, h: 10, original: format!("o{i}"), reading: "".into(), translated: t.into(), ai_original: format!("o{i}"), ai_reading: "".into(), ai_translated: t.into(), needs_white_patch: false, is_user_edited: e };
+        let prev = PageTranslation { page_id: "p".into(), target_lang: "id".into(), style: "".into(), model: "".into(), bubbles: vec![mk(0, "keep", true), mk(1, "old", false)] };
+        let out = preserve_user_edits(vec![mk(0, "ai0", false), mk(1, "ai1", false)], Some(&prev));
+        assert_eq!(out[0].translated, "keep");
+        assert!(out[0].is_user_edited);
+        assert_eq!(out[1].translated, "ai1");
+        assert!(!out[1].is_user_edited);
+    }
+
+    #[test]
+    fn baseline_survives_preserve() {
+        // Edited bubble: ai* lama dipertahankan, bukan AI baru yg ditolak.
+        let old = BubbleTranslation { index: 0, x: 0, y: 0, w: 10, h: 10, original: "manual".into(), reading: "mr".into(), translated: "user".into(), ai_original: "BASE-O".into(), ai_reading: "BASE-R".into(), ai_translated: "BASE".into(), needs_white_patch: false, is_user_edited: true };
+        let fresh = BubbleTranslation { index: 0, x: 0, y: 0, w: 10, h: 10, original: "new-O".into(), reading: "new-R".into(), translated: "new".into(), ai_original: "new-O".into(), ai_reading: "new-R".into(), ai_translated: "new".into(), needs_white_patch: false, is_user_edited: false };
+        let prev = PageTranslation { page_id: "p".into(), target_lang: "id".into(), style: "".into(), model: "".into(), bubbles: vec![old] };
+        let out = preserve_user_edits(vec![fresh], Some(&prev));
+        assert_eq!(out[0].translated, "user");
+        assert_eq!(out[0].ai_translated, "BASE");
+        assert_eq!(out[0].ai_original, "BASE-O");
+    }
+
+    #[test]
+    fn save_merge_keeps_stored_baseline() {
+        // Frontend kirim manual + ai* kosong/stale → stored yg menang.
+        let stored = vec![BubbleTranslation { index: 0, x: 0, y: 0, w: 10, h: 10, original: "x".into(), reading: "".into(), translated: "x".into(), ai_original: "AI-O".into(), ai_reading: "AI-R".into(), ai_translated: "AI".into(), needs_white_patch: false, is_user_edited: false }];
+        let incoming = vec![BubbleTranslation { index: 0, x: 0, y: 0, w: 10, h: 10, original: "m".into(), reading: "mr".into(), translated: "user".into(), ai_original: "".into(), ai_reading: "".into(), ai_translated: "".into(), needs_white_patch: false, is_user_edited: true }];
+        let out = merge_ai_baseline(&stored, incoming);
+        assert_eq!(out[0].translated, "user");
+        assert!(out[0].is_user_edited);
+        assert_eq!(out[0].ai_translated, "AI");
+        assert_eq!(out[0].ai_original, "AI-O");
+    }
+
+    #[test]
+    fn old_json_without_baseline_loads() {
+        let raw = r#"{"index":0,"x":0,"y":0,"w":10,"h":10,"original":"o","reading":"","translated":"t","needsWhitePatch":false,"isUserEdited":false}"#;
+        let b: BubbleTranslation = serde_json::from_str(raw).unwrap();
+        assert_eq!(b.ai_original, "");
+        assert_eq!(b.ai_translated, "");
     }
 }

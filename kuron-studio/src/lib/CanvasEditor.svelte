@@ -20,15 +20,91 @@
     onChange: (bubbles: BubbleBox[]) => void;
     translations?: BubbleTranslation[];
     showTranslation?: boolean;
+    editable?: boolean;
+    onSelectForward?: (i: number) => void;
+    externalSelected?: number | null;
+    onEditTranslation?: (i: number, value: string) => void;
   }
 
-  let { imageUrl, fallbackUrl = "", imgW, imgH, initial, readingDir, tool, onChange, translations = [], showTranslation = false }: Props = $props();
+  let { imageUrl, fallbackUrl = "", imgW, imgH, initial, readingDir, tool, onChange, translations = [], showTranslation = false, editable = true, onSelectForward, externalSelected = null, onEditTranslation }: Props = $props();
 
   let holder: HTMLDivElement;
   let stage: Konva.Stage | null = null;
   let overlayLayer: Konva.Layer | null = null;
   let bgImage: Konva.Image | null = null;
   let selectedIdx = $state<number | null>(null);
+
+  // In-bubble editor: textarea HTML melayang di atas stage (Konva tak punya
+  // text-editing). Ketikan ditahan lokal; commit sekali via onEditTranslation.
+  let editingIdx = $state<number | null>(null);
+  let editingValue = $state("");
+  let editBox = $state<{ left: number; top: number; width: number; minH: number; fontSize: number; dark: boolean } | null>(null);
+  let editorEl = $state<HTMLTextAreaElement | null>(null);
+
+  const overlayFontSize = (b: BubbleBox, text: string, s: number): number =>
+    Math.max(10, Math.min(18, (b.w * s) / Math.max(8, text.length / 2)));
+
+  function openEditor(i: number) {
+    if (!showTranslation || !onEditTranslation) return;
+    const b = bubbles[i];
+    const tr = translations.find((t) => t.index === i);
+    if (!b) return;
+    commitEditor();
+    const s = scale();
+    editingIdx = i;
+    editingValue = tr?.translated ?? "";
+    editBox = {
+      left: b.x * s,
+      top: b.y * s,
+      width: Math.max(60, b.w * s),
+      minH: Math.max(24, b.h * s),
+      fontSize: overlayFontSize(b, editingValue || "…", s),
+      dark: !(tr?.needsWhitePatch ?? false),
+    };
+    requestAnimationFrame(() => {
+      editorEl?.focus();
+      editorEl?.select();
+    });
+  }
+
+  function commitEditor() {
+    if (editingIdx === null || !onEditTranslation) {
+      editingIdx = null;
+      return;
+    }
+    const i = editingIdx;
+    editingIdx = null;
+    editBox = null;
+    onEditTranslation(i, editingValue);
+  }
+
+  function cancelEditor() {
+    editingIdx = null;
+    editBox = null;
+  }
+
+  function onEditorKey(e: KeyboardEvent) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      cancelEditor();
+    } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      commitEditor();
+    }
+  }
+
+  $effect(() => {
+    translations;
+    showTranslation;
+    externalSelected;
+    if (externalSelected !== null) selectedIdx = externalSelected;
+    // Editor terbuka tapi bubble pindah seleksi → commit otomatis lalu tutup.
+    if (editingIdx !== null && selectedIdx !== null && selectedIdx !== editingIdx) {
+      commitEditor();
+    }
+    redraw();
+  });
 
   // Gambar datang belakangan (App fetch async setelah mount) — lacak request
   // terakhir agar load basi tidak menimpa, dan tandai siap/gagal untuk hint.
@@ -60,12 +136,6 @@
     if (requestedUrl === imageUrl) return;
     requestedUrl = imageUrl;
     loadBackground(imageUrl);
-  });
-
-  $effect(() => {
-    translations;
-    showTranslation;
-    redraw();
   });
 
   const scale = (): number => {
@@ -153,8 +223,8 @@
       // Overlay terjemahan (append-only; jangan refactor redraw di atas).
       if (showTranslation) {
         const tr = translations.find((t) => t.index === i);
-        if (tr?.translated) {
-          const fs = Math.max(10, Math.min(18, (b.w * s) / Math.max(8, tr.translated.length / 2)));
+        if (tr?.translated && editingIdx !== i) {
+          const fs = overlayFontSize(b, tr.translated, s);
           const txt = new Konva.Text({
             x: 2, y: 2, width: Math.max(10, b.w * s - 4),
             text: tr.translated, fontSize: fs, fill: "#fff",
@@ -175,16 +245,28 @@
       group.on("click tap", (e) => {
         e.cancelBubble = true;
         selectedIdx = i;
+        if (!editable && onSelectForward) onSelectForward(i);
         redraw();
       });
 
+      // Double-klik → editor teks di badan bubble (After + onEditTranslation saja).
+      if (showTranslation && onEditTranslation) {
+        group.on("dblclick", (e) => {
+          e.cancelBubble = true;
+          openEditor(i);
+        });
+      }
+
+      group.draggable(editable);
+
       group.on("dragend", () => {
+        if (!editable) { redraw(); return; }
         const nb = { ...b, x: group.x() / s, y: group.y() / s };
         commit(i, clampBubble(nb, imgW, imgH));
       });
 
-      // Resize handle kanan-bawah (rect/ellipse saja).
-      if (!b.shape) {
+      // Resize handle kanan-bawah (rect/ellipse saja, editable saja).
+      if (!b.shape && editable) {
         const handle = new Konva.Circle({
           x: b.w * s,
           y: b.h * s,
@@ -257,6 +339,7 @@
   }
 
   function onStageDown(e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) {
+    if (!editable) return;
     if (tool === "select") return;
     if (e.target !== stage) return;
     const [x, y] = stagePos();
@@ -459,7 +542,21 @@
   });
 </script>
 
+<div class="relative w-full">
 <div bind:this={holder} class="w-full cursor-crosshair overflow-auto rounded border border-zinc-800 bg-black"></div>
+{#if editingIdx !== null && editBox}
+  <textarea
+    bind:this={editorEl}
+    rows="3"
+    placeholder="ketik terjemahan"
+    class="absolute z-10 rounded px-1 py-0.5 text-center outline-none ring-2 ring-emerald-500 {editBox.dark ? 'bg-black/70 text-white' : 'bg-white text-neutral-900'}"
+    style="left:{editBox.left}px; top:{editBox.top}px; width:{editBox.width}px; min-height:{editBox.minH}px; font-size:{editBox.fontSize}px;"
+    bind:value={editingValue}
+    onblur={commitEditor}
+    onkeydown={onEditorKey}
+  ></textarea>
+{/if}
+</div>
 {#if !imgReady && !imgError}
   <p class="mt-1 text-[11px] text-zinc-500">Memuat gambar…</p>
 {:else if imgError}

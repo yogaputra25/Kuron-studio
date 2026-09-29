@@ -33,6 +33,7 @@
   let glossary = $state("");
   let glossaryPreview = $state<string | null>(null);
   let busy = $state(false);
+  let cancelled = $state(false);
   let info = $state("");
 
   // Angkat opts ke parent (Batch/Review) + preview glossary auto-context.
@@ -61,7 +62,7 @@
 
   async function translate() {
     if (!providerId) { onError("Pilih provider dulu (tambah via Providers)."); return; }
-    busy = true; info = "";
+    busy = true; cancelled = false; info = "";
     const t0 = performance.now();
     try {
       const t = await api.translatePage({
@@ -74,12 +75,26 @@
         readingDirection: readingDir,
         ...(glossary.trim() ? { glossary: glossary.trim() } : {}),
       });
+      if (cancelled) return; // response telat pasca-Batal: buang, tanpa persist ganda
       info = `${t.model} · ${t.bubbles.length} bubble · ${((performance.now() - t0) / 1000).toFixed(1)}s`;
       onTranslated(t);
     } catch (e) {
+      if (cancelled) return; // reject telat: tanpa banner error
       onError(String(e));
     } finally {
-      busy = false;
+      if (!cancelled) busy = false;
+    }
+  }
+
+  // Batal (opsi B cancel): lepas UI seketika + minta backend berhenti.
+  async function cancel() {
+    cancelled = true;
+    busy = false;
+    info = "Dibatalkan";
+    try {
+      await api.cancelTranslate(pageId);
+    } catch {
+      // Backend tak sempat klaim (belum ada flag): UI tetap lepas.
     }
   }
 </script>
@@ -124,7 +139,7 @@
   {/if}
   <button
     class="mt-1 w-full rounded bg-emerald-600 px-2 py-1 text-xs font-semibold hover:bg-emerald-500 disabled:opacity-50"
-    onclick={translate} disabled={busy || !providerId}
-  >{busy ? "Translate…" : "Translate"}</button>
+    onclick={busy ? cancel : translate} disabled={!busy && !providerId}
+  >{busy ? "Batal" : "Translate"}</button>
   {#if info}<p class="mt-1 text-[10px] text-zinc-500">{info}</p>{/if}
 </div>

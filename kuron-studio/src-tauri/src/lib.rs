@@ -14,6 +14,7 @@ pub mod provider;
 pub mod translation;
 pub mod commands;
 
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use tauri::Manager;
 
@@ -29,16 +30,46 @@ use commands::glossary::{
 };
 use commands::image::get_image_preview;
 use commands::project::{
-    ProjectStore, create_project, get_project, import_pages, list_projects,
+    PageStatus, ProjectStore, create_project, get_project, import_pages, list_projects,
 };
 use commands::provider::{delete_provider, get_providers, list_models, save_provider, validate_provider};
-use commands::translate::{clear_cache, save_translation, translate_page};
+use commands::translate::{cancel_translate, clear_cache, save_translation, translate_page};
 
 pub struct AppState {
     pub store: Mutex<ProjectStore>,
     pub detect: DetectState,
     pub http: reqwest::Client,
     pub db: Mutex<rusqlite::Connection>,
+    /// Halaman yang diminta batal (opsi B cancel): diisi `cancel_translate`,
+    /// dibaca `backoff_translate` tiap iterasi + saat sleep via `select!`.
+    pub cancel: Mutex<HashSet<String>>,
+    /// Status sebelum `claim_page` (Translating menimpa); path cancel restore
+    /// ini via helper, bukan `fail_page`.
+    pub prev_status: Mutex<HashMap<String, PageStatus>>,
+}
+
+impl AppState {
+    pub fn stash_prev(&self, page_id: &str, st: PageStatus) {
+        if let Ok(mut m) = self.prev_status.lock() {
+            m.insert(page_id.to_string(), st);
+        }
+    }
+    pub fn take_prev(&self, page_id: &str) -> Option<PageStatus> {
+        self.prev_status.lock().ok()?.remove(page_id)
+    }
+    pub fn clear_cancel(&self, page_id: &str) {
+        if let Ok(mut c) = self.cancel.lock() {
+            c.remove(page_id);
+        }
+    }
+    pub fn request_cancel(&self, page_id: &str) {
+        if let Ok(mut c) = self.cancel.lock() {
+            c.insert(page_id.to_string());
+        }
+    }
+    pub fn is_cancelled(&self, page_id: &str) -> bool {
+        self.cancel.lock().map(|c| c.contains(page_id)).unwrap_or(false)
+    }
 }
 
 // ponytail: M0 holds projects only. BubbleDetector (M1), reqwest client (M2),
@@ -72,6 +103,8 @@ pub fn run() {
                 detect: DetectState::new(app.path().resource_dir().ok(), app.path().app_data_dir().map_err(|e| io_err(e.to_string()))?),
                 http,
                 db: Mutex::new(db),
+                cancel: Mutex::new(HashSet::new()),
+                prev_status: Mutex::new(HashMap::new()),
             });
             // M4-7: updater (desktop only); endpoints/pubkey in tauri.conf.json.
             #[cfg(desktop)]
@@ -108,6 +141,7 @@ pub fn run() {
             qa_check,
             share_project,
             save_translation,
+            cancel_translate,
             clear_cache
         ])
         .run(tauri::generate_context!())
