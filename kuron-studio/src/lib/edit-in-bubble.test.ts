@@ -9,7 +9,7 @@ import canvasSrc from "./CanvasEditor.svelte?raw";
 describe("in-bubble edit (§1 canvas)", () => {
   it("props onEditTranslation opsional, default mati (Before aman)", () => {
     expect(canvasSrc).toContain("onEditTranslation?: (i: number, value: string) => void");
-    expect(canvasSrc).toMatch(/onEditTranslation\s*\}: Props/);
+    expect(canvasSrc).toMatch(/onEditTranslation, onDrawHint \}: Props/);
     // Editor hanya dibuka bila kabel dipasang.
     expect(canvasSrc).toMatch(/if \(!showTranslation \|\| !onEditTranslation\) return;/);
   });
@@ -45,6 +45,20 @@ describe("in-bubble edit (§1 canvas)", () => {
 
   it("pindah bubble saat editor terbuka → commit otomatis", () => {
     expect(canvasSrc).toMatch(/if \(editingIdx !== null && selectedIdx !== null && selectedIdx !== editingIdx\) \{\s*commitEditor\(\);/);
+  });
+
+  it("openEditor kunci seleksi baru dulu (anti-yank saat pindah bubble)", () => {
+    const fn = canvasSrc.slice(canvasSrc.indexOf("function openEditor"), canvasSrc.indexOf("function openEditor") + 700);
+    // Urutan: select baru → forward → commit lama. Commit lama (editTr) tak
+    // boleh menarik manualSel balik ke bubble lama.
+    expect(fn.indexOf("selectedIdx = i;")).toBeGreaterThan(-1);
+    expect(fn.indexOf("onSelectForward(i)")).toBeGreaterThan(fn.indexOf("selectedIdx = i;"));
+    expect(fn.indexOf("commitEditor()")).toBeGreaterThan(fn.indexOf("onSelectForward(i)"));
+  });
+
+  it("commit tanpa perubahan tak tulis (tak tandai edited/antre save)", () => {
+    const fn = canvasSrc.slice(canvasSrc.indexOf("function commitEditor"), canvasSrc.indexOf("function commitEditor") + 500);
+    expect(fn).toContain("if (cur !== editingValue) onEditTranslation(i, editingValue);");
   });
 
   it("textarea WYSIWYG: font ikut rumus fs overlay, tema ikut needsWhitePatch", () => {

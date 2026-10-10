@@ -29,6 +29,11 @@ ab_glyph = "0.2"
 uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
 zip = "2"
+# pdf-import: ekstraksi gambar embedded PDF scan — keduanya murni-Rust
+# (MIT/Apache, tanpa dep native/sistem): lopdf parse+decrypt, flate2 inflate
+# manual stream Flate (decompress() lopdf skip stream berfilter-DCT).
+lopdf = "0.35"
+flate2 = "1"
 ort = "=2.0.0-rc.13"
 ndarray = "0.17"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-manual-roots"] }

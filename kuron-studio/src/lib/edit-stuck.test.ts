@@ -8,29 +8,32 @@ import canvasSrc from "./CanvasEditor.svelte?raw";
 // (ponytail: @testing-library/svelte + jsdom saat butuh interaksi nyata;
 // ceiling = ketik-tengah-kalimat + ketik-cepat-lawan-save beneran.)
 describe("edit draft kartu (§1)", () => {
-  it("oninput kartu tulis draft saja, tak sentuh translation.bubbles", () => {
-    expect(panelSrc).toContain("let draft = $state<{ row: number; original: string; reading: string; translated: string } | null>(null)");
+  it("oninput kartu tulis cache plain, tak sentuh $state/translation.bubbles", () => {
+    expect(panelSrc).toContain("let draftBox: { cur:");
     expect(panelSrc).toContain("function draftInput(");
-    const fn = panelSrc.slice(panelSrc.indexOf("function draftInput"), panelSrc.indexOf("function draftInput") + 700);
-    expect(fn).toContain("draft[field] = v");
+    const fn = panelSrc.slice(panelSrc.indexOf("function draftInput"), panelSrc.indexOf("function draftInput") + 900);
+    expect(fn).toContain("draftBox.cur[field] = v");
     expect(fn).not.toContain("translation.bubbles =");
     expect(fn).not.toContain("editTr(");
+    expect(fn).not.toContain("$state");
     // Ketiga textarea kartu memakai draftInput, bukan editTr langsung.
     const usages = panelSrc.match(/oninput=\{\(e\) => draftInput\("/g) ?? [];
     expect(usages.length).toBe(3);
     expect(panelSrc).not.toMatch(/oninput=\{\(e\) => editTr\(i, /);
   });
 
-  it("textarea baca draft saat aktif, fallback ke b.field", () => {
-    expect(panelSrc).toContain("value={draft && draft.row === i ? draft.original : b.original}");
-    expect(panelSrc).toContain("value={draft && draft.row === i ? draft.reading : b.reading}");
-    expect(panelSrc).toContain("value={draft && draft.row === i ? draft.translated : b.translated}");
+  it("textarea baca cache saat aktif, fallback ke b.field", () => {
+    expect(panelSrc).toContain("value={draftBox.cur && draftBox.cur.row === i ? draftBox.cur.original : b.original}");
+    expect(panelSrc).toContain("value={draftBox.cur && draftBox.cur.row === i ? draftBox.cur.reading : b.reading}");
+    expect(panelSrc).toContain("value={draftBox.cur && draftBox.cur.row === i ? draftBox.cur.translated : b.translated}");
   });
 
-  it("blur/debounce commit via editTr existing (sekali, bukan per huruf)", () => {
+  it("commit di batas alami via editTr existing (blur/pindah/Save/jaring, bukan tiap jeda)", () => {
     const blurs = panelSrc.match(/onblur=\{commitDraft\}/g) ?? [];
     expect(blurs.length).toBe(3);
-    expect(panelSrc).toMatch(/draftTimer = setTimeout\(\(\) => \{ draftTimer = null; commitDraft\(\); \}, 500\)/);
+    // draftInput tanpa timer-500ms: tulis cache saja.
+    const input = panelSrc.slice(panelSrc.indexOf("function draftInput"), panelSrc.indexOf("function draftInput") + 900);
+    expect(input).not.toContain(", 500)");
     const commit = panelSrc.slice(panelSrc.indexOf("function commitDraft"), panelSrc.indexOf("function commitDraft") + 700);
     expect(commit).toContain('editTr(row, "original", original)');
     expect(commit).toContain('editTr(row, "reading", reading)');
@@ -38,12 +41,11 @@ describe("edit draft kartu (§1)", () => {
     // Hanya field berubah yang di-commit (guard per field).
     expect(commit).toContain("if (cur.original !== original)");
   });
-
   it("pindah seleksi commit draft kotor; null buang draft", () => {
     expect(panelSrc).toContain("function selectBubble(");
     const fn = panelSrc.slice(panelSrc.indexOf("function selectBubble"), panelSrc.indexOf("function selectBubble") + 250);
-    expect(fn).toContain("if (draft) commitDraft();");
-    expect(fn).toContain("if (idx === null) draft = null;");
+    expect(fn).toContain("if (draftBox.cur) commitDraft();");
+    expect(fn).toContain("draftBox.cur = null;");
     // Semua jalur ganti manualSel lewat selectBubble (tak ada assignment langsung tersisa).
     expect(panelSrc).not.toContain("manualSel = i)");
     expect(panelSrc).not.toContain("(manualSel = manualSel === b.index ? null : b.index)");
@@ -51,22 +53,57 @@ describe("edit draft kartu (§1)", () => {
 
   it("Save edits + resetBubble + unmount amankan draft", () => {
     const save = panelSrc.slice(panelSrc.indexOf("async function saveTranslationEdits"), panelSrc.indexOf("async function saveTranslationEdits") + 200);
-    expect(save).toContain("if (draft) commitDraft();");
+    expect(save).toContain("if (draftBox.cur) commitDraft();");
     const reset = panelSrc.slice(panelSrc.indexOf("function resetBubble"), panelSrc.indexOf("function resetBubble") + 300);
-    expect(reset).toContain("draft = null;");
-    expect(panelSrc).toContain("onDestroy(() => { if (saveTimer) clearTimeout(saveTimer); if (draftTimer) clearTimeout(draftTimer); });");
+    expect(reset).toContain("draftBox.cur = null;");
+    expect(panelSrc).toContain("if (draftBox.cur) commitDraft(); if (saveTimer)");
   });
 
   it("hasil Translate baru commit draft dulu (tak hilang/timpa AI)", () => {
     const fn = panelSrc.slice(panelSrc.indexOf("function onTranslated"), panelSrc.indexOf("function onTranslated") + 300);
-    expect(fn).toContain("if (draft) commitDraft();");
+    expect(fn).toContain("if (draftBox.cur) commitDraft();");
   });
 
-  it("editTr tak berubah (jalur save existing utuh)", () => {
+  it("editTr tulis teks saja, tak sentuh seleksi (anti-yank)", () => {
     const fn = panelSrc.slice(panelSrc.indexOf("function editTr"), panelSrc.indexOf("function editTr") + 400);
     expect(fn).toContain("translation.bubbles = translation.bubbles.map(");
     expect(fn).toContain("isUserEdited: true");
     expect(fn).toContain("queueSaveTranslationEdits()");
+    // Seleksi milik selectBubble saja — commit editor lama tak boleh yank.
+    expect(fn).not.toContain("manualSel");
+  });
+
+  it("oninput tak tulis reactive per huruf (cache plain, nol render)", () => {
+    const fn = panelSrc.slice(panelSrc.indexOf("function draftInput"), panelSrc.indexOf("function draftInput") + 900);
+    expect(fn).not.toMatch(/=\s*\$state/);
+    expect(fn).not.toContain("draftShown");
+  });
+
+  it("guard IME: komposisi tunda commit, selesai langsung commit", () => {
+    expect(panelSrc).toContain("function compStart()");
+    expect(panelSrc).toContain("function compEnd()");
+    const commit = panelSrc.slice(panelSrc.indexOf("function commitDraft"), panelSrc.indexOf("function commitDraft") + 200);
+    expect(commit).toContain("if (composing) return;");
+    const end = panelSrc.slice(panelSrc.indexOf("function compEnd()"), panelSrc.indexOf("function compEnd()") + 200);
+    expect(end).toContain("if (draftBox.cur) commitDraft();");
+    const areas = panelSrc.match(/oncompositionstart=\{compStart\}/g) ?? [];
+    expect(areas.length).toBe(3);
+    const ends = panelSrc.match(/oncompositionend=\{compEnd\}/g) ?? [];
+    expect(ends.length).toBe(3);
+  });
+
+  it("timer-jaring 10dtk sekali per baris kotor (bukan ritme kerja)", () => {
+    expect(panelSrc).toContain("const DRAFT_SAFETY_MS = 10_000;");
+    const input = panelSrc.slice(panelSrc.indexOf("function draftInput"), panelSrc.indexOf("function draftInput") + 900);
+    expect(input).toContain("if (!draftTimer) draftTimer = setTimeout(");
+    expect(input).toContain("DRAFT_SAFETY_MS");
+  });
+
+  it("indikator dirty + Save flush eksplisit + flush-on-destroy", () => {
+    expect(panelSrc).toContain("let dirtyDraft = $state(false);");
+    expect(panelSrc).toContain("belum tersimpan");
+    expect(panelSrc).toContain("if (draftBox.cur) commitDraft(); void saveTranslationEdits();");
+    expect(panelSrc).toContain("if (draftBox.cur) commitDraft(); if (saveTimer)");
   });
 });
 
@@ -84,7 +121,7 @@ describe("last-write-wins §4", () => {
 
   it("↺ tulis ai* lalu save LANGSUNG (bukan debounce)", () => {
     const fn = panelSrc.slice(panelSrc.indexOf("function resetBubble"), panelSrc.indexOf("function resetBubble") + 800);
-    expect(fn).toContain("draft = null;");
+    expect(fn).toContain("draftBox.cur = null;");
     expect(fn).toContain("original: b.aiOriginal");
     expect(fn).toContain("isUserEdited: false");
     expect(fn).toContain("void saveTranslationEdits();");
@@ -96,6 +133,24 @@ describe("last-write-wins §4", () => {
     const catchBlock = save.slice(save.indexOf("} catch"));
     expect(catchBlock).toContain("error = String(e)");
     expect(catchBlock).not.toContain("translation =");
+  });
+});
+
+describe("sync-guard translation (typing-comfort D6)", () => {
+  it("skip timpa prop saat kotor/terbang; sync normal saat tenang", () => {
+    const fn = panelSrc.slice(panelSrc.indexOf("function syncFromPage"), panelSrc.indexOf("function syncFromPage") + 1200);
+    // Kondisi sibuk: cache kotor ATAU save terbang (timer/saving).
+    expect(fn).toContain("draftBox.cur !== null || saveTimer !== null || savingTr");
+    expect(fn).toContain("if (!busyTyping && incomingTr");
+  });
+
+  it("cabang bubbles tak diubah (pelaku = cabang translation)", () => {
+    const fn = panelSrc.slice(panelSrc.indexOf("function syncFromPage"), panelSrc.indexOf("function syncFromPage") + 500);
+    expect(fn).toContain("if (syncedFor !== page.id || JSON.stringify(incoming) !== JSON.stringify(bubbles)) {");
+    expect(fn).not.toContain("busyTyping");
+    // busyTyping hanya dipakai sekali: guard cabang translation.
+    const uses = panelSrc.match(/busyTyping/g) ?? [];
+    expect(uses.length).toBe(2);
   });
 });
 

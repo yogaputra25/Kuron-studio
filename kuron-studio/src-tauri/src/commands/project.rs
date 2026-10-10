@@ -174,6 +174,304 @@ fn is_archive(path: &Path) -> bool {
     }
 }
 
+fn is_pdf(path: &Path) -> bool {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some(ext) => ext.eq_ignore_ascii_case("pdf"),
+        None => false,
+    }
+}
+
+/// Filter stream gambar — mengikuti urutan array `/Filter` (urutan = urutan
+/// decode). Hanya DCT (JPEG pass-through) + Flate (inflate manual, karena
+/// `decompress()` lopdf skip stream berfilter-DCT). JPX/CCITT/JBIG2 ditolak
+/// jujur (tanpa decoder murni-Rust yang matang di repo ini).
+fn pdf_image_filter_kind(dict: &lopdf::Dictionary) -> Result<Vec<String>, String> {
+    let f = dict
+        .get(b"Filter")
+        .map_err(|_| "stream gambar tanpa /Filter".to_string())?;
+    let names: Vec<String> = match f {
+        lopdf::Object::Name(n) => vec![String::from_utf8_lossy(n).into_owned()],
+        lopdf::Object::Array(arr) => arr
+            .iter()
+            .filter_map(|o| o.as_name().ok().map(|n| String::from_utf8_lossy(n).into_owned()))
+            .collect(),
+        _ => return Err("tipe /Filter tak dikenal".to_string()),
+    };
+    if names.is_empty() {
+        return Err("daftar /Filter kosong".to_string());
+    }
+    Ok(names)
+}
+
+/// Inflate manual satu lapis Flate (zlib). `decompress()` lopdf dilewati
+/// untuk stream berfilter-DCT — ia skip stream itu sepenuhnya.
+fn inflate_flate(raw: &[u8]) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let mut dec = flate2::read::ZlibDecoder::new(raw);
+    let mut out = Vec::new();
+    dec.read_to_end(&mut out)
+        .map_err(|e| format!("inflate Flate gagal: {e}"))?;
+    Ok(out)
+}
+
+/// Tulis pixel mentah Flate (non-JPEG: Gray/Indexed/RGB) jadi PNG via `image`.
+/// Mendukung 8 bit/komponen tanpa predictor; predictor PNG per-baris
+/// didukung via decode_frame lopdf bila tersedia (fallback: tolak halaman).
+fn write_flate_png(
+    inflated: &[u8],
+    width: u32,
+    height: u32,
+    bpc: u8,
+    colorspace: &str,
+    out: &Path,
+) -> Result<(), String> {
+    if bpc != 8 {
+        return Err(format!("BPC {bpc} tak didukung (hanya 8)"));
+    }
+    let (channels, palette): (u8, Option<Vec<[u8; 3]>>) = if colorspace.contains("DeviceRGB") {
+        (3, None)
+    } else if colorspace.contains("DeviceGray") {
+        (1, None)
+    } else if colorspace.contains("Indexed") {
+        // Palet melekat di dict ColorSpace (stream/string) — Fase 1 hanya
+        // dukung bila bisa dibaca; sisanya tolak halaman dengan jujur.
+        return Err("Indexed tanpa palet terbaca — halaman di-skip".to_string());
+    } else {
+        return Err(format!("colorspace {colorspace} tak didukung"));
+    };
+    let stride = width as usize * channels as usize;
+    // Coba tanpa predictor dulu (data mentah = stride*height).
+    let pixels: Vec<u8> = if inflated.len() == stride * height as usize {
+        inflated.to_vec()
+    } else {
+        return Err("predictor PNG per-baris tak didukung — halaman di-skip".to_string());
+    };
+    let img: image::RgbImage = match channels {
+        3 => image::RgbImage::from_raw(width, height, pixels)
+            .ok_or_else(|| "rakit RGB gagal".to_string())?,
+        1 => {
+            let gray = image::GrayImage::from_raw(width, height, pixels)
+                .ok_or_else(|| "rakit Gray gagal".to_string())?;
+            image::DynamicImage::ImageLuma8(gray).to_rgb8()
+        }
+        _ => unreachable!(),
+    };
+    let _ = palette;
+    img.save(out).map_err(|e| format!("tulis PNG gagal: {e}"))?;
+    // Hormati /Rotate nanti di level halaman (lihat extract_pdf_pages).
+    Ok(())
+}
+
+/// Ekstrak gambar embedded per halaman PDF ke `{out_dir}/p001.jpg...`
+/// (urutan page index). Mengembalikan (files, skipped, infos).
+/// Pola `extract_archive` 1:1 — `safe_join` per output, sort, skipped jujur.
+fn extract_pdf_pages(
+    path: &Path,
+    out_dir: &Path,
+) -> Result<(Vec<PathBuf>, usize, Vec<String>), String> {
+    let mut doc =
+        lopdf::Document::load(path).map_err(|e| format!("buka PDF gagal: {e}"))?;
+    if doc.is_encrypted() {
+        doc.decrypt("")
+            .map_err(|_| "PDF terkunci — buka kunci dulu".to_string())?;
+    }
+    fs::create_dir_all(out_dir).map_err(|e| e.to_string())?;
+    let pages = doc.get_pages();
+    let mut files = Vec::new();
+    let mut skipped = 0;
+    let mut infos: Vec<String> = Vec::new();
+    // Urutan halaman = page index (BTreeMap terurut), bukan kemunculan objek.
+    for (n, (_page_no, &page_id)) in pages.iter().enumerate() {
+        let page_idx = n + 1;
+        // Rotasi halaman (/Rotate kelipatan 90) — diterapkan saat tulis.
+        let rotate_deg: i32 = doc
+            .get_dictionary(page_id)
+            .ok()
+            .and_then(|d| d.get(b"Rotate").ok())
+            .and_then(|o| o.as_i64().ok())
+            .map(|r| r.rem_euclid(360) as i32)
+            .unwrap_or(0);
+        // Kumpulkan XObject gambar halaman ini via content stream (op Do).
+        let mut candidates: Vec<(u64, Vec<u8>, lopdf::Dictionary)> = Vec::new();
+        let content = doc
+            .get_and_decode_page_content(page_id)
+            .map_err(|e| format!("baca konten halaman {page_idx} gagal: {e}"))?;
+        let resources = doc
+            .get_page_resources(page_id)
+            .map_err(|e| format!("baca resources halaman {page_idx} gagal: {e}"))?;
+        // resources: (Option<&Dictionary>, Vec<ObjectId>) — XObject inline
+        // di dict pertama bila ada.
+        let mut xobj_dicts: Vec<lopdf::Dictionary> = Vec::new();
+        // Dict inline (bila Resources dict langsung di halaman) ...
+        if let Some(d) = resources.0 {
+            // XObject bisa dict langsung atau referensi — get_deref tangani keduanya.
+            if let Ok(xo) = d.get_deref(b"XObject", &doc) {
+                if let Ok(xd) = xo.as_dict() {
+                    xobj_dicts.push(xd.clone());
+                }
+            }
+        }
+        // ... plus dict via referensi Resources (kasus umum dunia-nyata:
+        // halaman hanya pegang Reference, XObject hidup di objek lain).
+        for rid in resources.1 {
+            let Ok(res_obj) = doc.get_object(rid) else {
+                continue;
+            };
+            let Ok(res_dict) = res_obj.as_dict() else {
+                continue;
+            };
+            if let Ok(xo) = res_dict.get_deref(b"XObject", &doc) {
+                if let Ok(xd) = xo.as_dict() {
+                    xobj_dicts.push(xd.clone());
+                }
+            }
+        }
+        for op in &content.operations {
+            if op.operator != "Do" {
+                continue;
+            }
+            let Some(lopdf::Object::Name(name)) = op.operands.first() else {
+                continue;
+            };
+            for xd in &xobj_dicts {
+                let Ok(obj) = xd.get(name.as_slice()) else {
+                    continue;
+                };
+                let Ok((_, resolved)) = doc.dereference(obj) else {
+                    continue;
+                };
+                if let lopdf::Object::Stream(stm) = resolved {
+                    let is_img = matches!(
+                        stm.dict.get(b"Subtype"),
+                        Ok(lopdf::Object::Name(n)) if n == b"Image"
+                    );
+                    if !is_img {
+                        continue;
+                    }
+                    let w = stm
+                        .dict
+                        .get(b"Width")
+                        .and_then(|o| o.as_i64())
+                        .unwrap_or(0)
+                        .max(0) as u64;
+                    let h = stm
+                        .dict
+                        .get(b"Height")
+                        .and_then(|o| o.as_i64())
+                        .unwrap_or(0)
+                        .max(0) as u64;
+                    candidates.push((w * h, stm.content.clone(), stm.dict.clone()));
+                }
+            }
+        }
+        if candidates.is_empty() {
+            skipped += 1;
+            infos.push(format!("halaman {page_idx} vektor, ekspor manual"));
+            continue;
+        }
+        // Ambil gambar TERBESAR (mask/SMask kecil diabaikan diam-diam).
+        candidates.sort_by_key(|(area, _, _)| std::cmp::Reverse(*area));
+        let (_, raw, dict) = &candidates[0];
+        let filters = pdf_image_filter_kind(dict)
+            .map_err(|e| format!("halaman {page_idx}: {e}"))?;
+        // Tolak-jujur filter tanpa decoder murni-Rust di repo ini.
+        if filters.iter().any(|f| {
+            f.contains("JPXDecode")
+                || f.contains("CCITTFaxDecode")
+                || f.contains("JBIG2Decode")
+        }) {
+            skipped += 1;
+            infos.push(format!(
+                "halaman {page_idx} filter takdidukung ({}), konversi manual",
+                filters.join("+")
+            ));
+            continue;
+        }
+        // Urutan array = urutan decode: Flate dulu bila ada, lalu DCT pass-through.
+        let has_flate = filters.iter().any(|f| f.contains("FlateDecode"));
+        let has_dct = filters.iter().any(|f| f.contains("DCTDecode"));
+        let fname = format!("p{page_idx:03}.jpg");
+        let Some(out) = safe_join(out_dir, &fname) else {
+            skipped += 1;
+            continue;
+        };
+        if has_dct {
+            let mut jpeg = raw.clone();
+            if has_flate {
+                jpeg = inflate_flate(&jpeg).map_err(|e| format!("halaman {page_idx}: {e}"))?;
+            }
+            // Validasi magic JPEG sebelum tulis (data korup → skip, bukan rusak).
+            if jpeg.len() < 4 || jpeg[0] != 0xFF || jpeg[1] != 0xD8 {
+                skipped += 1;
+                infos.push(format!("halaman {page_idx} data JPEG rusak"));
+                continue;
+            }
+            fs::write(&out, &jpeg).map_err(|e| e.to_string())?;
+            rotate_file_if_needed(&out, rotate_deg)?;
+            files.push(out);
+        } else if has_flate {
+            // Flate murni: tulis PNG via pixel mentah (RGB/Gray 8-bit).
+            let w = dict
+                .get(b"Width")
+                .and_then(|o| o.as_i64())
+                .unwrap_or(0)
+                .max(0) as u32;
+            let h = dict
+                .get(b"Height")
+                .and_then(|o| o.as_i64())
+                .unwrap_or(0)
+                .max(0) as u32;
+            let bpc = dict
+                .get(b"BitsPerComponent")
+                .and_then(|o| o.as_i64())
+                .unwrap_or(8)
+                .max(0) as u8;
+            let cs = dict
+                .get(b"ColorSpace")
+                .map(|o| format!("{o:?}"))
+                .unwrap_or_default();
+            let png_out = out.with_extension("png");
+            match write_flate_png(raw, w, h, bpc, &cs, &png_out) {
+                Ok(()) => {
+                    rotate_file_if_needed(&png_out, rotate_deg)?;
+                    files.push(png_out);
+                }
+                Err(e) => {
+                    skipped += 1;
+                    infos.push(format!("halaman {page_idx}: {e}"));
+                }
+            }
+        } else {
+            skipped += 1;
+            infos.push(format!(
+                "halaman {page_idx} filter takdidukung ({}), konversi manual",
+                filters.join("+")
+            ));
+        }
+    }
+    files.sort();
+    Ok((files, skipped, infos))
+}
+
+/// Putar file gambar sesuai /Rotate halaman (kelipatan 90 derajat).
+fn rotate_file_if_needed(path: &Path, deg: i32) -> Result<(), String> {
+    match deg {
+        0 => Ok(()),
+        90 => {
+            let img = image::open(path).map_err(|e| e.to_string())?;
+            img.rotate90().save(path).map_err(|e| e.to_string())
+        }
+        180 => {
+            let img = image::open(path).map_err(|e| e.to_string())?;
+            img.rotate180().save(path).map_err(|e| e.to_string())
+        }
+        270 => {
+            let img = image::open(path).map_err(|e| e.to_string())?;
+            img.rotate270().save(path).map_err(|e| e.to_string())
+        }
+        _ => Ok(()),
+    }
+}
 /// `None` = file bukan gambar yang bisa di-decode (sidecar `._*`, korup,
 /// 0 byte). Import menghitungnya sebagai skipped supaya projects.json tidak
 /// pernah menerima halaman rusak.
@@ -212,6 +510,19 @@ fn expand_input(path: &Path, extract_dir: &Path) -> Result<(Vec<PathBuf>, usize)
     if path.is_file() {
         if is_archive(path) {
             return extract_archive(path, extract_dir);
+        }
+        if is_pdf(path) {
+            let stem = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("pdf");
+            let safe_stem: String = stem
+                .chars()
+                .map(|c| if c.is_alphanumeric() { c } else { '_' })
+                .collect();
+            let out_dir = extract_dir.join(format!("{safe_stem}_pdf"));
+            let (files, skipped, _infos) = extract_pdf_pages(path, &out_dir)?;
+            return Ok((files, skipped));
         }
         if is_image_file(path) {
             return Ok((vec![path.to_path_buf()], 0));
@@ -668,5 +979,176 @@ mod tests {
         assert_eq!(pg.bubbles[0].shape.as_ref().unwrap().len(), 3);
         assert_eq!(pg.bubbles[0].tail.as_ref().unwrap().len(), 2);
         assert_eq!(pg.status, PageStatus::Detected);
+    }
+}
+
+#[cfg(test)]
+mod pdf_tests {
+    use super::*;
+    use lopdf::{Dictionary, Object, Stream};
+
+    fn temp_dir(tag: &str) -> PathBuf {
+        let n = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("{tag}-{}-{n}", std::process::id()))
+    }
+
+    /// Bangun PDF 1-halaman-JPEG sintetis murni di memori (tanpa biner
+    /// commit): 1 XObject /Image DCT 4x4 merah sebagai halaman 1.
+    fn synthetic_scan_pdf() -> Vec<u8> {
+        // JPEG 4x4 minimal via crate image.
+        let img = image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
+            4,
+            4,
+            image::Rgb([200, 40, 90]),
+        ));
+        let mut jpg = Vec::new();
+        img.write_to(
+            &mut std::io::Cursor::new(&mut jpg),
+            image::ImageFormat::Jpeg,
+        )
+        .unwrap();
+        let mut doc = lopdf::Document::with_version("1.4");
+        // XObject gambar: pass-through JPEG (Filter DCT saja, tanpa Flate).
+        let mut img_dict = Dictionary::new();
+        img_dict.set("Type", Object::Name(b"XObject".to_vec()));
+        img_dict.set("Subtype", Object::Name(b"Image".to_vec()));
+        img_dict.set("Width", Object::Integer(4));
+        img_dict.set("Height", Object::Integer(4));
+        img_dict.set("ColorSpace", Object::Name(b"DeviceRGB".to_vec()));
+        img_dict.set("BitsPerComponent", Object::Integer(8));
+        img_dict.set(
+            "Filter",
+            Object::Name(b"DCTDecode".to_vec()),
+        );
+        let img_id = doc.add_object(Object::Stream(Stream::new(img_dict, jpg)));
+        // Resources + content (Do /Im0) + page + pages + catalog.
+        let mut xobj = Dictionary::new();
+        xobj.set("Im0", Object::Reference(img_id));
+        let mut res = Dictionary::new();
+        res.set("XObject", Object::Dictionary(xobj));
+        let res_id = doc.add_object(Object::Dictionary(res));
+        let content = lopdf::content::Content {
+            operations: vec![lopdf::content::Operation::new(
+                "Do",
+                vec![Object::Name(b"Im0".to_vec())],
+            )],
+        };
+        let content_id = doc.add_object(Object::Stream(Stream::new(
+            Dictionary::new(),
+            content.encode().unwrap(),
+        )));
+        let mut page_dict = Dictionary::new();
+        page_dict.set("Type", Object::Name(b"Page".to_vec()));
+        page_dict.set("MediaBox", Object::Array(vec![
+            Object::Integer(0),
+            Object::Integer(0),
+            Object::Integer(100),
+            Object::Integer(100),
+        ]));
+        page_dict.set("Resources", Object::Reference(res_id));
+        page_dict.set(
+            "Contents",
+            Object::Array(vec![Object::Reference(content_id)]),
+        );
+        let page_id = doc.add_object(Object::Dictionary(page_dict));
+        let mut pages_dict = Dictionary::new();
+        pages_dict.set("Type", Object::Name(b"Pages".to_vec()));
+        pages_dict.set(
+            "Kids",
+            Object::Array(vec![Object::Reference(page_id)]),
+        );
+        pages_dict.set("Count", Object::Integer(1));
+        let pages_id = doc.add_object(Object::Dictionary(pages_dict));
+        // Parent link + catalog.
+        if let Ok(page_obj) = doc.get_object_mut(page_id) {
+            if let Ok(d) = page_obj.as_dict_mut() {
+                d.set("Parent", Object::Reference(pages_id));
+            }
+        }
+        let mut catalog = Dictionary::new();
+        catalog.set("Type", Object::Name(b"Catalog".to_vec()));
+        catalog.set("Pages", Object::Reference(pages_id));
+        let catalog_id = doc.add_object(Object::Dictionary(catalog));
+        doc.trailer.set("Root", Object::Reference(catalog_id));
+        let mut buf = Vec::new();
+        doc.save_to(&mut buf).unwrap();
+        buf
+    }
+
+    #[test]
+    fn pdf_scan_extracts_jpeg_passthrough() {
+        let dir = temp_dir("pdf-extract");
+        fs::create_dir_all(&dir).unwrap();
+        let pdf = dir.join("scan.pdf");
+        fs::write(&pdf, synthetic_scan_pdf()).unwrap();
+        let out_dir = dir.join("out");
+        let (files, skipped, _infos) = extract_pdf_pages(&pdf, &out_dir).unwrap();
+        assert_eq!(skipped, 0, "halaman JPEG valid tak boleh di-skip");
+        assert_eq!(files.len(), 1);
+        // Pass-through: magic JPEG + dimensi 4x4 via page_from_file.
+        let raw = fs::read(&files[0]).unwrap();
+        assert!(raw.len() > 4 && raw[0] == 0xFF && raw[1] == 0xD8);
+        let pg = page_from_file(&files[0]).expect("hasil ekstrak harus jadi Page");
+        assert_eq!((pg.width, pg.height), (4, 4));
+    }
+
+    #[test]
+    fn pdf_vector_page_skipped_honestly() {
+        let dir = temp_dir("pdf-vector");
+        fs::create_dir_all(&dir).unwrap();
+        // PDF 1 halaman teks vektor tanpa XObject gambar.
+        let mut doc = lopdf::Document::with_version("1.4");
+        let content = lopdf::content::Content {
+            operations: vec![lopdf::content::Operation::new(
+                "Tj",
+                vec![Object::string_literal("hello")],
+            )],
+        };
+        let content_id = doc.add_object(Object::Stream(Stream::new(
+            Dictionary::new(),
+            content.encode().unwrap(),
+        )));
+        let mut page_dict = Dictionary::new();
+        page_dict.set("Type", Object::Name(b"Page".to_vec()));
+        page_dict.set("MediaBox", Object::Array(vec![
+            Object::Integer(0),
+            Object::Integer(0),
+            Object::Integer(100),
+            Object::Integer(100),
+        ]));
+        page_dict.set(
+            "Contents",
+            Object::Array(vec![Object::Reference(content_id)]),
+        );
+        let page_id = doc.add_object(Object::Dictionary(page_dict));
+        let mut pages_dict = Dictionary::new();
+        pages_dict.set("Type", Object::Name(b"Pages".to_vec()));
+        pages_dict.set("Kids", Object::Array(vec![Object::Reference(page_id)]));
+        pages_dict.set("Count", Object::Integer(1));
+        let pages_id = doc.add_object(Object::Dictionary(pages_dict));
+        let mut catalog = Dictionary::new();
+        catalog.set("Type", Object::Name(b"Catalog".to_vec()));
+        catalog.set("Pages", Object::Reference(pages_id));
+        let catalog_id = doc.add_object(Object::Dictionary(catalog));
+        doc.trailer.set("Root", Object::Reference(catalog_id));
+        let pdf = dir.join("vector.pdf");
+        let mut buf = Vec::new();
+        doc.save_to(&mut buf).unwrap();
+        fs::write(&pdf, buf).unwrap();
+        let (files, skipped, infos) = extract_pdf_pages(&pdf, &dir.join("out")).unwrap();
+        assert!(files.is_empty());
+        assert_eq!(skipped, 1);
+        assert!(infos.iter().any(|s| s.contains("vektor")));
+    }
+
+    #[test]
+    fn pdf_recognized_but_not_image_or_archive() {
+        assert!(is_pdf(Path::new("scan.PDF")));
+        assert!(is_pdf(Path::new("a.pdf")));
+        assert!(!is_pdf(Path::new("a.jpg")));
+        assert!(!is_image_file(Path::new("a.pdf")));
     }
 }

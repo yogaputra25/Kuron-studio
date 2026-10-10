@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import projectRs from "../../src-tauri/src/commands/project.rs?raw";
-import { ARCHIVE_EXTS, IMAGE_EXTS } from "./types";
+import { ARCHIVE_EXTS, IMAGE_EXTS, PDF_EXTS } from "./types";
+import appSrc from "../App.svelte?raw";
 
 // Cegah dialog picker dan backend_import menerima daftar format berbeda.
 // Kalau melebar, user bisa pilih file yang import-nya ditolak diam-diam;
@@ -34,8 +35,20 @@ describe("image/archive extension contract (TS picker == Rust import filter)", (
   });
 
   it("no duplicates", () => {
-    for (const list of [IMAGE_EXTS, ARCHIVE_EXTS]) {
+    for (const list of [IMAGE_EXTS, ARCHIVE_EXTS, PDF_EXTS]) {
       expect(new Set(list).size, `duplikat di ${list.join(",")}`).toBe(list.length);
     }
+  });
+
+  it("pdf-import: backend is_pdf + dialog PDF sinkron, IMAGE_EXTS tak berubah", () => {
+    // Backend kenali pdf via is_pdf() terpisah (output = jpg/png).
+    expect(projectRs).toMatch(/fn is_pdf\(/);
+    expect(projectRs).toContain('"pdf"');
+    expect(projectRs).toContain("extract_pdf_pages");
+    // TS: PDF_EXTS terpisah, tak masuk IMAGE_EXTS (output-nya yang gambar).
+    expect([...PDF_EXTS]).toEqual(["pdf"]);
+    expect([...IMAGE_EXTS]).not.toContain("pdf");
+    // Dialog tawarkan filter PDF documents.
+    expect(appSrc).toContain("PDF documents");
   });
 });

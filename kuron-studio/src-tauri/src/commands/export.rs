@@ -204,9 +204,14 @@ fn ttf_draw(img: &mut RgbImage, s: &str, x0: i32, y0: i32, scale: u32) -> bool {
         let mut glyph = scaled.scaled_glyph(ch);
         glyph.position = ab_glyph::point(x, y0 as f32 + scaled.ascent());
         if let Some(out) = scaled.outline_glyph(glyph) {
+            // draw() memberi (dx,dy) relatif bounds glyph — offset dengan
+            // px_bounds().min yang sudah absolut-halaman (position dilipat
+            // via offset raster; terverifikasi source ab_glyph 0.2).
+            let bb = out.px_bounds();
+            let (ox, oy) = (bb.min.x as i32, bb.min.y as i32);
             out.draw(|dx, dy, c| {
                 if c > 0.5 {
-                    let (pxi, pyi) = (dx as i32, dy as i32);
+                    let (pxi, pyi) = (ox + dx as i32, oy + dy as i32);
                     if pxi >= 0 && pyi >= 0
                         && (pxi as u32) < img.width()
                         && (pyi as u32) < img.height()
@@ -503,7 +508,7 @@ mod tests {
     use super::*;
     use image::{Rgb, RgbImage};
 
-    fn solid_png(w: u32, h: u32) -> Vec<u8> {
+    pub(super) fn solid_png(w: u32, h: u32) -> Vec<u8> {
         let img = RgbImage::from_pixel(w, h, Rgb([200, 200, 200]));
         let mut buf = Vec::new();
         let enc = image::codecs::png::PngEncoder::new(&mut buf);
@@ -513,7 +518,7 @@ mod tests {
         buf
     }
 
-    fn bt(i: usize, x: i32, y: i32, w: i32, h: i32, t: &str) -> BubbleTranslation {
+    pub(super) fn bt(i: usize, x: i32, y: i32, w: i32, h: i32, t: &str) -> BubbleTranslation {
         BubbleTranslation {
             index: i, x, y, w, h,
             original: "o".into(), reading: "".into(), translated: t.into(),
@@ -606,5 +611,57 @@ mod tests {
         assert!(!text_overflows("HI", 200, 100));
         assert!(!text_overflows("", 60, 30));
         assert!(!text_overflows("   ", 60, 30));
+    }
+}
+
+#[cfg(test)]
+mod text_position_tests {
+    use super::tests::{bt, solid_png};
+    use super::*;
+    use image::RgbImage;
+
+    fn dark_in_rect(img: &RgbImage, x0: u32, y0: u32, x1: u32, y1: u32) -> usize {
+        let mut n = 0;
+        for y in y0..y1.min(img.height()) {
+            for x in x0..x1.min(img.width()) {
+                if img.get_pixel(x, y).0 == [0, 0, 0] {
+                    n += 1;
+                }
+            }
+        }
+        n
+    }
+
+    #[test]
+    fn ttf_text_inside_bubble_corner_clean() {
+        // TTF path hanya bila font sistem ada; bila tidak, bitmap path
+        // (posisi sudah benar) yang diuji — keduanya wajib di-dalam-bubble.
+        let png = solid_png(400, 400);
+        let t = PageTranslation {
+            page_id: "p".into(), target_lang: "id".into(), style: "s".into(),
+            model: "m".into(), bubbles: vec![bt(0, 50, 50, 200, 100, "HELLO")],
+        };
+        let out = render_page_png(&png, &t, &[None]).unwrap();
+        let img = image::load_from_memory(&out).unwrap().to_rgb8();
+        let inside = dark_in_rect(&img, 50, 50, 250, 150);
+        assert!(inside > 20, "teks harus di dalam bubble, got {inside}");
+        let corner = dark_in_rect(&img, 0, 0, 30, 30);
+        assert_eq!(corner, 0, "pojok halaman harus bersih, got {corner}");
+    }
+
+    #[test]
+    fn ttf_multiline_inside_bubble() {
+        let png = solid_png(400, 400);
+        let t = PageTranslation {
+            page_id: "p".into(), target_lang: "id".into(), style: "s".into(),
+            model: "m".into(),
+            bubbles: vec![bt(0, 50, 50, 220, 160, "HELLO WORLD FOO BAR BAZ")],
+        };
+        let out = render_page_png(&png, &t, &[None]).unwrap();
+        let img = image::load_from_memory(&out).unwrap().to_rgb8();
+        let inside = dark_in_rect(&img, 50, 50, 270, 210);
+        assert!(inside > 20, "multiline harus di dalam bubble, got {inside}");
+        let corner = dark_in_rect(&img, 0, 0, 30, 30);
+        assert_eq!(corner, 0, "pojok halaman harus bersih, got {corner}");
     }
 }
