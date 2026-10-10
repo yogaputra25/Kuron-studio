@@ -106,6 +106,23 @@ menjaganya.
 
 ---
 
+## Status per 2026-10-10
+
+- Tiga change diarsipkan: `2026-10-10-fix-pane-switch-editor` (commit-on-switch
+  + canvas mentok pane), `2026-10-10-fix-card-input-lag` (cache plain, guard
+  IME), `2026-10-10-typing-comfort` (commit-on-boundary + jaring 10dtk +
+  indikator dirty + sync-guard prop-basi). Spec gabungan masuk
+  `openspec/specs/kuron-studio/spec.md`.
+- Keputusan terkunci: kenyamanan > crash-safety (V2'); autosave dipertahankan
+  sebagai jaring, bukan dihapus; Opsi C sync-guard (tunda timpa prop saat
+  kotor/terbang) atas Opsi A mentah (regresi hasil batch); ResizeObserver
+  ditunda (ponytail) kecuali resize-window diprotes.
+- Pelajaran: `syncFromPage` cabang translation menimpa state lebih baru
+  dengan prop basi ("ketikan balik ke sebelumnya"); cache plain tak cukup
+  tanpa sync-guard.
+
+---
+
 ## Cara kerja yang terbukti
 
 - **Gate dulu, baru bilang selesai.** Gate ada di `AGENTS.md` bagian 2. Klaim

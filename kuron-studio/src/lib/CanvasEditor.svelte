@@ -50,6 +50,10 @@
     const b = bubbles[i];
     const tr = translations.find((t) => t.index === i);
     if (!b) return;
+    // Kunci seleksi ke bubble baru DULU sebelum commit editor lama, supaya
+    // commit(editTr) tak menarik manualSel balik ke bubble lama (yank).
+    selectedIdx = i;
+    if (onSelectForward) onSelectForward(i);
     commitEditor();
     const s = scale();
     editingIdx = i;
@@ -68,15 +72,18 @@
     });
   }
 
-  function commitEditor() {
+  /** Commit dari luar (ganti tab): pola sama seperti deleteSelected. */
+  export function commitEditor() {
     if (editingIdx === null || !onEditTranslation) {
       editingIdx = null;
       return;
     }
     const i = editingIdx;
+    const cur = translations.find((t) => t.index === i)?.translated ?? "";
     editingIdx = null;
     editBox = null;
-    onEditTranslation(i, editingValue);
+    // Nilai tak berubah → tutup saja, jangan tandai edited / antre save.
+    if (cur !== editingValue) onEditTranslation(i, editingValue);
   }
 
   function cancelEditor() {
@@ -179,12 +186,18 @@
     return { accent, cyan, accentRgba: hexToRgba(accent, 0.18), cyanRgba: hexToRgba(cyan, 0.12) };
   };
 
-  function redraw() {
+  export function redraw() {
     if (!stage || !overlayLayer) return;
     const s = scale();
     const P = paint();
     stage.width(imgW * s);
     stage.height(imgH * s);
+    // Background ikut scale baru (diset sekali saat load): tanpa ini gambar
+    // diam sementara overlay pindah (split-brain) usai pane berganti lebar.
+    if (bgImage) {
+      bgImage.size({ width: imgW * s, height: imgH * s });
+      bgImage.getLayer()?.batchDraw();
+    }
     overlayLayer.destroyChildren();
     const nums = chipNumbers(bubbles, readingDir);
 

@@ -6,7 +6,10 @@ mengubah repo ini. Baca sebelum menulis kode.
 Dokumen ini selalu terbaca di tiap percakapan. Jaga tetap ringkas. Detail yang
 jarang dipakai ditaruh di file terpisah dan ditunjuk dari sini.
 
----
+> Protokol sesi (wajib): (1) baca `MEMORY.md` di awal setiap sesi sebelum
+> menyentuh kode; (2) update `MEMORY.md` setelah perubahan penting (keputusan,
+> jebakan baru, status milestone) — file ini manual, tidak ada mekanisme
+> otomatis yang menulisnya.
 
 ## 1. Peta repo
 

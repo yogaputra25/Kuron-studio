@@ -239,3 +239,79 @@ System SHALL render translated text in bubble regions using `shape` polygon when
 #### Scenario: User edited guard
 - **WHEN** `BubbleTranslation.isUserEdited=true`
 - **THEN** subsequent translate SHALL NOT overwrite its `translated` text
+
+### Requirement: Pane switch SHALL commit in-bubble editor and fill canvas
+
+Ganti tab Before|Split|After SHALL meng-commit editor in-bubble yang terbuka via jalur `editTr` existing (tanpa yank seleksi), dan canvas SHALL di-redraw satu scale (overlay + background) setelah layout settle sehingga stage selebar holder.
+
+#### Scenario: Split → After dengan editor terbuka dan ada ketikan
+- **WHEN** user membuka editor in-bubble di bubble C saat mode Split, mengetik teks baru, lalu klik tab After
+- **THEN** teks ketikan SHALL tersimpan ke bubble C (`translated`, `isUserEdited: true`) dan tidak ada textarea basi yang tertinggal di posisi lama
+
+#### Scenario: Split → After canvas mentok pane
+- **WHEN** user pindah tab Split → After (dengan atau tanpa editor terbuka)
+- **THEN** stage After SHALL selebar holder: gambar + overlay bubble mentok pane, tanpa ruang kosong/hitam di kanan; background image dan overlay SHALL dalam scale yang sama
+
+### Requirement: Ketikan kartu responsif tanpa render per huruf
+
+Textarea kartu (`original`/`reading`/`translated`) SHALL menampilkan huruf di frame yang sama saat tombol ditekan, tanpa update reactive per huruf; commit tetap via jalur `editTr` existing.
+
+#### Scenario: Ketik-cepat satu kalimat
+- **WHEN** user mengetik satu kalimat cepat di Terjemahan (ID) tanpa jeda
+- **THEN** seluruh huruf SHALL tampil lengkap dan berurutan, kursor stabil di posisi ketik, tanpa huruf hilang/tertukar
+
+#### Scenario: Autosave tak mengganggu ketikan berjalan
+- **WHEN** user mengetik terus melewati batas debounce (commit + save fire + respons tiba saat masih mengetik)
+- **THEN** ketikan SHALL tidak terpotong, kursor tidak melompat, textarea fokus tidak di-render ulang oleh respons save
+
+### Requirement: Komposisi IME tak terpotong commit
+
+Selama komposisi IME aktif, commit SHALL ditunda sampai `compositionend`; teks komposisi SHALL utuh. `compEnd` SHALL commit langsung (batas kata alami, bukan timer).
+
+#### Scenario: Ketik dengan IME aktif
+- **WHEN** user mengetik memakai IME (komposisi belum di-commit browser)
+- **THEN** tidak ada commit yang fire di tengah komposisi; commit SHALL jalan setelah `compositionend`
+
+### Requirement: Sinkronisasi eksternal tak menimpa fokus
+
+Hasil Translate baru, reset, dan ganti bubble SHALL commit draft kotor dulu; DOM textarea yang sedang fokus SHALL tidak ditulis ulang oleh respons save/hasil luar dengan konten identik.
+
+#### Scenario: Hasil Translate tiba saat mengetik
+- **WHEN** hasil `translatePage` tiba saat user sedang mengetik di kartu (draft kotor)
+- **THEN** draft SHALL di-commit dulu lalu merge (`mergeUserEdits`) melindungi teks yang sedang diketik; tidak ada huruf hilang
+
+#### Scenario: Pindah bubble saat draft kotor
+- **WHEN** user klik bubble lain saat draft kotor
+- **THEN** draft SHALL di-commit via `editTr` dulu, kartu baru menampilkan teks bubble baru, tanpa huruf tertinggal di kartu lama
+
+### Requirement: Mengetik tanpa commit tengah-ketik
+
+Mengetik di textarea kartu SHALL tidak memicu commit/render sampai batas alami: blur, pindah bubble, tombol Save, `compositionend`, atau timer-jaring 10 dtk (`DRAFT_SAFETY_MS`). Satu kalimat penuh SHALL selesai tanpa interupsi.
+
+#### Scenario: Ketik 1 kalimat penuh tanpa jeda-paksa
+- **WHEN** user mengetik 1 kalimat penuh di Terjemahan (ID) dengan jeda mikro alami antar kata (tanpa blur)
+- **THEN** tidak ada commit/render yang fire selama mengetik; commit SHALL terjadi sekali saat blur/pindah/Save
+
+#### Scenario: Timer-jaring menyelamatkan sesi ditinggal
+- **WHEN** user mengetik lalu meninggalkan kartu tanpa blur selama >10 dtk (tanpa pindah/Save/tutup)
+- **THEN** timer-jaring SHALL commit + antre save tepat sekali; ketikan terselamatkan ke SQLite
+
+### Requirement: Indikator dirty dan Save flush eksplisit
+
+Saat cache kotor (ada ketikan belum commit), UI SHALL menunjukkan status belum-tersimpan (`belum tersimpan` + `Save*`); tombol Save SHALL commit + save langsung. Menutup panel dengan cache kotor SHALL commit best-effort sebelum unmount.
+
+#### Scenario: Save flush eksplisit
+- **WHEN** user klik Save saat cache kotor
+- **THEN** sistem SHALL commit dulu lalu save langsung (tanpa menunggu timer-jaring); teks tersimpan ke SQLite
+
+### Requirement: Sync prop tak menimpa ketikan berjalan
+
+`syncFromPage` cabang `translation` SHALL skip bila cache kotor (`draftBox.cur`) ATAU save terbang (`saveTimer`/`savingTr`); cabang `bubbles` tak berubah. Saat tenang, sync jalan normal (echo/mount/batch/retry lolos; kabar batch tertunda, bukan hilang).
+
+#### Scenario: Ketikan tak balik ke sebelumnya pasca-save
+- **WHEN** user mengetik 1 kalimat, commit, lalu mengetik lanjutan saat save terbang (prop echo basi tiba di jendela commit→save)
+- **THEN** lanjutan SHALL tidak ditimpa prop basi; save berikutnya SHALL mengirim teks lengkap; kartu tetap tampil kalimat baru
+
+#### Scenario: Hasil batch masuk saat tenang
+- **WHEN** batch/retry selesai (`refreshProject`) saat tak ada ketikan kotor dan tak ada save terbang
+- **THEN** hasil baru SHALL tampil di kartu/After via sync normal

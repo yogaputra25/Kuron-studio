@@ -51,7 +51,7 @@
   let batching = $state(false);
   let detectEngine = $state("…");
   let error = $state("");
-  let editorRef = $state<{ deleteSelected: () => boolean } | null>(null);
+  let editorRef = $state<{ deleteSelected: () => boolean; redraw: () => void } | null>(null);
 
   // M2 translation state.
   let translation = $state<PageTranslation | null>(null);
@@ -61,16 +61,37 @@
   let glossMsg = $state("");
   let manualSel = $state<number | null>(null);
 
-  // Draft lokal kartu (fix-edit-stuck D1): ketikan ditahan di sini, BUKAN di
-  // translation.bubbles — jadi value textarea tak di-set ulang per huruf dan
-  // kursor stabil. Commit sekali via editTr existing (blur/debounce/pindah).
-  let draft = $state<{ row: number; original: string; reading: string; translated: string } | null>(null);
-  let draftTimer = $state<ReturnType<typeof setTimeout> | null>(null);
+  // Draft kartu responsif (fix-card-input-lag D1): ketikan per huruf TAK
+  // menyentuh $state — DOM textarea milik browser penuh. draftBox.cur plain
+  // (properti kontainer, tanpa render ulang); markup baca saat render,
+  // selalu terbaru → set ulang value= identik = no-op kursor-aman.
+  // Commit via editTr existing (blur/debounce/pindah).
+  let draftBox: { cur: { row: number; original: string; reading: string; translated: string } | null } = { cur: null };
+  let draftTimer: ReturnType<typeof setTimeout> | null = null;
+  let composing = false;
+  // Sinyal reactive murah: true sekali per mulai-rangkaian-ketik (bukan per
+  // huruf) → 1 render per fokus untuk indikator dirty, bukan N× per huruf.
+  let dirtyDraft = $state(false);
 
   // Before|Split|After — after-lite: overlay Konva, bukan PNG typeset
   // (ponytail: after-true via command render_page_png bila diprotes).
   type PaneMode = "before" | "split" | "after";
   let mode = $state<PaneMode>("before");
+  // Ref instance After (Before sudah punya editorRef): commit editor in-bubble
+  // yang terbuka sebelum pane berganti — tak ada textarea basi.
+  let afterRef = $state<{ commitEditor: () => void; redraw: () => void } | null>(null);
+  function setMode(m: PaneMode) {
+    afterRef?.commitEditor();
+    mode = m;
+    // Layout pane baru settle setelah render: redraw di frame berikut agar
+    // holder.clientWidth sudah lebar baru (sync = baca lebar lama).
+    // Kedua instance hidup di Split; redraw keduanya agar Split→tunggal
+    // tak menyisakan stage ber-scale lama di pane yang selamat.
+    requestAnimationFrame(() => {
+      editorRef?.redraw();
+      afterRef?.redraw();
+    });
+  }
   let beforeScroll: HTMLDivElement | null = $state(null);
   let afterScroll: HTMLDivElement | null = $state(null);
   let syncing = false;
@@ -115,8 +136,13 @@
       dirty = false;
       syncedFor = page.id;
     }
-    // Restore persisted translation (close → reopen); local edits win unless saved.
-    if (incomingTr && JSON.stringify(translation) !== incomingTr) {
+    // Sync-guard (typing-comfort D6): JANGAN timpa translation lokal yang
+    // lebih baru dengan prop basi di jendela commit→save. Kondisi sibuk =
+    // ketikan kotor (draftBox) ATAU save terbang (timer/saving). Saat tenang,
+    // sync jalan normal (echo/mount/batch/retry lolos; kabar batch tertunda).
+    // Cabang bubbles tak diubah (pelaku = cabang translation).
+    const busyTyping = draftBox.cur !== null || saveTimer !== null || savingTr;
+    if (!busyTyping && incomingTr && JSON.stringify(translation) !== incomingTr) {
       translation = $state.snapshot(page.translation) ?? null;
     }
   }
@@ -194,7 +220,7 @@
   }
 
   async function saveTranslationEdits() {
-    if (draft) commitDraft();
+    if (draftBox.cur) commitDraft();
     if (!translation) return;
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
     const my = ++saveGen;
@@ -218,7 +244,9 @@
     saveTimer = setTimeout(() => { saveTimer = null; void saveTranslationEdits(); }, 500);
   }
 
-  onDestroy(() => { if (saveTimer) clearTimeout(saveTimer); if (draftTimer) clearTimeout(draftTimer); });
+  // Flush best-effort: commit sinkron dulu (tanpa await) agar ketikan tak
+  // dibuang diam-diam saat panel ditutup; save ikut antre fire-and-forget.
+  onDestroy(() => { if (draftBox.cur) commitDraft(); if (saveTimer) clearTimeout(saveTimer); if (draftTimer) clearTimeout(draftTimer); });
 
   /** "Isi manual": translation null → bangun kosong lokal → save_translation. */
   async function createEmptyTranslation() {
@@ -260,7 +288,7 @@
   function onTranslated(t: PageTranslation) {
     // Draft kartu yang sedang diketik jadi edited + ikut mergeUserEdits
     // (tanpa ini draft basi menimpa hasil AI baru / hilang).
-    if (draft) commitDraft();
+    if (draftBox.cur) commitDraft();
     translation = {
       ...t,
       bubbles: mergeUserEdits(translation?.bubbles, t.bubbles),
@@ -282,32 +310,54 @@
     translation.bubbles = translation.bubbles.map((b, j) =>
       j === i ? { ...b, [field]: v, isUserEdited: true } : b,
     );
-    manualSel = translation.bubbles[i]?.index ?? null;
+    // Tanpa yank: seleksi hanya via selectBubble.
     queueSaveTranslationEdits();
   }
 
   type DraftField = "original" | "reading" | "translated";
 
-  /** Tulis ketikan kartu ke draft saja — translation.bubbles tak tersentuh. */
+  /** Ketikan kartu → cache plain TANPA $state: nol render/commit per huruf.
+   *  DOM textarea milik browser penuh. Commit hanya di batas alami
+   *  (blur/pindah/Save/compositionend/jaring) — bukan tiap jeda mikro.
+   *  Timer-jaring = pengaman sesi-ditinggal, bukan ritme kerja. */
+  const DRAFT_SAFETY_MS = 10_000;
   function draftInput(field: DraftField, v: string) {
     if (!translation || selectedRow < 0) return;
-    if (!draft || draft.row !== selectedRow) {
+    if (!draftBox.cur || draftBox.cur.row !== selectedRow) {
       const cur = translation.bubbles[selectedRow];
       if (!cur) return;
-      draft = { row: selectedRow, original: cur.original, reading: cur.reading, translated: cur.translated };
+      draftBox.cur = { row: selectedRow, original: cur.original, reading: cur.reading, translated: cur.translated };
     }
-    draft[field] = v;
-    // Ketik-tanpa-blur: debounce ~500ms commit (ritme autosave existing).
-    if (draftTimer) clearTimeout(draftTimer);
-    draftTimer = setTimeout(() => { draftTimer = null; commitDraft(); }, 500);
+    draftBox.cur[field] = v;
+    // Sekali per rangkaian-ketik (bukan per huruf): 1 render indikator.
+    if (!dirtyDraft) dirtyDraft = true;
+    // IME: tampung cache tapi jangan antre apa pun tengah komposisi.
+    if (composing) return;
+    // Jaring sekali per baris kotor (bukan per huruf): selamatkan sesi
+    // ditinggal tanpa blur; ketik normal blur/pindah jauh sebelum fire.
+    if (!draftTimer) draftTimer = setTimeout(() => { draftTimer = null; commitDraft(); }, DRAFT_SAFETY_MS);
+  }
+
+  /** IME mulai: jangan antre commit tengah komposisi. */
+  function compStart() {
+    composing = true;
+    if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; }
+  }
+
+  /** IME selesai = batas kata alami → commit langsung (D2). */
+  function compEnd() {
+    composing = false;
+    if (draftBox.cur) commitDraft();
   }
 
   /** Commit field kotor via editTr existing (sekali, bukan per huruf). */
   function commitDraft() {
+    if (composing) return;
     if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; }
-    if (!draft || !translation) return;
-    const { row, original, reading, translated } = draft;
-    draft = null;
+    if (!draftBox.cur || !translation) return;
+    const { row, original, reading, translated } = draftBox.cur;
+    draftBox.cur = null;
+    dirtyDraft = false;
     const cur = translation.bubbles[row];
     if (!cur) return;
     if (cur.original !== original) editTr(row, "original", original);
@@ -317,15 +367,16 @@
 
   /** Pindah seleksi saat draft kotor → commit otomatis dulu (D2). */
   function selectBubble(idx: number | null) {
-    if (draft) commitDraft();
+    if (draftBox.cur) commitDraft();
     manualSel = idx;
-    if (idx === null) draft = null;
+    if (idx === null) { draftBox.cur = null; dirtyDraft = false; }
   }
 
   /** ↺ opsi A: current = baseline AI terakhir, kirim LANGSUNG (§4 D7). */
   function resetBubble(i: number) {
     if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; }
-    draft = null;
+    draftBox.cur = null;
+    dirtyDraft = false;
     if (!translation) return;
     translation.bubbles = translation.bubbles.map((b, j) =>
       j === i ? { ...b, original: b.aiOriginal, reading: b.aiReading, translated: b.aiTranslated, isUserEdited: false } : b,
@@ -372,7 +423,7 @@
                 : "bg-surface-2 text-ink-2 hover:bg-hover hover:text-ink",
             ]}
             aria-pressed={mode === m}
-            onclick={() => (mode = m as PaneMode)}
+            onclick={() => setMode(m as PaneMode)}
           >{label}</button>
         {/each}
       </div>
@@ -462,6 +513,7 @@
         onscroll={() => syncScroll(afterScroll, beforeScroll)}
       >
         <CanvasEditor
+          bind:this={afterRef}
           imageUrl={fullImageUrl}
           fallbackUrl={fallbackUrl}
           imgW={page.width || 800}
@@ -567,13 +619,14 @@
             </div>
 
             <div class="mb-3 flex gap-2">
+              {#if dirtyDraft}<span class="rounded bg-warn-soft px-1.5 py-0.5 text-[10px] text-warn">belum tersimpan</span>{/if}
               <Button
                 variant="default"
                 size="sm"
                 class="ml-auto"
-                onclick={() => void saveTranslationEdits()}
+                onclick={() => { if (draftBox.cur) commitDraft(); void saveTranslationEdits(); }}
                 disabled={savingTr}
-              >{savingTr ? "…" : $t("save")}</Button>
+              >{savingTr ? "…" : dirtyDraft ? `${$t("save")}*` : $t("save")}</Button>
             </div>
 
             {#if mode !== "before"}
@@ -613,8 +666,10 @@
                     class="mt-1 w-full rounded-md border border-line bg-surface px-2.5 py-2 text-[13px] text-ink
                            outline-none transition-colors placeholder:text-ink-3
                            focus:border-accent focus:ring-2 focus:ring-accent/25"
-                    value={draft && draft.row === i ? draft.original : b.original}
+                    value={draftBox.cur && draftBox.cur.row === i ? draftBox.cur.original : b.original}
                     oninput={(e) => draftInput("original", (e.target as HTMLTextAreaElement).value)}
+                    oncompositionstart={compStart}
+                    oncompositionend={compEnd}
                     onblur={commitDraft}
                   ></textarea>
                   <p class="mt-1.5 block text-[10px] text-ink-3">Reading</p>
@@ -623,8 +678,10 @@
                     class="mt-1 w-full rounded-md border border-line bg-surface px-2.5 py-2 text-[13px] text-ink
                            outline-none transition-colors placeholder:text-ink-3
                            focus:border-accent focus:ring-2 focus:ring-accent/25"
-                    value={draft && draft.row === i ? draft.reading : b.reading}
+                    value={draftBox.cur && draftBox.cur.row === i ? draftBox.cur.reading : b.reading}
                     oninput={(e) => draftInput("reading", (e.target as HTMLTextAreaElement).value)}
+                    oncompositionstart={compStart}
+                    oncompositionend={compEnd}
                     onblur={commitDraft}
                   ></textarea>
                   <p class="mt-1.5 block text-[10px] text-ink-3">Terjemahan (ID)</p>
@@ -633,8 +690,10 @@
                     class="mt-1 w-full rounded-md border border-line bg-surface px-2.5 py-2 text-[13px] text-ink
                            outline-none transition-colors placeholder:text-ink-3
                            focus:border-accent focus:ring-2 focus:ring-accent/25"
-                    value={draft && draft.row === i ? draft.translated : b.translated}
+                    value={draftBox.cur && draftBox.cur.row === i ? draftBox.cur.translated : b.translated}
                     oninput={(e) => draftInput("translated", (e.target as HTMLTextAreaElement).value)}
+                    oncompositionstart={compStart}
+                    oncompositionend={compEnd}
                     onblur={commitDraft}
                   ></textarea>
                   {#if glossMsg}<p class="mt-1.5 text-[10px] text-success" role="status">{glossMsg}</p>{/if}
