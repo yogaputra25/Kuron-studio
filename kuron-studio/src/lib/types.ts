@@ -42,6 +42,9 @@ export const IMAGE_EXTS = [
 ] as const;
 
 export const ARCHIVE_EXTS = ["zip", "cbz"] as const;
+// pdf-import: dikenali backend via is_pdf() terpisah (output = jpg/png,
+// jadi TAK masuk IMAGE_EXTS). Sinkron dengan is_pdf di project.rs.
+export const PDF_EXTS = ["pdf"] as const;
 
 export interface ImportResult {
   pages: Page[];

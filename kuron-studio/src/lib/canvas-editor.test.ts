@@ -115,7 +115,7 @@ describe("delete autosave (fix-preview-hang §6)", () => {
   });
 
   it("kontrak tak tersentuh: onChange umum tetap lokal+dirty, guard syncFromPage utuh", () => {
-    expect(panelSrc).toMatch(/onChange=\{\(nb\) => \{\s*bubbles = nb;\s*dirty = true;\s*\}\}/);
+    expect(panelSrc).toMatch(/onChange=\{\(nb\) => \{\s*bubbles = nb;\s*dirty = true;[\s\S]*?\}\}/);
     expect(panelSrc).toContain("if (syncedFor !== page.id || JSON.stringify(incoming) !== JSON.stringify(bubbles)) {");
   });
 });
@@ -130,23 +130,23 @@ describe("manual draw tools never throw (regression)", () => {
     const up = src.slice(src.indexOf("function onStageUp"));
     const destructureAt = up.indexOf("[[x0, y0], [x1, y1]] = pts");
     expect(destructureAt, "baris destructure tidak ditemukan").toBeGreaterThan(-1);
-    const guardAt = up.indexOf("if (pts.length < 2) return;");
+    const guardAt = up.indexOf("if (pts.length < 2)");
     expect(guardAt, "guard pts.length hilang — destructure bisa throw").toBeGreaterThan(-1);
     expect(guardAt, "guard harus SEBELUM destructure").toBeLessThan(destructureAt);
   });
 
   it("freeform juga punya guard panjang pts", () => {
     const up = src.slice(src.indexOf("function onStageUp"));
-    const ff = up.slice(0, up.indexOf("if (pts.length < 2) return;"));
-    expect(ff).toContain("if (pts.length < 6) return;");
+    const ff = up.slice(0, up.indexOf("if (pts.length < 2)"));
+    expect(ff).toContain("if (pts.length < 6)");
   });
 
   it("semua tool gambar punya batas minimum yang sama", () => {
     expect(src).toContain("const MIN_BUBBLE_PX = 8;");
     const up = src.slice(src.indexOf("function onStageUp"));
     // Tidak ada literal yang的神色 bypass — semua lewat konstanta.
-    expect(up).toContain("if (w < MIN_BUBBLE_PX || h < MIN_BUBBLE_PX) return;");
-    expect(up).toContain("if (bbW < MIN_BUBBLE_PX || bbH < MIN_BUBBLE_PX) return;");
+    expect(up).toContain("if (w < MIN_BUBBLE_PX || h < MIN_BUBBLE_PX)");
+    expect(up).toContain("if (bbW < MIN_BUBBLE_PX || bbH < MIN_BUBBLE_PX)");
   });
 
   it("ekor: guard target dihapus supaya bisa klik di bubble sendiri", () => {
@@ -155,7 +155,7 @@ describe("manual draw tools never throw (regression)", () => {
     // Guard e.target WAJIB ada (tool gambar baru), tapi harus SESUDAH blok
     // tail — kalau mendahului, user tidak bisa klik bubble buat nunjuk ekor.
     const tailAt = down.indexOf('if (tool === "tail")');
-    const guardAt = down.indexOf("if (e.target !== stage) return;");
+    const guardAt = down.indexOf("if (e.target !== stage)");
     expect(tailAt, "blok tool tail tidak ditemukan").toBeGreaterThan(-1);
     expect(guardAt, "guard e.target hilang — tool gambar mulai dari bubble").toBeGreaterThan(-1);
     expect(

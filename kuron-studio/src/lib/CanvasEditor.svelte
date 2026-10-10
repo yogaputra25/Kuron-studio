@@ -25,9 +25,10 @@
     onSelectForward?: (i: number) => void;
     externalSelected?: number | null;
     onEditTranslation?: (i: number, value: string) => void;
+    onDrawHint?: (msg: string) => void;
   }
 
-  let { imageUrl, fallbackUrl = "", imgW, imgH, initial, readingDir, tool, onChange, translations = [], showTranslation = false, editable = true, onSelectForward, externalSelected = null, onEditTranslation }: Props = $props();
+  let { imageUrl, fallbackUrl = "", imgW, imgH, initial, readingDir, tool, onChange, translations = [], showTranslation = false, editable = true, onSelectForward, externalSelected = null, onEditTranslation, onDrawHint }: Props = $props();
 
   let holder: HTMLDivElement;
   let stage: Konva.Stage | null = null;
@@ -457,7 +458,7 @@
     // lalu drag keluar) atau di mana saja untuk menunjuk ujung ekor. Jadi
     // jangan pernah reject berdasarkan target — cukup butuh bubble terpilih.
     if (tool === "tail") {
-      if (selectedIdx === null || !stage) return;
+      if (selectedIdx === null || !stage) { onDrawHint?.("Pilih bubble dulu, lalu Ekor"); return; }
       const p = stage.getPointerPosition();
       if (!p) return;
       const s = scale();
@@ -465,9 +466,13 @@
       return;
     }
     // Tool gambar baru mulai dari area kosong — klik bubble = pilih/pindah.
-    if (e.target !== stage) return;
+    if (e.target !== stage) { onDrawHint?.("Klik area kosong untuk menggambar"); return; }
     const [x, y] = stagePos();
     drawing = { x0: x, y0: y, node: null, pts: [[x, y]] };
+    // Gesture lock (draw-tools-feedback D4): holder overflow-auto bersarang
+    // bisa merebut drag sebagai scroll → titik parsial → "terlalu kecil"
+    // palsu. Kunci selama drag, kembalikan saat up (unlock juga di bawah).
+    holder.style.overflow = "hidden";
     const s = scale();
     const P = paint();
     const layer = overlayLayer!;
@@ -506,19 +511,25 @@
     overlayLayer?.batchDraw();
   }
 
+  /** Buka kunci scroll holder (pasangan lock di onStageDown). */
+  function unlockScroll() {
+    holder.style.overflow = "";
+  }
+
   function onStageUp() {
-    if (!drawing) return;
+    if (!drawing) { unlockScroll(); return; }
     const pts = drawing.pts;
     drawing.node?.destroy();
     drawing = null;
+    unlockScroll();
     if (tool === "freeform") {
       // 6 = 3 titik (polyline minimal), bukan angka acak.
-      if (pts.length < 6) return;
+      if (pts.length < 6) { onDrawHint?.("Terlalu kecil, drag lebih lebar"); return; }
       const xs = pts.map((p) => p[0]);
       const ys = pts.map((p) => p[1]);
       const bbW = Math.max(...xs) - Math.min(...xs);
       const bbH = Math.max(...ys) - Math.min(...ys);
-      if (bbW < MIN_BUBBLE_PX || bbH < MIN_BUBBLE_PX) return;
+      if (bbW < MIN_BUBBLE_PX || bbH < MIN_BUBBLE_PX) { onDrawHint?.("Terlalu kecil, drag lebih lebar"); return; }
       const nb: BubbleBox = {
         x: Math.floor(Math.min(...xs)),
         y: Math.floor(Math.min(...ys)),
@@ -534,11 +545,11 @@
       // `pts` hanya berisi 2 titik setelah mousemove. Klik tanpa drag
       // (atau drag yang tidak sampai ke move) menyisakan 1 titik, dan
       // destructure di sini akan throw — jadi guard dulu.
-      if (pts.length < 2) return;
+      if (pts.length < 2) { onDrawHint?.("Terlalu kecil, drag lebih lebar"); return; }
       const [[x0, y0], [x1, y1]] = pts;
       const w = Math.abs(x1 - x0);
       const h = Math.abs(y1 - y0);
-      if (w < MIN_BUBBLE_PX || h < MIN_BUBBLE_PX) return;
+      if (w < MIN_BUBBLE_PX || h < MIN_BUBBLE_PX) { onDrawHint?.("Terlalu kecil, drag lebih lebar"); return; }
       bubbles.push(
         clampBubble(
           {
@@ -671,6 +682,7 @@
   onDestroy(() => {
     bgToken++; // invalidasi onload/onerror/timeout telat
     clearBgTimer();
+    unlockScroll();
     stage?.destroy();
     stage = null;
   });

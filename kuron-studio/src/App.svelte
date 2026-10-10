@@ -13,7 +13,7 @@
   import { lang, t, theme } from "./lib/i18n";
   import type { Lang, Theme } from "./lib/i18n";
   import type { BatchOpts, Page, Project, ReadingDirection } from "./lib/types";
-  import { ARCHIVE_EXTS, IMAGE_EXTS } from "./lib/types";
+  import { ARCHIVE_EXTS, IMAGE_EXTS, PDF_EXTS } from "./lib/types";
   import Button from "./lib/ui/Button.svelte";
   import StatusBadge from "./lib/ui/StatusBadge.svelte";
   import DiagnosticsPanel from "./lib/DiagnosticsPanel.svelte";
@@ -251,6 +251,7 @@
       filters: [
         { name: "Images", extensions: [...IMAGE_EXTS] },
         { name: "Archives", extensions: [...ARCHIVE_EXTS] },
+        { name: "PDF documents", extensions: [...PDF_EXTS] },
       ],
     });
     if (Array.isArray(files)) await doImport(files);

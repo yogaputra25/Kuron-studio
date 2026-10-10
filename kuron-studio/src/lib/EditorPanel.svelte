@@ -45,12 +45,14 @@
   let bubbles = $state<BubbleBox[]>([]);
   let dirty = $state(false);
   let syncedFor = $state<string | null>(null);
-  let tool = $state<Tool>("select");
   let saving = $state(false);
   let detecting = $state(false);
   let batching = $state(false);
   let detectEngine = $state("…");
   let error = $state("");
+  // Hint ringan tool gambar (draw-tools-feedback D3): terpisah dari error
+  // agar tak berebut prioritas; dibersihkan saat sukses/ganti-tool/ganti-mode.
+  let drawHint = $state("");
   let editorRef = $state<{ deleteSelected: () => boolean; redraw: () => void } | null>(null);
 
   // M2 translation state.
@@ -77,11 +79,19 @@
   // (ponytail: after-true via command render_page_png bila diprotes).
   type PaneMode = "before" | "split" | "after";
   let mode = $state<PaneMode>("before");
+  let tool = $state<Tool>("select");
+  // Mode After tunggal = tak ada pane editable → tool gambar tak berlaku (D1).
+  const readOnlyMode = $derived(mode === "after");
+  function setTool(t: Tool) {
+    tool = t;
+    drawHint = "";
+  }
   // Ref instance After (Before sudah punya editorRef): commit editor in-bubble
   // yang terbuka sebelum pane berganti — tak ada textarea basi.
   let afterRef = $state<{ commitEditor: () => void; redraw: () => void } | null>(null);
   function setMode(m: PaneMode) {
     afterRef?.commitEditor();
+    drawHint = "";
     mode = m;
     // Layout pane baru settle setelah render: redraw di frame berikut agar
     // holder.clientWidth sudah lebar baru (sync = baca lebar lama).
@@ -427,17 +437,22 @@
           >{label}</button>
         {/each}
       </div>
-      <div class="flex overflow-hidden rounded-md border border-line" role="group" aria-label="Tool gambar">
+      <div class="flex overflow-hidden rounded-md border border-line" role="group" aria-label="Tool gambar" title={readOnlyMode ? "Gambar hanya di Before" : undefined}>
         {#each TOOLS as [t, label] (t)}
+          {@const drawTool = t !== "select"}
+          {@const off = drawTool && readOnlyMode}
           <button
             class={[
               "h-8 border-l border-line px-3 text-xs font-medium transition-colors first:border-l-0",
               tool === t
                 ? "bg-accent text-accent-fg"
                 : "bg-surface-2 text-ink-2 hover:bg-hover hover:text-ink",
+              off ? "cursor-not-allowed opacity-40" : "",
             ]}
             aria-pressed={tool === t}
-            onclick={() => (tool = t as Tool)}
+            disabled={off}
+            title={off ? "Gambar hanya di Before" : label}
+            onclick={() => setTool(t as Tool)}
           >{label}</button>
         {/each}
       </div>
@@ -465,6 +480,9 @@
   {/if}
   {#if error}
     <p role="alert" class="border-b border-warn-soft bg-warn-soft px-4 py-1.5 text-xs text-warn">{error}</p>
+  {/if}
+  {#if drawHint}
+    <p role="status" class="border-b border-line bg-surface-2 px-4 py-1.5 text-xs text-ink-2">{drawHint}</p>
   {/if}
 
   {#if openError && !fullImageUrl}
@@ -497,9 +515,11 @@
           editable={true}
           externalSelected={manualSel}
           onSelectForward={(i) => selectBubble(i)}
+          onDrawHint={(m) => { drawHint = m; }}
           onChange={(nb) => {
             bubbles = nb;
             dirty = true;
+            drawHint = "";
           }}
         />
       </div>
