@@ -14,6 +14,7 @@ const KEYS = [
   "projectName",
   "create",
   "emptyHint",
+  "emptyHintMobile",
   "batchTitle",
   "parallel",
   "failed",

@@ -604,6 +604,39 @@ pub fn get_project(project_id: String, state: State<'_, AppState>) -> Result<Pro
         .ok_or_else(|| format!("project not found: {project_id}"))
 }
 
+/// iOS document picker returns `file://` URLs; `Path::new` on the raw
+/// string never resolves. Parse via plugin-fs `FilePath` (handles
+/// percent-encoding), fall back to raw for plain desktop paths.
+fn normalize_picker_path(raw: &str) -> PathBuf {
+    use std::str::FromStr;
+    tauri_plugin_fs::FilePath::from_str(raw)
+        .ok()
+        .and_then(|fp| fp.into_path().ok())
+        .unwrap_or_else(|| PathBuf::from(raw))
+}
+
+/// iOS only: picker copies land in Caches (purgeable). Pin single image
+/// files into the store dir so pages survive; archives/PDFs already
+/// extract under `extract_dir`. Folder picker is unsupported on iOS, so
+/// dir inputs never reach here from mobile.
+#[cfg(target_os = "ios")]
+fn stage_ios_pick(picked: &Path, store_dir: &Path, project_id: &str) -> Option<PathBuf> {
+    if !picked.is_file() || !is_image_file(picked) {
+        return None;
+    }
+    let dest_dir = store_dir.join(format!("{project_id}_imports"));
+    fs::create_dir_all(&dest_dir).ok()?;
+    let name = picked.file_name()?.to_str()?;
+    let dest = dest_dir.join(format!("{}_{name}", &Uuid::new_v4().to_string()[..8]));
+    fs::copy(picked, &dest).ok()?;
+    Some(dest)
+}
+
+#[cfg(not(target_os = "ios"))]
+fn stage_ios_pick(_picked: &Path, _store_dir: &Path, _project_id: &str) -> Option<PathBuf> {
+    None
+}
+
 #[tauri::command(rename_all = "snake_case")]
 pub fn import_pages(
     project_id: String,
@@ -611,11 +644,14 @@ pub fn import_pages(
     state: State<'_, AppState>,
 ) -> Result<ImportResult, String> {
     let mut store = state.store.lock().map_err(|e| e.to_string())?;
-    let extract_dir = store.dir.join(format!("{project_id}_extracted"));
+    let store_dir = store.dir.clone();
+    let extract_dir = store_dir.join(format!("{project_id}_extracted"));
     let mut all_files: Vec<PathBuf> = Vec::new();
     let mut skipped = 0;
     for raw in &paths {
-        let (mut files, skip) = expand_input(Path::new(raw), &extract_dir)?;
+        let picked = normalize_picker_path(raw);
+        let input = stage_ios_pick(&picked, &store_dir, &project_id).unwrap_or(picked);
+        let (mut files, skip) = expand_input(&input, &extract_dir)?;
         all_files.append(&mut files);
         skipped += skip;
     }
@@ -932,6 +968,28 @@ mod tests {
         let dir = std::env::temp_dir().join("kuron-studio-missing-probe");
         let res = expand_input(&dir.join("nope"), &dir);
         assert!(res.is_err());
+    }
+
+    /// iOS document picker returns `file://` URLs (percent-encoded).
+    /// Backend wajib resolve ke path fs — `Path::new` mentah tidak jalan.
+    #[test]
+    fn picker_url_normalizes_to_fs_path() {
+        let dir = temp_dir("kuron-studio-picker-url");
+        fs::create_dir_all(&dir).unwrap();
+        let real = dir.join("my page.png");
+        image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(
+            8,
+            6,
+            image::Rgb([1, 2, 3]),
+        ))
+        .save(&real)
+        .unwrap();
+        let url = format!("file://{}", real.to_string_lossy().replace(' ', "%20"));
+        let norm = normalize_picker_path(&url);
+        assert_eq!(norm, real);
+        let norm_raw = normalize_picker_path(&real.to_string_lossy());
+        assert_eq!(norm_raw, real);
+        fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

@@ -10,7 +10,11 @@
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "ios:init": "tauri ios init",
+    "ios:open": "tauri ios dev --open",
+    "ios:build:sim": "node -e \"fs.rmSync('src-tauri/gen/apple/build/arm64-sim', {recursive:true,force:true})\" && tauri ios build --target aarch64-sim --debug --no-sign",
+    "ios:run:sim": "pnpm ios:build:sim && xcrun simctl install booted 'src-tauri/gen/apple/build/arm64-sim/Kuron Studio.app' && xcrun simctl launch booted id.kuron.studio"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.0",

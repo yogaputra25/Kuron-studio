@@ -55,6 +55,11 @@ const STR: Record<string, Record<Lang, string>> = {
     id: "Drag-drop folder/zip ke sini, atau pakai tombol Import.",
     zh: "将文件夹/压缩包拖到此处，或使用导入按钮。",
   },
+  emptyHintMobile: {
+    en: "Use Import files to add pages.",
+    id: "Pakai tombol Import files untuk tambah halaman.",
+    zh: "使用导入文件按钮添加页面。",
+  },
   batchTitle: { en: "Batch translate", id: "Batch translate", zh: "批量翻译" },
   parallel: { en: "parallel", id: "paralel", zh: "并行" },
   failed: { en: "failed", id: "gagal", zh: "失败" },

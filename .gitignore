@@ -14,3 +14,5 @@ target/
 *.onnx
 # M1-3: bubble.onnx hanya 11.3MB (YOLO11n-seg) — bundle langsung, SHA Bonne
 !kuron-studio/src-tauri/resources/models/bubble.onnx
+# Xcode project hasil `tauri ios init` — generated per mesin (signing team lokal)
+kuron-studio/src-tauri/gen/apple/

@@ -7,8 +7,7 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   plugins: [svelte(), tailwindcss()],
   clearScreen: false,
-  server: { port: 1420, strictPort: true },
-  build: { outDir: "dist" },
+  server: { host: "0.0.0.0", port: 1420, strictPort: true },
   // Di bawah Vitest, resolve Svelte ke build *browser*. Tanpa ini kita dapat
   // index-server.js dan `mount(...)` melempar lifecycle_function_unavailable —
   // test runtime komponen (field-roundtrip) mustahil jalan.

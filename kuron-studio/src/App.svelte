@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { open } from "@tauri-apps/plugin-dialog";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
+  import { isMobile } from "./lib/device";
   import { api } from "./lib/api";
   import UpdateButton from "./lib/UpdateButton.svelte";
   import BatchPanel from "./lib/BatchPanel.svelte";
@@ -248,6 +249,9 @@
   async function importFiles() {
     const files = await open({
       multiple: true,
+      // iOS: salin pilihan ke sandbox app (default pun copy, ditulis eksplisit
+      // supaya tidak tergantung default plugin). Folder picker tak ada di iOS.
+      fileAccessMode: "copy",
       filters: [
         { name: "Images", extensions: [...IMAGE_EXTS] },
         { name: "Archives", extensions: [...ARCHIVE_EXTS] },
@@ -280,7 +284,7 @@
 
 <main class="flex min-h-screen flex-col bg-bg text-ink" data-theme={$theme}>
   <header class="sticky top-0 z-30 flex flex-wrap items-center gap-3 border-b border-line bg-surface/80 px-5 py-2.5 backdrop-blur-md">
-    <h1 class="font-display text-base font-semibold tracking-tight">Kuron Studio</h1>
+    <h1 class="font-display shrink-0 text-base font-semibold tracking-tight">Kuron Studio</h1>
 
     {#if projects.length > 0}
       <select
@@ -296,7 +300,7 @@
       <span class="tnum text-xs text-ink-3">{current?.pages.length ?? 0} halaman</span>
     {/if}
 
-    <div class="ml-auto flex flex-wrap items-center gap-1.5">
+    <div class="ml-auto flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto sm:flex-none sm:flex-wrap sm:overflow-visible">
       <Button variant="ghost" size="sm" class="font-mono" onclick={() => (readingDir = readingDir === "rtl" ? "ltr" : "rtl")} title="Urutan baca bubble">
         {readingDir === "rtl" ? "RTL→" : "←LTR"}
       </Button>
@@ -307,10 +311,10 @@
         {$lang.toUpperCase()}
       </Button>
 
-      <div class="mx-1 h-5 w-px bg-line"></div>
+      {#if !isMobile}<div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>{/if}
 
       <Button variant="ghost" size="sm" onclick={() => (showProviders = true)}>{$t("providers")}</Button>
-      <UpdateButton />
+      {#if !isMobile}<UpdateButton />{/if}
       <Button
         variant="ghost"
         size="sm"
@@ -326,7 +330,7 @@
         disabled={!current}
       >{$t("review")}</Button>
 
-      <div class="mx-1 h-5 w-px bg-line"></div>
+      <div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>
 
       <Button
         variant="primary"
@@ -334,13 +338,12 @@
         onclick={detectAll}
         disabled={!current || busy || (current?.pages.length ?? 0) === 0}
       >{$t("detectAll")}</Button>
-      <Button variant="default" size="sm" onclick={importFolder} disabled={!current || busy}>{$t("importFolder")}</Button>
+      {#if !isMobile}<Button variant="default" size="sm" onclick={importFolder} disabled={!current || busy}>{$t("importFolder")}</Button>{/if}
       <Button variant="default" size="sm" onclick={importFiles} disabled={!current || busy}>{$t("importFiles")}</Button>
 
-      <div class="mx-1 h-5 w-px bg-line"></div>
+      {#if !isMobile}<div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>{/if}
 
-      <Button
-
+      {#if !isMobile}<Button
         variant="default"
         size="sm"
         onclick={cleanPages}
@@ -349,7 +352,7 @@
       >
         {#if brokenCount > 0}<span class="tnum text-danger">{brokenCount}</span>{/if}
         {$t("cleanImages")}
-      </Button>
+      </Button>{/if}
       <Button
         variant="danger"
         size="sm"
@@ -358,9 +361,9 @@
         title={$t("confirmDeleteProject")}
       >{$t("deleteProject")}</Button>
 
-      <div class="mx-1 h-5 w-px bg-line"></div>
+      {#if !isMobile}<div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>{/if}
 
-      <Button
+      {#if !isMobile}<Button
         variant={lastInvokeError ? "danger" : "ghost"}
         size="icon"
         onclick={() => (showDiagnostics = true)}
@@ -368,7 +371,7 @@
           ? `${lastInvokeError.command}: ${lastInvokeError.error}`
           : "Diagnostics & log"}
         aria-label="Diagnostics"
-      >⚙</Button>
+      >⚙</Button>{/if}
     </div>
   </header>
 
@@ -465,8 +468,8 @@
       {/each}
     </section>
     {#if current.pages.length === 0}
-      <p class="mt-16 text-center text-sm text-ink-3">
-        {#if dragging}Lepaskan file untuk import…{:else}{$t("emptyHint")}{/if}
+      <p class="mt-16 px-8 text-center text-sm text-ink-3">
+        {#if dragging}Lepaskan file untuk import…{:else if isMobile}{$t("emptyHintMobile")}{:else}{$t("emptyHint")}{/if}
       </p>
     {/if}
   {/if}

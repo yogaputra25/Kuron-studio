@@ -3,6 +3,7 @@
   import { api } from "./api";
   import { t } from "./i18n";
   import type { BatchOpts, ExportFormat, Project, QaIssue, TmHit } from "./types";
+  import { isMobile } from "./device";
   import Button from "./ui/Button.svelte";
   import Panel from "./ui/Panel.svelte";
   import StatusBadge from "./ui/StatusBadge.svelte";
@@ -56,6 +57,12 @@
   );
 
   async function exportAs(format: ExportFormat) {
+    // iOS: folder picker tidak ada; save dialog iOS hanya bisa pindah file
+    // yang sudah ada di sandbox. PNG/PSD multi-file tak didukung di mobile.
+    if (isMobile && (format === "png" || format === "psd")) {
+      error = "Export PNG/PSD folder belum didukung di iOS — pakai CBZ atau JSON.";
+      return;
+    }
     busy = true; error = ""; info = "";
     try {
       let path: string | null;
@@ -250,9 +257,9 @@
   <div class="mb-4 flex flex-wrap items-center gap-1.5 border-t border-line pt-3">
     <span class="mr-1 text-[11px] tracking-wide text-ink-3 uppercase">{$t("export")}</span>
     <Button variant="default" size="sm" onclick={() => exportAs("json")} disabled={busy}>{$t("exportJson")}</Button>
-    <Button variant="default" size="sm" onclick={() => exportAs("png")} disabled={busy}>{$t("exportPng")}</Button>
+    <Button variant="default" size="sm" onclick={() => exportAs("png")} disabled={busy || isMobile} title={isMobile ? "Butuh folder picker (tak ada di iOS)" : undefined}>{$t("exportPng")}</Button>
     <Button variant="default" size="sm" onclick={() => exportAs("cbz")} disabled={busy}>{$t("exportCbz")}</Button>
-    <Button variant="default" size="sm" onclick={() => exportAs("psd")} disabled={busy}>PSD</Button>
+    <Button variant="default" size="sm" onclick={() => exportAs("psd")} disabled={busy || isMobile} title={isMobile ? "Butuh folder picker (tak ada di iOS)" : undefined}>PSD</Button>
     <Button variant="default" size="sm" onclick={shareZip} disabled={busy}>ZIP</Button>
     <Button variant="ghost" size="sm" class="ml-auto" onclick={onRefresh}>{$t("refresh")}</Button>
   </div>

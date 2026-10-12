@@ -1,0 +1,1 @@
+{"$schema": "../gen/schemas/desktop-schema.json","description": "Mobile: same IPC as desktop minus updater/process (desktop-only plugins).","identifier": "mobile","permissions": ["core:default", "dialog:allow-open", "dialog:allow-save"],"platforms": ["iOS", "android"],"windows": ["main"]}
