@@ -37,12 +37,13 @@ impl BubbleBox {
 }
 
 /// Postprocess hasil ONNX / input manual — mirror `postProcessBoxes` Kuron:
-/// filter confidence >= 0.25, buang box raksasa false-positive yang menelan
-/// box 2.5x lebih kecil.
+/// filter confidence >= 0.25, buang box < 8px (batas bawah yang sama dengan
+/// yang diizinkan UI), dan buang box raksasa false-positive yang menelan box
+/// 2.5x lebih kecil.
 pub fn post_process(boxes: Vec<BubbleBox>) -> Vec<BubbleBox> {
     let kept: Vec<BubbleBox> = boxes
         .into_iter()
-        .filter(|b| b.confidence >= 0.25 && b.w > 8 && b.h > 8)
+        .filter(|b| b.confidence >= 0.25 && b.w >= 8 && b.h >= 8)
         .collect();
     let n = kept.len();
     let mut giant = vec![false; n];
@@ -118,6 +119,16 @@ mod tests {
         let out = post_process(vec![b(0, 0, 50, 50, 0.9), b(60, 0, 50, 50, 0.1)]);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].x, 0);
+    }
+
+    #[test]
+    fn keeps_min_size_bubble() {
+        // 8px = ukuran minimum yang boleh diproduksi UI (fix-geometry-revert D4).
+        // Batas bawah harus sama di dua sisi, kalau tidak bubble yang dikecilkan
+        // sampai minimum justru dibuang saat Simpan.
+        let out = post_process(vec![b(0, 0, 8, 8, 0.9), b(20, 0, 7, 7, 0.9)]);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].w, 8);
     }
 
     #[test]

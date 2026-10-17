@@ -142,6 +142,8 @@ export interface BubbleTranslation {
   y: number;
   w: number;
   h: number;
+  /** Polygon freeform absolut (px asli); null = rect/ellipse. Repair R4. */
+  shape?: [number, number][] | null;
   original: string;
   reading: string;
   translated: string;

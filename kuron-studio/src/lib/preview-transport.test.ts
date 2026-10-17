@@ -84,3 +84,9 @@ describe("preview transport (fix-preview-hang §3 defensive load)", () => {
     expect(canvasSrc).toContain("onclick={retryLoad}");
   });
 });
+describe("sharp preview (editor tajam, grid murah)", () => {
+  it("Stage pakai pixelRatio device (fallback 1)", () => {
+    expect(canvasSrc).toContain("pixelRatio");
+    expect(canvasSrc).toContain("devicePixelRatio");
+  });
+});

@@ -40,7 +40,7 @@ describe("manual text entry (1.1–1.3, via draft fix-edit-stuck)", () => {
     expect(fn).toContain("queueSaveTranslationEdits()");
     expect(fn).not.toContain("saveTranslationEdits()");
     // Error save tampil di banner existing, teks lokal tetap (catch hanya set error).
-    const save = panelSrc.slice(panelSrc.indexOf("async function saveTranslationEdits"), panelSrc.indexOf("async function saveTranslationEdits") + 600);
+    const save = panelSrc.slice(panelSrc.indexOf("async function saveTranslationEdits"), panelSrc.indexOf("async function saveTranslationEdits") + 900);
     expect(save).toContain("error = String(e)");
     expect(save).not.toContain("translation = null");
   });
@@ -56,7 +56,7 @@ describe("manual text entry (1.1–1.3, via draft fix-edit-stuck)", () => {
   });
 
   it("guard syncFromPage tak tersentuh: save identik tidak reset saat ngetik", () => {
-    expect(panelSrc).toContain("if (syncedFor !== page.id || JSON.stringify(incoming) !== JSON.stringify(bubbles)) {");
+    expect(panelSrc).toContain("if (!samePage || (!localBusy && JSON.stringify(incoming) !== JSON.stringify(bubbles))) {");
   });
 });
 
@@ -67,9 +67,10 @@ describe("before|split|after (3.1–3.4)", () => {
     expect(panelSrc).toContain('[["before", "Before"], ["split", "Split"], ["after", "After"]]');
   });
 
-  it("before = editable tanpa overlay; after = read-only dengan overlay", () => {
+  it("before = editable tanpa overlay; after = overlay + geometri editable", () => {
     expect(panelSrc).toMatch(/showTranslation=\{false\}[\s\S]{0,120}editable=\{true\}/);
-    expect(panelSrc).toMatch(/showTranslation=\{true\}[\s\S]{0,120}editable=\{false\}/);
+    // After: overlay terjemahan + geometri editable (bubble-edit-any-pane), tanpa gambar.
+    expect(panelSrc).toMatch(/showTranslation=\{true\}[\s\S]{0,160}editable=\{true\}[\s\S]{0,80}canDraw=\{false\}/);
   });
 
   it("split = dua pane flex-1 + satu data-URL dishare (get_image_preview sekali)", () => {
@@ -90,21 +91,49 @@ describe("before|split|after (3.1–3.4)", () => {
     expect(panelSrc).toContain("onscroll={() => syncScroll(afterScroll, beforeScroll)}");
   });
 
-  it("after read-only: klik teruskan seleksi ke before, bubbles tak berubah", () => {
-    // Pane after: onChange no-op (bubbles unchanged) + forward seleksi.
-    // Sejak fix-edit-stuck: forward lewat selectBubble (commit draft kotor dulu).
+  it("after editable geometri: seleksi selalu forward, gambar tetap Before-only", () => {
+    // bubble-edit-any-pane D1: pane After boleh ubah geometri → onChange nyata.
     expect(panelSrc).toContain("onSelectForward={(i) => selectBubble(i)}");
-    expect(panelSrc).toContain("onChange={() => {}}");
-    // Pane before ikut seleksi via externalSelected (satu sumber state).
+    expect(panelSrc).toContain("editable={true}");
+    expect(panelSrc).toContain("canDraw={false}");
+    expect(panelSrc).not.toContain("onChange={() => {}}");
+    // Pane before & after berbagi seleksi via externalSelected (satu state).
     expect(panelSrc).toContain("externalSelected={manualSel}");
-    // Canvas: klik di mode read-only forward, bukan edit lokal saja.
-    expect(canvasSrc).toContain("if (!editable && onSelectForward) onSelectForward(i);");
-    // Canvas read-only: drag dibatalkan (redraw saja), tanpa onChange.
+    // D2: seleksi SELALU diteruskan, bukan hanya saat read-only.
+    expect(canvasSrc).toContain("if (onSelectForward) onSelectForward(i);");
+    expect(canvasSrc).not.toContain("if (!editable && onSelectForward)");
+    // D1: gerbang menggambar pakai canDraw (Before-only), bukan editable.
+    // \r? — file bisa CRLF di Windows, pola harus toleran.
+    expect(canvasSrc).toMatch(/function onStageDown\(e: Konva\.KonvaEventObject<MouseEvent \| TouchEvent>\) \{\r?\n    if \(!canDraw\) return;/);
+    // D3: handle resize hanya bubble terpilih.
+    expect(canvasSrc).toContain("if (!b.shape && editable && i === selectedIdx) {");
+    // Canvas tetap jaga jalur non-editable (prop publik, default true).
     const drag = canvasSrc.slice(canvasSrc.indexOf('group.on("dragend"'), canvasSrc.indexOf('group.on("dragend"') + 250);
     expect(drag).toContain("if (!editable) { redraw(); return; }");
-    // Drawing tools mati saat read-only; resize handle hanya saat editable.
-    // \r? — file bisa CRLF di Windows, pola harus toleran.
-    expect(canvasSrc).toMatch(/function onStageDown\(e: Konva\.KonvaEventObject<MouseEvent \| TouchEvent>\) \{\r?\n    if \(!editable\) return;/);
-    expect(canvasSrc).toContain("if (!b.shape && editable) {");
+  });
+});
+
+describe("bubble edit any pane", () => {
+  it("After bisa ubah geometri: onChange nyata + canDraw false", () => {
+    const at = panelSrc.indexOf("bind:this={afterRef}");
+    const after = panelSrc.slice(at, at + 1200);
+    expect(after).toContain("editable={true}");
+    expect(after).toContain("canDraw={false}");
+    expect(after).toContain('onChange={(nb) => { bubbles = nb; dirty = true; drawHint = ""; }}');
+    // tool tetap "select" → menggambar mustahil walau editable.
+    expect(after).toContain('tool="select"');
+  });
+
+  it("Delete hidup di After-only: coba editorRef lalu afterRef", () => {
+    const key = panelSrc.slice(panelSrc.indexOf("function onKey"), panelSrc.indexOf("function onKey") + 700);
+    expect(key).toContain("editorRef?.deleteSelected()");
+    expect(key).toContain("afterRef?.deleteSelected()");
+    // Tipe ref After membawa deleteSelected (dipakai jalur After-only).
+    expect(panelSrc).toContain("deleteSelected: () => boolean");
+  });
+
+  it("canDraw prop di canvas: default editable, gerbang onStageDown", () => {
+    expect(canvasSrc).toContain("canDraw?: boolean;");
+    expect(canvasSrc).toContain("canDraw = editable");
   });
 });

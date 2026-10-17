@@ -41,6 +41,16 @@ export function clampBubble(b: BubbleBox, w: number, h: number): BubbleBox {
   return { ...b, x, y, w: bw, h: bh };
 }
 
+/** Mirror Rust needs_white_patch (translation.rs): wide box atau >25% luas halaman. */
+export function needsWhitePatch(w: number, h: number, pageW: number, pageH: number): boolean {
+  const ww = Math.max(0, w);
+  const hh = Math.max(0, h);
+  if (hh <= 0) return false;
+  const aspect = ww / hh;
+  const frac = pageW > 0 && pageH > 0 ? (ww * hh) / (pageW * pageH) : 0;
+  return aspect > 2.5 || frac > 0.25;
+}
+
 /**
  * Ukuran font TERBESAR (≤ max) yang tinggi blok teksnya masih muat di `boxH`.
  *

@@ -39,7 +39,7 @@ describe("canvas-editor blank-canvas contract (D3)", () => {
   });
 
   it("redraw() tidak bergantung pada bgImage non-null", () => {
-    const redraw = src.slice(src.indexOf("function redraw()"), src.indexOf("/** Redraw tanpa melepas"));
+    const redraw = src.slice(src.indexOf("export function redraw()"), src.indexOf("function commit("));
     expect(redraw).toMatch(/if \(!stage \|\| !overlayLayer\) return;/);
     expect(redraw).not.toContain("bgImage.image");
     expect(redraw).not.toContain("if (!bgImage)");
@@ -73,7 +73,9 @@ describe("snapshot copy (fix-preview-hang §5)", () => {
 
   it("CanvasEditor: semua onChange kirim snapshot (clone aman proxy non-kosong)", () => {
     const calls = src.match(/onChange\(\$state\.snapshot\(bubbles\)\)/g) ?? [];
-    expect(calls.length).toBe(5);
+    // 4 jalur via commit()/langsung (commit, delete, tail, gambar) — handle +
+    // vertex + group-dragend konsolidasi lewat commit() (refactor definitif).
+    expect(calls.length).toBe(4);
     expect(src).not.toContain("structuredClone");
   });
 
@@ -111,12 +113,12 @@ describe("delete autosave (fix-preview-hang §6)", () => {
   it("onKey Delete: abaikan saat saving, save() hanya bila deleteSelected true", () => {
     const key = panelSrc.slice(panelSrc.indexOf("function onKey"), panelSrc.indexOf("async function saveTranslationEdits"));
     expect(key).toContain("if (saving) return;");
-    expect(key).toContain("if (editorRef?.deleteSelected()) void save();");
+    expect(key).toContain("if (editorRef?.deleteSelected() || afterRef?.deleteSelected()) void save();");
   });
 
   it("kontrak tak tersentuh: onChange umum tetap lokal+dirty, guard syncFromPage utuh", () => {
     expect(panelSrc).toMatch(/onChange=\{\(nb\) => \{\s*bubbles = nb;\s*dirty = true;[\s\S]*?\}\}/);
-    expect(panelSrc).toContain("if (syncedFor !== page.id || JSON.stringify(incoming) !== JSON.stringify(bubbles)) {");
+    expect(panelSrc).toContain("if (!samePage || (!localBusy && JSON.stringify(incoming) !== JSON.stringify(bubbles))) {");
   });
 });
 
@@ -229,5 +231,66 @@ describe("overlay terjemahan: posisi & ukuran font", () => {
     ).toMatch(/document\.fonts\?\.ready/);
     const gate = src.slice(src.indexOf("document.fonts?.ready"));
     expect(gate.slice(0, 200)).toContain("redraw();");
+  });
+});
+
+describe("bubble resize repair (R1-R3)", () => {
+  it("R2: garis polygon relatif ke origin group (bukan absolut)", () => {
+    expect(src).toContain("points: b.shape.flatMap(([px, py]) => [(px - b.x) * s, (py - b.y) * s])");
+    expect(src).not.toContain("points: b.shape.flatMap(([px, py]) => [px * s, py * s])");
+  });
+
+  it("R1: dragmove handle update Rect/Ellipse + posisi handle secara live", () => {
+    const dm = src.slice(src.indexOf('handle.on("dragmove"'), src.indexOf('handle.on("dragmove"') + 1200);
+    expect(dm).toContain('group.findOne("Rect")');
+    expect(dm).toContain("setAttrs({ width:");
+    expect(dm).toContain("handle.position({");
+    expect(dm).toContain("overlayLayer?.batchDraw()");
+    expect(dm).not.toContain("redraw()");
+  });
+
+  it("R1: dragmove vertex pakai state lokal + update garis live", () => {
+    expect(src).toContain("let curShape:");
+    expect(src).toContain("syncVertexNodes()");
+    expect(src).toContain('poly?.setAttrs({ points: curShape.flatMap');
+  });
+
+  it("R3: dragend group translasi shape sebesar delta", () => {
+    const de = src.slice(src.indexOf('group.on("dragend"'), src.indexOf('group.on("dragend"') + 700);
+    expect(de).toContain("const dx = nx - b.x;");
+    expect(de).toContain("const dy = ny - b.y;");
+    expect(de).toContain("[px + dx, py + dy]");
+  });
+});
+
+describe("bubble resize repair (R6 drag-lock)", () => {
+  it("handle besar + terlihat (radius 11, stroke putih)", () => {
+    expect(src).toContain("radius: 11,");
+    expect(src).toContain('handle.on("mouseenter"');
+    expect(src).toContain('handle.on("mousedown touchstart"');
+    expect(src).toContain("group.draggable(false)");
+    expect(src).toContain('handle.on("click tap"');
+    expect(src).toContain('handle.on("mouseup"');
+  });
+
+  it("vertex besar + terlihat (radius 10, stroke 2)", () => {
+    expect(src).toContain("radius: 10,");
+    expect(src).toContain("strokeWidth: 2,");
+    expect(src).toContain('v.on("mouseenter"');
+    expect(src).toContain('v.on("mousedown touchstart"');
+    expect(src).toContain('v.on("click tap"');
+    expect(src).toContain('v.on("mouseup"');
+  });
+
+  it("dragmove tulis pending lokal, state sekali di dragend", () => {
+    const dm = src.slice(src.indexOf('handle.on("dragmove"'), src.indexOf('handle.on("dragmove"') + 900);
+    expect(dm).toContain("pendW");
+    expect(dm).not.toContain("bubbles[i] = ");
+    const de = src.slice(src.indexOf('handle.on("dragend"'), src.indexOf('handle.on("dragend"') + 300);
+    expect(de).toContain("commit(i, clampBubble(");
+  });
+
+  it("klik ulang bubble sama = no-op tanpa redraw", () => {
+    expect(src).toContain("if (selectedIdx === i) return;");
   });
 });
