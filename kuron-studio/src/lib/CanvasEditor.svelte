@@ -22,16 +22,25 @@
     translations?: BubbleTranslation[];
     showTranslation?: boolean;
     editable?: boolean;
-    /** Izin menggambar bubble BARU (Before-only). Default = `editable`.
-     *  Ubah geometri bubble lama tetap lewat `editable`. */
+    /** Izin menggambar bubble BARU (Before-only). Default literal `false`;
+     *  pane yang boleh menggambar mengisinya eksplisit. Jangan pakai
+     *  `= editable`: compiler Svelte menerjemahkan fallback antar-prop jadi
+     *  fungsi, bukan boolean (fix-draw-tools C). */
     canDraw?: boolean;
+    /** Dipanggil setelah satu bubble berhasil digambar — panel memakainya
+     *  untuk mengembalikan tool ke "Pilih" (fix-draw-tools D). */
+    onToolDone?: () => void;
     onSelectForward?: (i: number) => void;
     externalSelected?: number | null;
     onEditTranslation?: (i: number, value: string) => void;
     onDrawHint?: (msg: string) => void;
   }
 
-  let { imageUrl, fallbackUrl = "", imgW, imgH, initial, readingDir, tool, onChange, translations = [], showTranslation = false, editable = true, canDraw = editable, onSelectForward, externalSelected = null, onEditTranslation, onDrawHint }: Props = $props();
+  let { imageUrl, fallbackUrl = "", imgW, imgH, initial, readingDir, tool, onChange, translations = [], showTranslation = false, editable = true, canDraw = false, onSelectForward, externalSelected = null, onEditTranslation, onDrawHint, onToolDone }: Props = $props();
+
+  /** A1 (fix-draw-tools): geser/resize bubble hanya di mode Pilih. Saat tool
+   *  gambar aktif, canvas milik gambar — bubble tak boleh mencuri gestur. */
+  const canMoveGroups = (): boolean => editable && tool === "select";
 
   let holder: HTMLDivElement;
   let stage: Konva.Stage | null = null;
@@ -110,6 +119,9 @@
     translations;
     showTranslation;
     externalSelected;
+    // fix-draw-tools A1: handle/vertex/draggable ikut mode tool, jadi ganti
+    // tool harus me-render ulang (bukan hanya saat seleksi/terjemahan berubah).
+    tool;
     if (externalSelected !== null) selectedIdx = externalSelected;
     // Editor terbuka tapi bubble pindah seleksi → commit otomatis lalu tutup.
     if (editingIdx !== null && selectedIdx !== null && selectedIdx !== editingIdx) {
@@ -335,6 +347,9 @@
 
       group.on("click tap", (e) => {
         e.cancelBubble = true;
+        // A1 (fix-draw-tools): selama tool gambar aktif, klik tak menyeleksi —
+        // canvas milik gambar, bukan milik bubble.
+        if (tool !== "select") return;
         // Klik ulang bubble yang sama = no-op (redraw me-recreate node drag).
         if (selectedIdx === i) return;
         selectedIdx = i;
@@ -352,7 +367,7 @@
         });
       }
 
-      group.draggable(editable);
+      group.draggable(canMoveGroups());
 
       group.on("dragend", () => {
         if (!editable) { redraw(); return; }
@@ -369,7 +384,7 @@
 
       // Resize handle kanan-bawah (rect/ellipse, editable, HANYA terpilih — D3)
       // agar pane After yang penuh overlay teks tak jadi hutan titik.
-      if (!b.shape && editable && i === selectedIdx) {
+      if (!b.shape && editable && i === selectedIdx && tool === "select") {
         const handle = new Konva.Circle({
           x: b.w * s,
           y: b.h * s,
@@ -385,7 +400,7 @@
           group.draggable(false);
         });
         handle.on("mouseleave", () => {
-          group.draggable(editable);
+          group.draggable(canMoveGroups());
         });
         handle.on("click tap", (e) => {
           // Jangan teruskan ke group: klik handle tak boleh redraw
@@ -416,7 +431,7 @@
           overlayLayer?.batchDraw();
         });
         handle.on("dragend", () => {
-          group.draggable(editable);
+          group.draggable(canMoveGroups());
           // Satu-satunya penulis state: commit + onChange sekali.
           commit(i, clampBubble({ ...b, w: pendW, h: pendH }, imgW, imgH));
         });
@@ -427,7 +442,7 @@
         });
         handle.on("mouseup", () => {
           // Klik-tanpa-drag tak memicu dragend — buka di sini juga.
-          group.draggable(editable);
+          group.draggable(canMoveGroups());
         });
         group.add(handle);
       }
@@ -436,7 +451,7 @@
       // vertex jadi titik draggable; bbox = DERIVASI vertex (satu arah).
       // State lokal cur* (bukan closure b) agar drag beruntun tak meleset
       // setelah bbox bergeser.
-      if (b.shape && b.shape.length >= 3 && editable && i === selectedIdx) {
+      if (b.shape && b.shape.length >= 3 && editable && i === selectedIdx && tool === "select") {
         let curShape: [number, number][] = b.shape.map(([qx, qy]) => [qx, qy]);
         let curX = b.x;
         let curY = b.y;
@@ -464,7 +479,7 @@
             group.draggable(false);
           });
           v.on("mouseleave", () => {
-            group.draggable(editable);
+            group.draggable(canMoveGroups());
           });
           v.on("click tap", (e) => {
             e.cancelBubble = true;
@@ -492,7 +507,7 @@
             overlayLayer?.batchDraw();
           });
           v.on("dragend", () => {
-            group.draggable(editable);
+            group.draggable(canMoveGroups());
             const xs = curShape.map((p) => p[0]);
             const ys = curShape.map((p) => p[1]);
             const fx = Math.min(...xs);
@@ -506,7 +521,7 @@
             group.draggable(false);
           });
           v.on("mouseup", () => {
-            group.draggable(editable);
+            group.draggable(canMoveGroups());
           });
           group.add(v);
         });
@@ -579,8 +594,12 @@
     return [p.x / s, p.y / s];
   }
 
-  function onStageDown(e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) {
-    if (!canDraw) return;
+  function onStageDown() {
+    if (!canDraw) {
+      // B (fix-draw-tools): pane yang tak boleh menggambar tetap bersuara.
+      if (tool !== "select") onDrawHint?.("Gambar hanya di pane Before");
+      return;
+    }
     if (tool === "select") return;
     // Ekor: user mengklik TEPAT pada bubble terpilih (itu titik melekat,
     // lalu drag keluar) atau di mana saja untuk menunjuk ujung ekor. Jadi
@@ -593,8 +612,9 @@
       setTailForSelected([Math.round(p.x / s), Math.round(p.y / s)]);
       return;
     }
-    // Tool gambar baru mulai dari area kosong — klik bubble = pilih/pindah.
-    if (e.target !== stage) { onDrawHint?.("Klik area kosong untuk menggambar"); return; }
+    // A1 (fix-draw-tools): tool gambar aktif = canvas milik gambar. Guard
+    // `e.target` dibuang — drag di atas bubble lama tetap menggambar
+    // (sebelumnya seluruh badan bubble = zona mati untuk menggambar).
     const [x, y] = stagePos();
     drawing = { x0: x, y0: y, node: null, pts: [[x, y]] };
     // Gesture lock (draw-tools-feedback D4): holder overflow-auto bersarang
@@ -697,6 +717,9 @@
     }
     selectedIdx = bubbles.length - 1;
     onChange($state.snapshot(bubbles));
+    // D (fix-draw-tools): sekali gambar, sekali tool — balik ke Pilih supaya
+    // gestur berikutnya menyunting, bukan menggambar bubble tak sengaja.
+    onToolDone?.();
     redraw();
   }
 

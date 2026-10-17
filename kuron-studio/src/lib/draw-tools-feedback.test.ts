@@ -14,16 +14,19 @@ describe("draw tools feedback (§1)", () => {
   it("callback onDrawHint opsional, Before pasang + clear saat sukses", () => {
     expect(canvasSrc).toContain("onDrawHint?: (msg: string) => void");
     expect(panelSrc).toContain("onDrawHint={(m) => { drawHint = m; }}");
-    // After tidak pasang (hanya satu pemasangan = Before).
+    // fix-draw-tools B: After kini IKUT memasang (suara di tiap pane).
     const usages = panelSrc.match(/onDrawHint=/g) ?? [];
-    expect(usages.length).toBe(1);
+    expect(usages.length).toBe(2);
     expect(panelSrc).toContain('drawHint = "";');
   });
 
-  it("3 titik tolak bersuara (bukan diam)", () => {
-    expect(canvasSrc).toContain('onDrawHint?.("Klik area kosong untuk menggambar")');
+  it("titik tolak bersuara (bukan diam)", () => {
+    // fix-draw-tools A1: penolakan "klik area kosong" dibuang — drag di atas
+    // bubble lama kini menggambar. Sisa titik tolak + titik baru (B).
+    expect(canvasSrc).not.toContain("Klik area kosong untuk menggambar");
     expect(canvasSrc).toContain('onDrawHint?.("Pilih bubble dulu, lalu Ekor")');
     expect(canvasSrc).toContain('onDrawHint?.("Terlalu kecil, drag lebih lebar")');
+    expect(canvasSrc).toContain('onDrawHint?.("Gambar hanya di pane Before")');
   });
 
   it("hint ringan terpisah dari error (role status, bukan alert)", () => {
@@ -66,5 +69,36 @@ describe("bubble resize full (§1.5)", () => {
 
   it("whitePatch dihitung ulang dari geometri baru (port Rust)", () => {
     expect(panelSrc).toContain("needsWhitePatch");
+  });
+});
+
+describe("kepemilikan canvas oleh mode tool (fix-draw-tools)", () => {
+  it("A1: mode gambar mematikan geser, seleksi, dan handle", () => {
+    expect(canvasSrc).toContain('const canMoveGroups = (): boolean => editable && tool === "select";');
+    expect(canvasSrc).toContain("group.draggable(canMoveGroups());");
+    expect(canvasSrc).toContain('if (!b.shape && editable && i === selectedIdx && tool === "select") {');
+    expect(canvasSrc).toContain('if (tool !== "select") return;');
+  });
+
+  it("A1: guard e.target dibuang dari jalur gambar", () => {
+    expect(canvasSrc).not.toContain("e.target !== stage");
+    expect(canvasSrc).toContain("tool gambar aktif = canvas milik gambar");
+  });
+
+  it("C: canDraw default literal false, bukan = editable", () => {
+    expect(canvasSrc).toContain("canDraw = false");
+    expect(canvasSrc).not.toContain("canDraw = editable");
+  });
+
+  it("B: After menerima tool asli + hint; Before canDraw true", () => {
+    expect(panelSrc).toContain("tool={tool}");
+    expect(panelSrc).toContain("canDraw={true}");
+    expect(panelSrc).toContain("canDraw={false}");
+    expect(canvasSrc).toContain('onDrawHint?.("Gambar hanya di pane Before")');
+  });
+
+  it("D: onToolDone dipanggil setelah bubble jadi", () => {
+    expect(canvasSrc).toContain("onToolDone?.();");
+    expect(panelSrc).toContain('onToolDone={() => setTool("select")}');
   });
 });

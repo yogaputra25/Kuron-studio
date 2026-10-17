@@ -151,19 +151,14 @@ describe("manual draw tools never throw (regression)", () => {
     expect(up).toContain("if (bbW < MIN_BUBBLE_PX || bbH < MIN_BUBBLE_PX)");
   });
 
-  it("ekor: guard target dihapus supaya bisa klik di bubble sendiri", () => {
+  it("ekor: blok tail mendahului jalur gambar, tanpa guard e.target", () => {
     const down = src.slice(src.indexOf("function onStageDown"));
-    // Blok tail = dari `if (tool === "tail")` sampai guard e.target.
-    // Guard e.target WAJIB ada (tool gambar baru), tapi harus SESUDAH blok
-    // tail — kalau mendahului, user tidak bisa klik bubble buat nunjuk ekor.
+    // Blok tail tetap didahulukan agar ekor bisa ditempel pada bubble sendiri.
     const tailAt = down.indexOf('if (tool === "tail")');
-    const guardAt = down.indexOf("if (e.target !== stage)");
     expect(tailAt, "blok tool tail tidak ditemukan").toBeGreaterThan(-1);
-    expect(guardAt, "guard e.target hilang — tool gambar mulai dari bubble").toBeGreaterThan(-1);
-    expect(
-      guardAt,
-      "guard e.target harus SESUDAH blok tail, tidak boleh mem-block-nya",
-    ).toBeGreaterThan(tailAt);
+    // fix-draw-tools A1: guard `e.target` dibuang — mengembalikannya berarti
+    // badan bubble jadi zona mati untuk menggambar.
+    expect(down, "guard e.target harus sudah dibuang").not.toContain("e.target !== stage");
   });
 
   it("ekor: titik melekat = titik yang diklik, bukan tengah bubble", () => {
