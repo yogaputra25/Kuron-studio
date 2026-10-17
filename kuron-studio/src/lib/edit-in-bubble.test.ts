@@ -62,8 +62,12 @@ describe("in-bubble edit (§1 canvas)", () => {
   });
 
   it("textarea WYSIWYG: font ikut rumus fs overlay, tema ikut needsWhitePatch", () => {
-    expect(canvasSrc).toContain("const overlayFontSize = (b: BubbleBox, text: string, s: number): number =>");
-    expect(canvasSrc).toContain("Math.max(10, Math.min(18, (b.w * s) / Math.max(8, text.length / 2)))");
+    // Editor in-bubble memakai layout yang SAMA dengan overlay, bukan rumus
+    // sendiri (dulu `overlayFontSize`) — kalau tidak, yang diketik tampak
+    // beda dari hasilnya.
+    expect(canvasSrc).not.toContain("const overlayFontSize");
+    expect(canvasSrc).toContain("fontSize: lay.fontSize * s");
+    expect(canvasSrc).toContain("lineHeight: lay.lineHeight");
     expect(canvasSrc).toContain("dark: !(tr?.needsWhitePatch ?? false)");
     expect(canvasSrc).toContain("min-height:{editBox.minH}px");
   });

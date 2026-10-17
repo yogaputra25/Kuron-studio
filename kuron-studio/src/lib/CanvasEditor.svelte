@@ -7,7 +7,9 @@
   import { onMount, onDestroy } from "svelte";
   import Konva from "konva";
   import type { BubbleBox, BubbleTranslation, ReadingDirection, Tool } from "../lib/types";
-  import { chipNumbers, clampBubble, fitFontSize } from "../lib/bubble";
+  import { chipNumbers, clampBubble } from "../lib/bubble";
+  import { computeTextLayout } from "../lib/textLayout";
+  import { OVERLAY_FONT_STYLE, overlayFontFamily, textMeasure } from "../lib/textMeasure";
   import Button from "./ui/Button.svelte";
 
   interface Props {
@@ -52,12 +54,12 @@
   // text-editing). Ketikan ditahan lokal; commit sekali via onEditTranslation.
   let editingIdx = $state<number | null>(null);
   let editingValue = $state("");
-  let editBox = $state<{ left: number; top: number; width: number; minH: number; fontSize: number; dark: boolean } | null>(null);
+  let editBox = $state<{ left: number; top: number; width: number; minH: number; fontSize: number; fontFamily: string; lineHeight: number; dark: boolean } | null>(null);
   let editorEl = $state<HTMLTextAreaElement | null>(null);
 
-  const overlayFontSize = (b: BubbleBox, text: string, s: number): number =>
-    Math.max(10, Math.min(18, (b.w * s) / Math.max(8, text.length / 2)));
-
+  // Editor in-bubble TIDAK punya rumus sendiri (dulu `overlayFontSize`):
+  // ukurannya dari `computeTextLayout` yang sama dengan overlay, diskalakan
+  // untuk tampilan. Kalau tidak, yang kamu ketik tampak beda dari hasilnya.
   function openEditor(i: number) {
     if (!showTranslation || !onEditTranslation) return;
     const b = bubbles[i];
@@ -71,12 +73,16 @@
     const s = scale();
     editingIdx = i;
     editingValue = tr?.translated ?? "";
+    // Layout yang sama dengan overlay — bukan rumus sendiri. Dihitung sekali.
+    const lay = computeTextLayout(tr?.translated ?? "", b.w, b.h, textMeasure, { fontSize: tr?.fontSize });
     editBox = {
       left: b.x * s,
       top: b.y * s,
       width: Math.max(60, b.w * s),
       minH: Math.max(24, b.h * s),
-      fontSize: overlayFontSize(b, editingValue || "…", s),
+      fontSize: lay.fontSize * s,
+      fontFamily: overlayFontFamily(),
+      lineHeight: lay.lineHeight,
       dark: !(tr?.needsWhitePatch ?? false),
     };
     requestAnimationFrame(() => {
@@ -130,21 +136,6 @@
     redraw();
   });
 
-  const OVERLAY_MIN_FS = 7;
-  const OVERLAY_MAX_FS = 28;
-
-  // Font overlay diambil dari token tipografi supaya mengikuti --font-sans;
-  // di-memo karena getComputedStyle tidak murah dan nilainya konstan per sesi.
-  let fontCache = "";
-  function overlayFontFamily(): string {
-    if (!fontCache) {
-      fontCache =
-        (typeof document !== "undefined"
-          ? getComputedStyle(document.documentElement).getPropertyValue("--font-sans").trim()
-          : "") || '"Inter Variable", sans-serif';
-    }
-    return fontCache;
-  }
   // Gambar datang belakangan (App fetch async setelah mount) — lacak request
   // terakhir agar load basi tidak menimpa, dan tandai siap/gagal untuk hint.
   let requestedUrl = "";
@@ -292,40 +283,35 @@
       if (showTranslation) {
         const tr = translations.find((t) => t.index === i);
         if (tr?.translated && editingIdx !== i) {
-          const pad = 4;
-          const boxW = Math.max(12, b.w * s - pad * 2);
-          const boxH = Math.max(12, b.h * s - pad * 2);
+          // Layout teks = SATU sumber (export-text-parity P1). Dihitung dalam
+          // px HALAMAN lalu diskalakan untuk tampilan: nilainya tak berubah
+          // saat lebar pane berubah, dan export memakai angka yang sama.
+          const lay = computeTextLayout(tr.translated, b.w, b.h, textMeasure, { fontSize: tr.fontSize });
+          const pad = lay.padding * s;
+          const boxW = Math.max(12, (b.w - lay.padding * 2) * s);
+          const boxH = Math.max(12, (b.h - lay.padding * 2) * s);
 
-          // Ukur dengan tinggi OTOMATIS dulu. Konva hanya menghitung tinggi
-          // blok teks lewat getHeight() selama attrs.height belum di-set;
-          // begitu height dikunci, getHeight() mengembalikan tinggi kotak.
           const txt = new Konva.Text({
             x: pad,
             y: pad,
             width: boxW,
-            text: tr.translated,
-            fontSize: OVERLAY_MAX_FS,
+            // Baris sudah diputuskan `computeTextLayout`; di sini gambar apa
+            // adanya. `wrap: "none"` wajib — kalau Konva memutus ulang,
+            // kanvas dan export bisa berbeda lagi.
+            text: lay.lines.join("\n"),
+            fontSize: lay.fontSize * s,
+            lineHeight: lay.lineHeight,
+            wrap: "none",
             fontFamily: overlayFontFamily(),
-            fontStyle: "600",
-            lineHeight: 1.25,
+            fontStyle: OVERLAY_FONT_STYLE,
             align: "center",
             fill: "#fff",
             listening: false,
           });
 
-          // Auto-fit: perbesar-kecilkan sampai teks pas muat. Konva tidak
-          // pernah melakukan ini sendiri.
-          txt.fontSize(
-            fitFontSize(boxH, (fs) => {
-              txt.fontSize(fs);
-              return txt.getHeight();
-            }, { min: OVERLAY_MIN_FS, max: OVERLAY_MAX_FS }),
-          );
-
-          // Kunci tinggi kotak SETELAH ukuran pas. Tanpa baris ini
-          // verticalAlign "middle" adalah no-op: _getTextTop() memakai
-          // getHeight() yang selama auto justru = tinggi teks, jadi ruang
-          // bebas selalu 0 dan teks nempel di tepi atas bubble.
+          // Kunci tinggi kotak supaya `verticalAlign: middle` bekerja: Konva
+          // menghitung ruang bebas dari `getHeight()`, dan selama height belum
+          // di-set nilainya = tinggi teks (ruang bebas 0, teks nempel di atas).
           txt.height(boxH);
           txt.verticalAlign("middle");
 
@@ -853,7 +839,7 @@
     rows="3"
     placeholder="ketik terjemahan"
     class="absolute z-10 rounded px-1 py-0.5 text-center outline-none ring-2 ring-accent {editBox.dark ? 'bg-black/70 text-white' : 'bg-surface text-ink'}"
-    style="left:{editBox.left}px; top:{editBox.top}px; width:{editBox.width}px; min-height:{editBox.minH}px; font-size:{editBox.fontSize}px;"
+    style="left:{editBox.left}px; top:{editBox.top}px; width:{editBox.width}px; min-height:{editBox.minH}px; font-size:{editBox.fontSize}px; font-family:{editBox.fontFamily}; line-height:{editBox.lineHeight};"
     bind:value={editingValue}
     onblur={commitEditor}
     onkeydown={onEditorKey}

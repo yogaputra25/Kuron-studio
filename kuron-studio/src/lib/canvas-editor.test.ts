@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import src from "./CanvasEditor.svelte?raw";
 import panelSrc from "./EditorPanel.svelte?raw";
+import measureSrc from "./textMeasure?raw";
 
 // Kontrak D3 change fix-editor-blank-canvas (§2), diverifikasi statis dari
 // sumber komponen. Alasan: komponen terikat Konva + DOM + Svelte runtime
@@ -197,25 +198,34 @@ describe("overlay terjemahan: posisi & ukuran font", () => {
     expect(overlay).toMatch(/verticalAlign\("middle"\)/);
   });
 
-  it("mengukur pakai getHeight(), bukan height()", () => {
+  it("mengukur lebar lewat getTextWidth(), bukan getter Node", () => {
+    // Pengukuran tinggal di modul bersama `textMeasure.ts` (dipakai kanvas DAN
+    // panel yang menyimpan layout) — bukan lagi di dalam komponen.
     expect(
-      overlay,
-      "height() = 0 selama height belum di-set → loop shrink mati",
-    ).toContain("return txt.getHeight();");
+      measureSrc,
+      "pengukuran lebar harus lewat API Text (getTextWidth), bukan properti Node",
+    ).toContain("getTextWidth()");
     expect(
-      overlay,
+      measureSrc,
       "jangan kembali ke txt.height() sebagai ukuran tinggi blok",
     ).not.toMatch(/txt\.height\(\)\s*[<>]/);
   });
 
-  it("font size lewat fitFontSize, bukan nilai beku", () => {
-    expect(overlay).toContain("fitFontSize(");
+  it("ukuran font dari computeTextLayout, bukan rumus lokal", () => {
+    expect(overlay).toContain("computeTextLayout(");
+    expect(overlay).toContain('wrap: "none"');
     expect(overlay, "font size hard-coded 18 = bug lama").not.toMatch(/fontSize:\s*18\b/);
   });
 
-  it("font family diambil dari token --font-sans", () => {
-    expect(overlay).toContain("overlayFontFamily()");
-    expect(src).toContain('getPropertyValue("--font-sans")');
+  it("font overlay = font export (font sistem), bukan token UI", () => {
+    // Grup 4 pendekatan "pakai font sistem": `ab_glyph` di Rust hanya bisa
+    // TTF/OTF dan repo tak membundel Inter dalam bentuk itu. Overlay sengaja
+    // TIDAK lagi mengikuti --font-sans, supaya metriknya sama dengan export.
+    expect(measureSrc).toContain("overlayFontFamily()");
+    expect(measureSrc).toContain("OVERLAY_FONT_STACK");
+    expect(measureSrc, "kembali ke token UI = paritas font hilang").not.toContain(
+      'getPropertyValue("--font-sans")',
+    );
   });
 
   it("redraw ulang setelah webfont siap", () => {

@@ -48,8 +48,8 @@ describe("draw tools feedback (§1)", () => {
 
 describe("bubble resize full (§1.5)", () => {
   it("sinkron geometri di jalur save (bukan kosmetik)", () => {
-    expect(panelSrc).toContain("syncGeometryToTranslation(bubbles, translation.bubbles");
-    const save = panelSrc.slice(panelSrc.indexOf("async function saveTranslationEdits"), panelSrc.indexOf("async function saveTranslationEdits") + 600);
+    expect(panelSrc).toContain("syncGeometryToTranslation(");
+    const save = panelSrc.slice(panelSrc.indexOf("async function saveTranslationEdits"), panelSrc.indexOf("async function saveTranslationEdits") + 1400);
     expect(save).toContain("syncGeometryToTranslation");
   });
 

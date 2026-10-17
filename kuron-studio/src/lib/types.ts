@@ -1,3 +1,7 @@
+import type { TextLayout } from "./textLayout";
+
+export type { TextLayout };
+
 export type PageStatus =
   | "idle"
   | "detecting"
@@ -144,6 +148,11 @@ export interface BubbleTranslation {
   h: number;
   /** Polygon freeform absolut (px asli); null = rect/ellipse. Repair R4. */
   shape?: [number, number][] | null;
+  /** Layout teks final dari kanvas (export-text-parity). Ukuran + baris sudah
+   *  diputuskan di sana; export menggambarnya apa adanya. Absen = file lama. */
+  layout?: TextLayout | null;
+  /** Ukuran font manual (px HALAMAN). Absen/null = auto-fit oleh kanvas. */
+  fontSize?: number | null;
   original: string;
   reading: string;
   translated: string;
