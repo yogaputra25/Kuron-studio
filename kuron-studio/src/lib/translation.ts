@@ -1,5 +1,6 @@
 import type { BubbleBox, BubbleTranslation } from "./types";
 import { needsWhitePatch } from "./bubble";
+import type { TextLayout } from "./textLayout";
 
 /** Gabung hasil translate baru dengan edit manual user (match by index). */
 export function mergeUserEdits(
@@ -18,22 +19,34 @@ export function mergeUserEdits(
   });
 }
 
+/** Hitung layout teks final dari teks + geometri, dalam px halaman.
+ *  Disuntik dari luar supaya modul ini tetap bebas Konva/DOM dan bisa diuji
+ *  di node; `CanvasEditor` menyediakan versi Konva-nya. */
+export type LayoutFor = (text: string, w: number, h: number, fontSize?: number | null) => TextLayout;
+
 /** Salin geometri canvas (x/y/w/h/shape) ke translation (match by index).
  *  Syarat sah resize: tanpa ini resize = kosmetik (export baca snapshot lama).
- *  Teks + ai* + flag tak disentuh — hanya geometri + needsWhitePatch
- *  (port 1:1 heuristik Rust, bukan logika baru). */
+ *  `layout` ikut dihitung ulang di sini — teks atau ukuran bisa sudah berubah,
+ *  jadi layout lama tak boleh dibiarkan. Teks + ai* + flag tak disentuh. */
 export function syncGeometryToTranslation(
   boxes: BubbleBox[],
   rows: BubbleTranslation[],
   pageW: number,
   pageH: number,
+  layoutFor?: LayoutFor,
 ): BubbleTranslation[] {
   const geo = new Map<number, BubbleBox>();
   for (let i = 0; i < boxes.length; i++) geo.set(i, boxes[i]);
   return rows.map((b, j) => {
     const g = geo.get(b.index) ?? geo.get(j);
     return g
-      ? { ...b, x: g.x, y: g.y, w: g.w, h: g.h, shape: g.shape, needsWhitePatch: needsWhitePatch(g.w, g.h, pageW, pageH) }
+      ? {
+          ...b,
+          x: g.x, y: g.y, w: g.w, h: g.h,
+          shape: g.shape,
+          needsWhitePatch: needsWhitePatch(g.w, g.h, pageW, pageH),
+          layout: layoutFor ? layoutFor(b.translated, g.w, g.h, b.fontSize) : (b.layout ?? null),
+        }
       : b;
   });
 }

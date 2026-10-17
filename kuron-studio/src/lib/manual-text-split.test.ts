@@ -40,7 +40,7 @@ describe("manual text entry (1.1–1.3, via draft fix-edit-stuck)", () => {
     expect(fn).toContain("queueSaveTranslationEdits()");
     expect(fn).not.toContain("saveTranslationEdits()");
     // Error save tampil di banner existing, teks lokal tetap (catch hanya set error).
-    const save = panelSrc.slice(panelSrc.indexOf("async function saveTranslationEdits"), panelSrc.indexOf("async function saveTranslationEdits") + 900);
+    const save = panelSrc.slice(panelSrc.indexOf("async function saveTranslationEdits"), panelSrc.indexOf("async function saveTranslationEdits") + 1800);
     expect(save).toContain("error = String(e)");
     expect(save).not.toContain("translation = null");
   });

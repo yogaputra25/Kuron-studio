@@ -7,6 +7,8 @@
   import type { TranslateOpts } from "../lib/TranslatePanel.svelte";
   import { chipNumbers, clampBubble } from "../lib/bubble";
   import { mergeUserEdits, syncGeometryToTranslation } from "../lib/translation";
+  import { computeTextLayout } from "../lib/textLayout";
+  import { textMeasure } from "../lib/textMeasure";
   import type { BubbleBox, Page, PageTranslation, ReadingDirection, Tool } from "../lib/types";
   import { t } from "./i18n";
   import Button from "./ui/Button.svelte";
@@ -249,7 +251,14 @@
     if (!translation) return;
     // Syarat sah resize (bubble-resize-full D1): salin geometri canvas
     // ke translation by index SEBELUM kirim — backend hanya sentuh teks/ai*.
-    translation.bubbles = syncGeometryToTranslation(bubbles, translation.bubbles, page.width || 800, page.height || 1200);
+    translation.bubbles = syncGeometryToTranslation(
+      bubbles,
+      translation.bubbles,
+      page.width || 800,
+      page.height || 1200,
+      // Layout dihitung di sini agar nilai tersimpan = yang terlihat di kanvas.
+      (text, w, h) => computeTextLayout(text, w, h, textMeasure),
+    );
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
     const my = ++saveGen;
     savingTr = true;
@@ -322,7 +331,25 @@
       bubbles: mergeUserEdits(translation?.bubbles, t.bubbles),
     };
     onSaved({ ...page, bubbles: $state.snapshot(bubbles), status: "translated", translation });
+    // P9 (export-text-parity): terjemahan datang dari backend yang tak punya
+    // metrik font browser, jadi bubble-nya lahir tanpa `layout`. Kirim satu
+    // save supaya export memakai jalur presisi, bukan hanya jalur fallback.
+    void saveTranslationEdits();
   }
+
+  // P9 — penyelamat data lama: kalau translation yang terbuka belum punya
+  // `layout` di sebagian bubble (proyek sebelum field ini ada), paksa satu
+  // push. Guard `layoutPushedFor` mencegah percobaan berulang kalau push-nya
+  // gagal; konvergen karena backend mengembalikan bubble yang sama + layout.
+  let layoutPushedFor = "";
+  $effect(() => {
+    const t = translation;
+    if (!t || layoutPushedFor === page.id) return;
+    if (!t.bubbles.some((b) => !b.layout)) return;
+    if (savingTr || saveTimer !== null) return;
+    layoutPushedFor = page.id;
+    void saveTranslationEdits();
+  });
 
   const selectedBubble = $derived(
     translation && manualSel !== null
@@ -436,6 +463,20 @@
   /** Index geometri: manualSel (translation.index) → posisi di bubbles[].
    *  Repair R5: korespondensi hanya sah bila jumlah sama (belum hapus/tambah
    *  tanpa save); tak sama → -1 agar tak edit bubble yang salah. */
+/** Ukuran font manual bubble terpilih (px HALAMAN). Kosong/0 = auto-fit. */
+function setBubbleFontSize(v: number | null) {
+  if (!translation) return;
+  const i = selectedRow;
+  if (i < 0) return;
+  const next = v && v > 0 ? Math.round(v) : null;
+  translation.bubbles = translation.bubbles.map((b, j) =>
+    j === i ? { ...b, fontSize: next } : b,
+  );
+  // Sama seperti ketikan teks: kanvas langsung ikut (prop `translations`),
+  // penyimpanan menyusul lewat antrean yang sudah ada.
+  queueSaveTranslationEdits();
+}
+
   function selectedIdxForGeometry(): number {
     if (manualSel === null) return -1;
     if (translation && bubbles.length !== translation.bubbles.length) return -1;
@@ -805,6 +846,19 @@
                       <Button variant="quiet" size="sm" title="Kecilkan 10% dari pusat" onclick={() => scaleSelectedBubble(0.9)}>−10%</Button>
                       <Button variant="quiet" size="sm" title="Besarkan 10% dari pusat" onclick={() => scaleSelectedBubble(1.1)}>+10%</Button>
                     </div>
+                      <label class="ml-2 flex flex-col gap-0.5 text-[10px] text-ink-3">font (px)
+                        <input
+                          type="number"
+                          min="4"
+                          class="tnum w-16 rounded-md border border-line bg-surface px-1.5 py-1 text-[12px] text-ink outline-none focus:border-accent"
+                          value={singleCard.b.fontSize ?? ""}
+                          placeholder="auto"
+                          onchange={(e) => setBubbleFontSize(Number((e.target as HTMLInputElement).value) || null)}
+                        />
+                      </label>
+                      {#if singleCard.b.fontSize}
+                        <Button variant="quiet" size="sm" title="Kembali ke ukuran otomatis" onclick={() => setBubbleFontSize(null)}>auto</Button>
+                      {/if}
                   {:else if geometryOutOfSync()}
                     <p class="mt-2 text-[10px] leading-relaxed text-warn" role="status">Geometri belum sinkron (bubble baru dihapus/ditambah) — Simpan dulu agar kontrol angka menunjuk bubble yang benar.</p>
                   {/if}

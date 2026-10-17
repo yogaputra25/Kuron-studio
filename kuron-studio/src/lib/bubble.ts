@@ -51,28 +51,3 @@ export function needsWhitePatch(w: number, h: number, pageW: number, pageH: numb
   return aspect > 2.5 || frac > 0.25;
 }
 
-/**
- * Ukuran font TERBESAR (≤ max) yang tinggi blok teksnya masih muat di `boxH`.
- *
- * `measure(fs)` harus mengembalikan tinggi blok teks pada ukuran `fs`.
- *
- * Kenapa fungsi ini ada: Konva tidak pernah mengecilkan font sendiri, jadi
- * kita yang mengecilkan. Dulu loop-nya memanggil `Konva.Text.height()` yang
- * mengembalikan **0** selama `height` belum di-set — itu getter Node (default
- * 0), bukan `getHeight()` yang menghitung tinggi blok. Kondisi `0 > boxH`
- * selalu false, loop tidak pernah jalan, dan ukuran font beku di nilai awal
- * untuk semua bubble: kekecilan di bubble besar, meluber di bubble kecil.
- */
-export function fitFontSize(
-  boxH: number,
-  measure: (fontSize: number) => number,
-  { min = 7, max = 28, step = 0.5, slack = 0.5 } = {},
-): number {
-  if (!(step > 0)) return min;
-  let fs = max;
-  // Toleransi `slack`: layout Konva memotong baris begitu N*lineHeight melebihi
-  // tinggi kotak, jadi "muat" harus memakai <= boxH, bukan < boxH — tanpa
-  // toleransi teks yang pas muat bisa terpotong akibat pembulatan float.
-  while (fs > min && measure(fs) > boxH + slack) fs -= step;
-  return fs;
-}

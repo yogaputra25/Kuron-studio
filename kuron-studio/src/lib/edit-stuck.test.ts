@@ -52,7 +52,7 @@ describe("edit draft kartu (§1)", () => {
   });
 
   it("Save edits + resetBubble + unmount amankan draft", () => {
-    const save = panelSrc.slice(panelSrc.indexOf("async function saveTranslationEdits"), panelSrc.indexOf("async function saveTranslationEdits") + 200);
+    const save = panelSrc.slice(panelSrc.indexOf("async function saveTranslationEdits"), panelSrc.indexOf("async function saveTranslationEdits") + 500);
     expect(save).toContain("if (draftBox.cur) commitDraft();");
     const reset = panelSrc.slice(panelSrc.indexOf("function resetBubble"), panelSrc.indexOf("function resetBubble") + 300);
     expect(reset).toContain("draftBox.cur = null;");
@@ -110,7 +110,7 @@ describe("edit draft kartu (§1)", () => {
 describe("last-write-wins §4", () => {
   it("save kirim naikkan generasi; respons basi diabaikan sebelum tulis state", () => {
     expect(panelSrc).toContain("let saveGen = 0;");
-    const save = panelSrc.slice(panelSrc.indexOf("async function saveTranslationEdits"), panelSrc.indexOf("async function saveTranslationEdits") + 800);
+    const save = panelSrc.slice(panelSrc.indexOf("async function saveTranslationEdits"), panelSrc.indexOf("async function saveTranslationEdits") + 1800);
     expect(save).toContain("const my = ++saveGen;");
     expect(save).toContain("if (my !== saveGen) return;");
     // Guard sebelum KEDUA penulis state (translation + onSaved).
@@ -129,7 +129,7 @@ describe("last-write-wins §4", () => {
   });
 
   it("error path tak menyentuh state (banner saja)", () => {
-    const save = panelSrc.slice(panelSrc.indexOf("async function saveTranslationEdits"), panelSrc.indexOf("async function saveTranslationEdits") + 1000);
+    const save = panelSrc.slice(panelSrc.indexOf("async function saveTranslationEdits"), panelSrc.indexOf("async function saveTranslationEdits") + 2000);
     const catchBlock = save.slice(save.indexOf("} catch"));
     expect(catchBlock).toContain("error = String(e)");
     expect(catchBlock).not.toContain("translation =");
@@ -185,5 +185,29 @@ describe("guard tidak memblokir niat (fix-geometry-revert D1)", () => {
     // disengaja, jadi jalur detect-all menulis state lokal langsung.
     expect(panelSrc).toContain("const mine = proj.pages.find((p) => p.id === page.id);");
     expect(panelSrc).toContain("bubbles = $state.snapshot(mine.bubbles ?? []);");
+  });
+});
+
+describe("P9 push layout otomatis (export-text-parity)", () => {
+  it("terjemahan baru langsung memicu pengiriman layout", () => {
+    // Backend tak punya metrik font browser: tanpa push ini, terjemahan hasil
+    // AI tersimpan dengan `layout` kosong dan export jatuh ke jalur fallback.
+    const fn = panelSrc.slice(
+      panelSrc.indexOf("function onTranslated"),
+      panelSrc.indexOf("function onTranslated") + 800,
+    );
+    expect(fn).toContain("void saveTranslationEdits();");
+  });
+
+  it("data lama diselamatkan sekali per halaman, dengan guard", () => {
+    expect(panelSrc).toContain('let layoutPushedFor = "";');
+    const eff = panelSrc.slice(
+      panelSrc.indexOf("layoutPushedFor === page.id"),
+      panelSrc.indexOf("layoutPushedFor === page.id") + 500,
+    );
+    // Hanya bila ada bubble yang belum punya layout, dan tak menabrak save.
+    expect(eff).toContain("b.layout");
+    expect(eff).toContain("savingTr || saveTimer !== null");
+    expect(eff).toContain("void saveTranslationEdits();");
   });
 });

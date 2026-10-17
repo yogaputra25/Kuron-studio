@@ -96,6 +96,11 @@ fn bitmap_draw(img: &mut RgbImage, s: &str, x0: i32, y0: i32, scale: u32) {
 // M5-4: system TTF via ab_glyph (no shaping/harfbuzz). Bitmap stays as fallback.
 static FONTS: OnceLock<Vec<FontVec>> = OnceLock::new();
 
+/// Font yang dicoba, berurutan — font pertama yang punya glyph itulah yang
+/// dipakai. Urutan ini menentukan metrik teks, jadi overlay kanvas WAJIB
+/// memakai urutan yang sama: lihat `OVERLAY_FONT_STACK` di
+/// `src/lib/textMeasure.ts` (grup 4 `export-text-parity`). Dijaga test kontrak
+/// lintas berkas — jangan ubah satu sisi saja.
 fn candidate_font_paths() -> Vec<&'static str> {
     let mut out = Vec::new();
     if cfg!(target_os = "windows") {
@@ -162,16 +167,23 @@ pub(crate) fn font_for(ch: char) -> Option<&'static FontVec> {
     load_system_fonts().iter().find(|f| f.glyph_id(ch).0 != 0)
 }
 
-fn ttf_width(s: &str, scale: u32) -> Option<u32> {
-    let px = 7.0 * scale as f32;
+/// Bitmap 5x7 hanya punya ukuran bulat; ambil pendekatan terdekat dari `px`.
+/// (Jalur bitmap = fallback saat tak ada TTF yang punya glyph-nya.)
+fn bitmap_scale_for(px: f32) -> u32 {
+    (px / 7.0).round().max(1.0) as u32
+}
+
+/// Lebar teks pada ukuran `px` (px halaman, pecahan — bukan kelipatan 7).
+fn ttf_width(s: &str, px: f32) -> Option<u32> {
     let fonts = load_system_fonts();
     if fonts.is_empty() {
         return None;
     }
     let mut w = 0u32;
+    let bitmap_scale = bitmap_scale_for(px);
     for ch in s.chars() {
         let Some(f) = fonts.iter().find(|f| f.glyph_id(ch).0 != 0) else {
-            w += glyph(ch).map(|_| 6 * scale).unwrap_or(0);
+            w += glyph(ch).map(|_| 6 * bitmap_scale).unwrap_or(0);
             continue;
         };
         let gid = f.glyph_id(ch);
@@ -180,20 +192,20 @@ fn ttf_width(s: &str, scale: u32) -> Option<u32> {
     Some(w)
 }
 
-fn ttf_draw(img: &mut RgbImage, s: &str, x0: i32, y0: i32, scale: u32) -> bool {
+fn ttf_draw(img: &mut RgbImage, s: &str, x0: i32, y0: i32, px: f32) -> bool {
     let fonts = load_system_fonts();
     if fonts.is_empty() {
         return false;
     }
-    let px = 7.0 * scale as f32;
+    let bitmap_scale = bitmap_scale_for(px);
     let mut x = x0 as f32;
     let mut drew_any = false;
     for ch in s.chars() {
         let Some(f) = fonts.iter().find(|f| f.glyph_id(ch).0 != 0) else {
             if glyph(ch).is_some() {
                 let single = ch.to_string();
-                bitmap_draw(img, &single, x.round() as i32, y0, scale);
-                x += 6.0 * scale as f32;
+                bitmap_draw(img, &single, x.round() as i32, y0, bitmap_scale);
+                x += 6.0 * bitmap_scale as f32;
                 drew_any = true;
             }
             continue;
@@ -230,36 +242,88 @@ fn ttf_draw(img: &mut RgbImage, s: &str, x0: i32, y0: i32, scale: u32) -> bool {
     drew_any
 }
 
-fn text_width(s: &str, scale: u32) -> u32 {
-    ttf_width(s, scale).unwrap_or_else(|| bitmap_width(s, scale))
+fn text_width(s: &str, px: f32) -> u32 {
+    ttf_width(s, px).unwrap_or_else(|| bitmap_width(s, bitmap_scale_for(px)))
 }
 
-fn draw_text(img: &mut RgbImage, s: &str, x0: i32, y0: i32, scale: u32) {
-    if ttf_draw(img, s, x0, y0, scale) {
+fn draw_text(img: &mut RgbImage, s: &str, x0: i32, y0: i32, px: f32) {
+    if ttf_draw(img, s, x0, y0, px) {
         return;
     }
-    bitmap_draw(img, s, x0, y0, scale)
+    bitmap_draw(img, s, x0, y0, bitmap_scale_for(px))
 }
 
-/// Bungkus kata agar muat dalam lebar patch (satuan px font).
-fn wrap_words(text: &str, max_w: u32, scale: u32) -> Vec<String> {
-    let mut lines: Vec<String> = Vec::new();
-    let mut cur = String::new();
-    for w in text.split_whitespace() {
-        let cand = if cur.is_empty() {
-            w.to_string()
-        } else {
-            format!("{cur} {w}")
-        };
-        if text_width(&cand, scale) <= max_w || cur.is_empty() {
-            cur = cand;
-        } else {
-            lines.push(cur);
-            cur = w.to_string();
-        }
+/// Konstanta layout — WAJIB identik dengan `src/lib/textLayout.ts`.
+/// Dijaga test kontrak lintas berkas; jangan ubah satu sisi saja.
+pub const LAYOUT_LINE_HEIGHT: f32 = 1.25;
+pub const LAYOUT_PADDING: i32 = 4;
+pub const LAYOUT_MIN_FONT: f32 = 10.0;
+pub const LAYOUT_MAX_FONT: f32 = 72.0;
+pub const LAYOUT_FONT_STEP: f32 = 0.5;
+
+/// Port `computeTextLayout` (`src/lib/textLayout.ts`) untuk jalur fallback:
+/// ukuran huruf TERBESAR yang blok teksnya masih muat TINGGI kotak.
+///
+/// Aturannya harus sama dengan kanvas; yang berbeda hanya sumber metrik
+/// (TTF sistem di sini, Konva di kanvas). Kalau satu sisi mengubah rumusnya,
+/// ubah keduanya — atau test kontrak konstanta akan gagal lebih dulu.
+fn layout_from_text(text: &str, w: i32, h: i32) -> (f32, Vec<String>) {
+    let inner_w = (w - LAYOUT_PADDING * 2).max(1) as u32;
+    let inner_h = (h - LAYOUT_PADDING * 2).max(1) as f32;
+    let mut font = LAYOUT_MAX_FONT;
+    let mut lines = wrap_words(text, inner_w, font);
+    while font > LAYOUT_MIN_FONT && lines.len() as f32 * font * LAYOUT_LINE_HEIGHT > inner_h {
+        font = (font - LAYOUT_FONT_STEP).max(LAYOUT_MIN_FONT);
+        lines = wrap_words(text, inner_w, font);
     }
-    if !cur.is_empty() {
-        lines.push(cur);
+    (font, lines)
+}
+
+/// Bungkus kata agar muat `max_w`, dan PECAH kata yang lebih lebar dari kotak
+/// (Konva juga begitu).
+///
+/// Tanpa pemecahan, kata panjang luber permanen: mengecilkan font tak akan
+/// pernah menolong, karena pada ukuran minimum pun kata itu masih lebih lebar
+/// dari kotak. Paragraf kosong dipertahankan sebagai baris kosong — sama
+/// seperti `wrapLines` di sisi TypeScript.
+fn wrap_words(text: &str, max_w: u32, px: f32) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    for para in text.split('\n') {
+        let words: Vec<&str> = para.split_whitespace().collect();
+        if words.is_empty() {
+            lines.push(String::new());
+            continue;
+        }
+        let mut cur = String::new();
+        for w in words {
+            let cand = if cur.is_empty() {
+                w.to_string()
+            } else {
+                format!("{cur} {w}")
+            };
+            if text_width(&cand, px) <= max_w {
+                cur = cand;
+                continue;
+            }
+            if !cur.is_empty() {
+                lines.push(std::mem::take(&mut cur));
+            }
+            if text_width(w, px) <= max_w {
+                cur = w.to_string();
+                continue;
+            }
+            let mut piece = String::new();
+            for ch in w.chars() {
+                if !piece.is_empty() && text_width(&format!("{piece}{ch}"), px) > max_w {
+                    lines.push(std::mem::take(&mut piece));
+                }
+                piece.push(ch);
+            }
+            cur = piece;
+        }
+        if !cur.is_empty() {
+            lines.push(cur);
+        }
     }
     lines
 }
@@ -303,21 +367,70 @@ pub fn paint_patch(img: &mut RgbImage, b: &BubbleTranslation, shape: Option<&Vec
             }
         }
     }
-    // Teks: skala dari lebar patch, bungkus kata, rata tengah.
-    let inner_w = (x1 - x0 - 8).max(8) as u32;
-    let mut scale = ((x1 - x0).max(16) as u32 / 90).clamp(1, 4);
-    let mut lines = wrap_words(&b.translated, inner_w, scale);
-    while lines.len() * 9 * scale as usize > (y1 - y0 - 6).max(9) as usize && scale > 1 {
-        scale -= 1;
-        lines = wrap_words(&b.translated, inner_w, scale);
+    // Teks (export-text-parity P4+P8). Kalau kanvas sudah memutuskan layout,
+    // gambar apa adanya. Kalau belum — hasil AI baru, halaman batch yang tak
+    // pernah dibuka, atau proyek lama — hitung sendiri dengan ATURAN YANG SAMA,
+    // bukan rumus lama (`lebar/90`, rata-atas) yang justru sumber keluhan.
+    match &b.layout {
+        Some(l) if !l.lines.is_empty() => draw_layout(img, l, x0, y0, x1, y1),
+        _ => {
+            let (font_size, lines) = layout_from_text(&b.translated, x1 - x0, y1 - y0);
+            if !lines.is_empty() {
+                draw_layout(
+                    img,
+                    &crate::translation::TextLayout {
+                        font_size,
+                        line_height: LAYOUT_LINE_HEIGHT,
+                        padding: LAYOUT_PADDING,
+                        lines,
+                    },
+                    x0,
+                    y0,
+                    x1,
+                    y1,
+                );
+            }
+        }
     }
-    let mut y = y0 + 4;
-    for line in lines {
-        let w = text_width(&line, scale);
-        let x = x0 + ((x1 - x0) - w as i32).max(0) / 2;
-        draw_text(img, &line, x, y, scale);
-        y += 9 * scale as i32;
+}
+
+/// Gambar layout final dari kanvas (px halaman) apa adanya.
+///
+/// Aturan penempatan WAJIB sama dengan `CanvasEditor`: padding di dalam kotak,
+/// tiap baris rata tengah, blok di tengah vertikal, jarak baris
+/// `fontSize * lineHeight`. Kalau salah satu sisi mengubah rumusnya, paritas
+/// hilang — ubah keduanya atau jangan ubah sama sekali.
+fn draw_layout(
+    img: &mut RgbImage,
+    l: &crate::translation::TextLayout,
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+) {
+    let (box_w, box_h) = (x1 - x0, y1 - y0);
+    let line_px = l.font_size * l.line_height;
+    let block_h = l.lines.len() as f32 * line_px;
+    let mut y = y0 as f32 + (box_h as f32 - block_h) / 2.0;
+    for line in &l.lines {
+        let w = text_width(line, l.font_size);
+        let x = x0 + (box_w - w as i32).max(0) / 2;
+        draw_text(img, line, x, y.round() as i32, l.font_size);
+        y += line_px;
     }
+}
+
+/// Luber menurut layout final dari kanvas (export-text-parity P7).
+///
+/// Dinilai dari `layout` — bukan dihitung ulang dengan algoritma lama, yang
+/// justru sudah berbeda dari yang dipakai export sekarang.
+pub fn layout_overflows(l: &crate::translation::TextLayout, w: i32, h: i32) -> bool {
+    let inner_w = (w - l.padding * 2).max(1) as u32;
+    let inner_h = (h - l.padding * 2).max(1) as f32;
+    if l.lines.len() as f32 * l.font_size * l.line_height > inner_h {
+        return true;
+    }
+    l.lines.iter().any(|line| text_width(line, l.font_size) > inner_w)
 }
 
 /// Cek overflow memakai metrik renderer yang sama (TTF/bitmap dispatch).
@@ -327,17 +440,14 @@ pub fn text_overflows(text: &str, w: i32, h: i32) -> bool {
     if text.split_whitespace().next().is_none() {
         return false;
     }
-    let inner_w = (w - 8).max(8) as u32;
-    let mut scale = (w.max(16) as u32 / 90).clamp(1, 4);
-    let mut lines = wrap_words(text, inner_w, scale);
-    while lines.len() * 9 * scale as usize > (h - 6).max(9) as usize && scale > 1 {
-        scale -= 1;
-        lines = wrap_words(text, inner_w, scale);
-    }
-    if lines.len() * 9 * scale as usize > (h - 6).max(9) as usize {
-        return true;
-    }
-    lines.iter().any(|l| text_width(l, scale) > inner_w)
+    // Nilai dari port layout yang sama dengan export memakai — bukan rumus
+    // terpisah. Dihitung ulang di sini karena QA berjalan tanpa `layout`
+    // tersimpan.
+    let (font_size, lines) = layout_from_text(text, w, h);
+    let inner_w = (w - LAYOUT_PADDING * 2).max(1) as u32;
+    let inner_h = (h - LAYOUT_PADDING * 2).max(1) as f32;
+    lines.len() as f32 * font_size * LAYOUT_LINE_HEIGHT > inner_h
+        || lines.iter().any(|l| text_width(l, font_size) > inner_w)
 }
 
 /// Repair R4: shape diambil dari `translation` dulu (sumber pasca-save sidebar),
@@ -528,7 +638,7 @@ mod tests {
 
     pub(super) fn bt(i: usize, x: i32, y: i32, w: i32, h: i32, t: &str) -> BubbleTranslation {
         BubbleTranslation {
-            index: i, x, y, w, h, shape: None,
+            index: i, x, y, w, h, shape: None, layout: None, font_size: None,
             original: "o".into(), reading: "".into(), translated: t.into(),
             ai_original: "o".into(), ai_reading: "".into(), ai_translated: t.into(),
             needs_white_patch: true, is_user_edited: false,
@@ -605,10 +715,10 @@ mod tests {
     }
     #[test]
     fn wrap_respects_width() {
-        let lines = wrap_words("HELLO WORLD FOO BAR", 60, 1);
+        let lines = wrap_words("HELLO WORLD FOO BAR", 60, 7.0);
         assert!(lines.len() > 1);
         for l in &lines {
-            assert!(text_width(l, 1) <= 90);
+            assert!(text_width(l, 7.0) <= 90);
         }
     }
 
@@ -645,9 +755,9 @@ mod tests {
     #[test]
     fn text_width_cjk_counts_when_font_present() {
         if font_for('日').is_some() {
-            assert!(text_width("日本語", 1) > 0);
+            assert!(text_width("日本語", 7.0) > 0);
         } else {
-            assert_eq!(text_width("日本語", 1), 0);
+            assert_eq!(text_width("日本語", 7.0), 0);
         }
     }
 
@@ -709,5 +819,102 @@ mod text_position_tests {
         assert!(inside > 20, "multiline harus di dalam bubble, got {inside}");
         let corner = dark_in_rect(&img, 0, 0, 30, 30);
         assert_eq!(corner, 0, "pojok halaman harus bersih, got {corner}");
+    }
+
+    #[test]
+    fn draws_layout_verbatim() {
+        // Layout dari kanvas harus digambar apa adanya, bukan dihitung ulang.
+        // Satu baris, font 14px: blok mendarat di TENGAH vertikal kotak —
+        // jalur lama menaruhnya di tepi atas (y0 + 4).
+        let png = solid_png(400, 400);
+        let mut b = bt(0, 50, 50, 200, 100, "HI");
+        b.layout = Some(crate::translation::TextLayout {
+            font_size: 14.0,
+            line_height: 1.25,
+            padding: 4,
+            lines: vec!["HI".into()],
+        });
+        let t = PageTranslation {
+            page_id: "p".into(), target_lang: "id".into(), style: "s".into(),
+            model: "m".into(), bubbles: vec![b],
+        };
+        let out = render_page_png(&png, &t, &[None]).unwrap();
+        let img = image::load_from_memory(&out).unwrap().to_rgb8();
+        let dark = img.pixels().filter(|p| p.0 == [0, 0, 0]).count();
+        assert!(dark > 0, "layout harus menggambar teks, got {dark}");
+        // Barisnya di tengah, bukan di baris paling atas kotak (y0+4 = 54).
+        let atas = dark_in_rect(&img, 50, 51, 250, 60);
+        let tengah = dark_in_rect(&img, 50, 85, 250, 115);
+        assert!(tengah > 0, "teks layout harus ada di tengah kotak");
+        assert!(tengah >= atas, "blok harus di tengah, bukan menempel atas");
+    }
+
+    #[test]
+    fn legacy_path_still_draws_without_layout() {
+        // Proyek lama: `layout` absen → jalur hitung-sendiri tetap keluar.
+        let png = solid_png(400, 400);
+        let t = PageTranslation {
+            page_id: "p".into(), target_lang: "id".into(), style: "s".into(),
+            model: "m".into(), bubbles: vec![bt(0, 50, 50, 200, 100, "HI")],
+        };
+        let out = render_page_png(&png, &t, &[None]).unwrap();
+        let img = image::load_from_memory(&out).unwrap().to_rgb8();
+        let dark = img.pixels().filter(|p| p.0 == [0, 0, 0]).count();
+        assert!(dark > 0, "jalur lama harus tetap menggambar, got {dark}");
+    }
+
+    #[test]
+    fn layout_overflow_uses_layout_not_recompute() {
+        let banyak = crate::translation::TextLayout {
+            font_size: 20.0, line_height: 1.25, padding: 4,
+            lines: vec!["x".into(); 10],
+        };
+        // Blok 10 * 20 * 1.25 = 250 px > 100 - 8 → luber.
+        assert!(layout_overflows(&banyak, 200, 100));
+        let sedikit = crate::translation::TextLayout {
+            font_size: 10.0, line_height: 1.25, padding: 4,
+            lines: vec!["x".into()],
+        };
+        assert!(!layout_overflows(&sedikit, 200, 100));
+    }
+
+    #[test]
+    fn fallback_font_grows_with_box() {
+        // Regresi jalur lama: ukuran datang dari `clamp(lebar/90,1,4)` → 7 px
+        // untuk hampir semua bubble. Sekarang ukuran dicari sampai blok teks
+        // muat TINGGI kotak, jadi kotak yang lebih tinggi mendapat font lebih
+        // besar.
+        let (kecil, _) = layout_from_text("HI", 100, 40);
+        let (besar, _) = layout_from_text("HI", 400, 400);
+        assert!(
+            besar > kecil,
+            "kotak lebih tinggi harus dapat font lebih besar: {kecil} vs {besar}"
+        );
+        assert!(kecil >= LAYOUT_MIN_FONT, "tak boleh di bawah minimum");
+        assert!(besar <= LAYOUT_MAX_FONT, "tak boleh di atas maksimum");
+    }
+
+    #[test]
+    fn fallback_breaks_long_words() {
+        // Satu kata tanpa spasi yang lebih lebar dari kotak harus dipecah —
+        // kalau dibiarkan, mengecilkan font tak akan pernah menolong.
+        let lines = wrap_words("AAAAAAAAAAAAAAAAAAAA", 40, 20.0);
+        assert!(lines.len() > 1, "kata panjang harus dipecah, got {lines:?}");
+        for l in &lines {
+            assert!(text_width(l, 20.0) <= 40, "baris luber: {l:?}");
+        }
+    }
+
+    #[test]
+    fn fallback_lines_fit_inner_width() {
+        let (_, lines) = layout_from_text("kata ".repeat(30).trim(), 160, 200);
+        let inner = (160 - LAYOUT_PADDING * 2) as u32;
+        assert!(!lines.is_empty());
+        for l in &lines {
+            assert!(
+                text_width(l, LAYOUT_MIN_FONT) <= inner,
+                "baris harus muat lebar dalam pada ukuran minimum: {l:?}"
+            );
+        }
     }
 }

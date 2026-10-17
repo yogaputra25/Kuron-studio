@@ -67,7 +67,15 @@ pub fn check_page(
             });
             continue;
         }
-        if crate::commands::export::text_overflows(&b.translated, b.w, b.h) {
+        // export-text-parity P7: kalau bubble punya layout dari kanvas, luber
+        // dinilai dari layout itu (satu sumber, tidak dihitung ulang).
+        let overflow = match &b.layout {
+            Some(l) if !l.lines.is_empty() => {
+                crate::commands::export::layout_overflows(l, b.w, b.h)
+            }
+            _ => crate::commands::export::text_overflows(&b.translated, b.w, b.h),
+        };
+        if overflow {
             out.push(QaIssue {
                 page_file: file.clone(),
                 bubble_index: b.index as i32,
@@ -119,7 +127,7 @@ mod tests {
 
     fn bt(i: usize, w: i32, o: &str, t: &str) -> BubbleTranslation {
         BubbleTranslation {
-            index: i, x: 0, y: 0, w, h: 40, shape: None,
+            index: i, x: 0, y: 0, w, h: 40, shape: None, layout: None, font_size: None,
             original: o.into(), reading: "".into(), translated: t.into(),
             ai_original: o.into(), ai_reading: "".into(), ai_translated: t.into(),
             needs_white_patch: false, is_user_edited: false,
