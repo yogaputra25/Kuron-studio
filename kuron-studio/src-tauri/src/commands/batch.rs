@@ -290,6 +290,7 @@ pub async fn retry_bubble(
             y: target.y,
             w: target.w,
             h: target.h,
+            shape: target.shape.clone(),
             original: r.original.clone(),
             reading: r.reading.clone(),
             translated: r.translated.clone(),

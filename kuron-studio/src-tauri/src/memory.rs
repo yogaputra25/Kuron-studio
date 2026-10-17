@@ -85,7 +85,7 @@ mod tests {
 
     fn bt(i: usize, o: &str, t: &str) -> BubbleTranslation {
         BubbleTranslation {
-            index: i, x: 0, y: 0, w: 10, h: 10,
+            index: i, x: 0, y: 0, w: 10, h: 10, shape: None,
             original: o.into(), reading: "".into(), translated: t.into(),
             ai_original: o.into(), ai_reading: "".into(), ai_translated: t.into(),
             needs_white_patch: false, is_user_edited: false,

@@ -102,7 +102,7 @@ describe("edit draft kartu (§1)", () => {
   it("indikator dirty + Save flush eksplisit + flush-on-destroy", () => {
     expect(panelSrc).toContain("let dirtyDraft = $state(false);");
     expect(panelSrc).toContain("belum tersimpan");
-    expect(panelSrc).toContain("if (draftBox.cur) commitDraft(); void saveTranslationEdits();");
+    expect(panelSrc).toContain("if (draftBox.cur) commitDraft(); if (dirty) await save(); await saveTranslationEdits();");
     expect(panelSrc).toContain("if (draftBox.cur) commitDraft(); if (saveTimer)");
   });
 });
@@ -129,7 +129,7 @@ describe("last-write-wins §4", () => {
   });
 
   it("error path tak menyentuh state (banner saja)", () => {
-    const save = panelSrc.slice(panelSrc.indexOf("async function saveTranslationEdits"), panelSrc.indexOf("async function saveTranslationEdits") + 800);
+    const save = panelSrc.slice(panelSrc.indexOf("async function saveTranslationEdits"), panelSrc.indexOf("async function saveTranslationEdits") + 1000);
     const catchBlock = save.slice(save.indexOf("} catch"));
     expect(catchBlock).toContain("error = String(e)");
     expect(catchBlock).not.toContain("translation =");
@@ -138,19 +138,21 @@ describe("last-write-wins §4", () => {
 
 describe("sync-guard translation (typing-comfort D6)", () => {
   it("skip timpa prop saat kotor/terbang; sync normal saat tenang", () => {
-    const fn = panelSrc.slice(panelSrc.indexOf("function syncFromPage"), panelSrc.indexOf("function syncFromPage") + 1200);
+    const fn = panelSrc.slice(panelSrc.indexOf("function syncFromPage"), panelSrc.indexOf("function syncFromPage") + 2000);
     // Kondisi sibuk: cache kotor ATAU save terbang (timer/saving).
     expect(fn).toContain("draftBox.cur !== null || saveTimer !== null || savingTr");
     expect(fn).toContain("if (!busyTyping && incomingTr");
-  });
-
-  it("cabang bubbles tak diubah (pelaku = cabang translation)", () => {
-    const fn = panelSrc.slice(panelSrc.indexOf("function syncFromPage"), panelSrc.indexOf("function syncFromPage") + 500);
-    expect(fn).toContain("if (syncedFor !== page.id || JSON.stringify(incoming) !== JSON.stringify(bubbles)) {");
-    expect(fn).not.toContain("busyTyping");
-    // busyTyping hanya dipakai sekali: guard cabang translation.
+    // busyTyping hanya dipakai guard cabang translation.
     const uses = panelSrc.match(/busyTyping/g) ?? [];
     expect(uses.length).toBe(2);
+  });
+
+  it("cabang bubbles punya guard sendiri (fix-geometry-revert D1)", () => {
+    const fn = panelSrc.slice(panelSrc.indexOf("function syncFromPage"), panelSrc.indexOf("function syncFromPage") + 900);
+    // Guard = edit lokal atau save terbang; ganti halaman tetap memaksa resync.
+    expect(fn).toContain("const samePage = syncedFor === page.id;");
+    expect(fn).toContain("const localBusy = dirty || saving || savingTr || saveTimer !== null;");
+    expect(fn).toContain("if (!samePage || (!localBusy &&");
   });
 });
 
@@ -159,5 +161,29 @@ describe("in-bubble bind:value (§2.1)", () => {
     expect(canvasSrc).toContain("bind:value={editingValue}");
     // [^:]: "bind:value=" mengandung "value=" — kecualikan prefix bind:.
     expect(canvasSrc).not.toMatch(/[^:]value=\{editingValue\}/);
+  });
+});
+
+describe("geometry persistence (fix-geometry-revert)", () => {
+  it("D2: echo onSaved membawa bubbles lokal (bukan prop basi)", () => {
+    const echoes = panelSrc.match(/onSaved\(\{ \.\.\.page, bubbles: \$state\.snapshot\(bubbles\)/g) ?? [];
+    // saveTranslationEdits + createEmptyTranslation + onTranslated + error.
+    expect(echoes.length).toBe(4);
+    // Tak ada jalur echo yang masih mengirim page.bubbles basi.
+    expect(panelSrc).not.toContain('onSaved({ ...page, status: "translated"');
+    expect(panelSrc).not.toContain('onSaved({ ...page, status: "failed" })');
+  });
+
+  it("D3: Save sidebar menuntaskan geometri lebih dulu bila dirty", () => {
+    expect(panelSrc).toContain("if (dirty) await save(); await saveTranslationEdits();");
+  });
+});
+
+describe("guard tidak memblokir niat (fix-geometry-revert D1)", () => {
+  it("detect halaman ini tetap diterapkan walau dirty", () => {
+    // Guard `dirty` menahan propagasi prop; Detect = penggantian yang
+    // disengaja, jadi jalur detect-all menulis state lokal langsung.
+    expect(panelSrc).toContain("const mine = proj.pages.find((p) => p.id === page.id);");
+    expect(panelSrc).toContain("bubbles = $state.snapshot(mine.bubbles ?? []);");
   });
 });

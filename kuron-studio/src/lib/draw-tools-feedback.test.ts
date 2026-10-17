@@ -42,3 +42,29 @@ describe("draw tools feedback (§1)", () => {
     expect(canvasSrc).toContain('holder.style.overflow = ""');
   });
 });
+
+describe("bubble resize full (§1.5)", () => {
+  it("sinkron geometri di jalur save (bukan kosmetik)", () => {
+    expect(panelSrc).toContain("syncGeometryToTranslation(bubbles, translation.bubbles");
+    const save = panelSrc.slice(panelSrc.indexOf("async function saveTranslationEdits"), panelSrc.indexOf("async function saveTranslationEdits") + 600);
+    expect(save).toContain("syncGeometryToTranslation");
+  });
+
+  it("vertex polygon draggable + bbox derivasi + tolak degenerat", () => {
+    // Repair R1: state lokal curShape (bukan b.shape.forEach) agar drag
+    // beruntun tak meleset setelah bbox bergeser (stale-closure fix).
+    expect(canvasSrc).toContain("let curShape:");
+    expect(canvasSrc).toContain("curShape.forEach(");
+    expect(canvasSrc).toContain("Math.min(...xs)");
+  });
+
+  it("kontrol angka + skala-dari-pusat + clamp di sidebar", () => {
+    expect(panelSrc).toContain("setBubbleGeometry");
+    expect(panelSrc).toContain("scaleSelectedBubble");
+    expect(panelSrc).toContain("Geometri (px asli)");
+  });
+
+  it("whitePatch dihitung ulang dari geometri baru (port Rust)", () => {
+    expect(panelSrc).toContain("needsWhitePatch");
+  });
+});

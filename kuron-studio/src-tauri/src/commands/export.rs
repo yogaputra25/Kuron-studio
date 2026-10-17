@@ -340,7 +340,30 @@ pub fn text_overflows(text: &str, w: i32, h: i32) -> bool {
     lines.iter().any(|l| text_width(l, scale) > inner_w)
 }
 
-/// `shapes[i]` = polygon bubble index i (None = rect), sejajar `t.bubbles`.
+/// Repair R4: shape diambil dari `translation` dulu (sumber pasca-save sidebar),
+/// fallback `page.bubbles` by posisi (file lama tanpa shape), fallback None = bbox.
+/// `shapes[i]` = polygon bubble index i, sejajar `t.bubbles`.
+pub fn shapes_for_export(
+  t: &PageTranslation,
+  page_bubbles: &[crate::bubble::BubbleBox],
+) -> Vec<Option<Vec<[i32; 2]>>> {
+  let max_idx = t.bubbles.iter().map(|b| b.index).max().unwrap_or(0);
+  let mut v: Vec<Option<Vec<[i32; 2]>>> = vec![None; max_idx + 1];
+  for b in &t.bubbles {
+    if b.index >= v.len() {
+      continue;
+    }
+    if let Some(s) = b.shape.clone() {
+      v[b.index] = Some(s);
+      continue;
+    }
+    if let Some(bb) = page_bubbles.get(b.index) {
+      v[b.index] = bb.shape.clone();
+    }
+  }
+  v
+}
+
 pub fn render_page_png(
     page_bytes: &[u8],
     t: &PageTranslation,
@@ -382,16 +405,7 @@ pub fn collect_pages(
         };
         let page_bytes =
             std::fs::read(&pg.path).map_err(|e| format!("read {}: {e}", pg.path))?;
-        let shapes: Vec<Option<Vec<[i32; 2]>>> = {
-            let max_idx = t.bubbles.iter().map(|b| b.index).max().unwrap_or(0);
-            let mut v: Vec<Option<Vec<[i32; 2]>>> = vec![None; max_idx + 1];
-            for (bi, bb) in pg.bubbles.iter().enumerate() {
-                if bi < v.len() {
-                    v[bi] = bb.shape.clone();
-                }
-            }
-            v
-        };
+        let shapes = shapes_for_export(&t, &pg.bubbles);
         let png = render_page_png(&page_bytes, &t, &shapes)?;
         out.push((format!("{:03}.png", i + 1), png));
     }
@@ -479,13 +493,7 @@ pub fn export_project(
                 };
                 let page_bytes =
                     std::fs::read(&pg.path).map_err(|e| format!("read {}: {e}", pg.path))?;
-                let max_idx = t.bubbles.iter().map(|b| b.index).max().unwrap_or(0);
-                let mut shapes: Vec<Option<Vec<[i32; 2]>>> = vec![None; max_idx + 1];
-                for (bi, bb) in pg.bubbles.iter().enumerate() {
-                    if bi < shapes.len() {
-                        shapes[bi] = bb.shape.clone();
-                    }
-                }
+                let shapes = shapes_for_export(&t, &pg.bubbles);
                 let psd = crate::psd::render_page_psd(&page_bytes, &t, &shapes)?;
                 std::fs::write(
                     std::path::Path::new(&path).join(format!("{:03}.psd", i + 1)),
@@ -520,7 +528,7 @@ mod tests {
 
     pub(super) fn bt(i: usize, x: i32, y: i32, w: i32, h: i32, t: &str) -> BubbleTranslation {
         BubbleTranslation {
-            index: i, x, y, w, h,
+            index: i, x, y, w, h, shape: None,
             original: "o".into(), reading: "".into(), translated: t.into(),
             ai_original: "o".into(), ai_reading: "".into(), ai_translated: t.into(),
             needs_white_patch: true, is_user_edited: false,
@@ -557,6 +565,44 @@ mod tests {
         assert_eq!(img.get_pixel(150, 70).0, [255, 255, 255]);
     }
 
+    #[test]
+    fn shapes_prefers_translation_over_page() {
+        let mut b = bt(0, 50, 50, 200, 100, "HI");
+        let fresh = vec![[10, 10], [60, 10], [60, 60]];
+        b.shape = Some(fresh.clone());
+        let t = PageTranslation {
+            page_id: "p".into(), target_lang: "id".into(), style: "s".into(),
+            model: "m".into(), bubbles: vec![b],
+        };
+        let stale = crate::bubble::BubbleBox {
+            x: 50, y: 50, w: 200, h: 100, confidence: 1.0,
+            shape: Some(vec![[50, 50], [250, 50], [150, 150]]),
+            kind: None, tail: None,
+        };
+        let shapes = shapes_for_export(&t, &[stale]);
+        assert_eq!(shapes[0], Some(fresh));
+    }
+
+    #[test]
+    fn shapes_falls_back_to_page_then_bbox() {
+        let t = PageTranslation {
+            page_id: "p".into(), target_lang: "id".into(), style: "s".into(),
+            model: "m".into(), bubbles: vec![bt(0, 50, 50, 200, 100, "HI")],
+        };
+        let with = crate::bubble::BubbleBox {
+            x: 50, y: 50, w: 200, h: 100, confidence: 1.0,
+            shape: Some(vec![[50, 50], [250, 50], [150, 150]]),
+            kind: None, tail: None,
+        };
+        let shapes = shapes_for_export(&t, &[with]);
+        assert!(shapes[0].is_some());
+        let plain = crate::bubble::BubbleBox {
+            x: 50, y: 50, w: 200, h: 100, confidence: 1.0,
+            shape: None, kind: None, tail: None,
+        };
+        let shapes2 = shapes_for_export(&t, &[plain]);
+        assert_eq!(shapes2[0], None);
+    }
     #[test]
     fn wrap_respects_width() {
         let lines = wrap_words("HELLO WORLD FOO BAR", 60, 1);

@@ -12,7 +12,13 @@ describe("pane-switch commit (§1)", () => {
   });
 
   it("afterRef ter-bind di instance After, terpisah dari editorRef Before", () => {
-    expect(panelSrc).toContain("let afterRef = $state<{ commitEditor: () => void; redraw: () => void } | null>(null)");
+    // Tipe ref membawa commitEditor + redraw; deleteSelected dipakai jalur
+    // Delete di After-only (bubble-edit-any-pane D4).
+    const decl = panelSrc.slice(panelSrc.indexOf("let afterRef = $state<{"), panelSrc.indexOf("let afterRef = $state<{") + 160);
+    expect(decl).toContain("commitEditor: () => void");
+    expect(decl).toContain("redraw: () => void");
+    expect(decl).toContain("deleteSelected: () => boolean");
+    expect(decl).toContain("| null>(null)");
     // Satu bind per instance: Before = editorRef, After = afterRef.
     const binds = panelSrc.match(/bind:this=\{(editorRef|afterRef)\}/g) ?? [];
     expect(binds).toContain("bind:this={editorRef}");

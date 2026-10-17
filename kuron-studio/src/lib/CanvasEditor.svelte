@@ -22,13 +22,16 @@
     translations?: BubbleTranslation[];
     showTranslation?: boolean;
     editable?: boolean;
+    /** Izin menggambar bubble BARU (Before-only). Default = `editable`.
+     *  Ubah geometri bubble lama tetap lewat `editable`. */
+    canDraw?: boolean;
     onSelectForward?: (i: number) => void;
     externalSelected?: number | null;
     onEditTranslation?: (i: number, value: string) => void;
     onDrawHint?: (msg: string) => void;
   }
 
-  let { imageUrl, fallbackUrl = "", imgW, imgH, initial, readingDir, tool, onChange, translations = [], showTranslation = false, editable = true, onSelectForward, externalSelected = null, onEditTranslation, onDrawHint }: Props = $props();
+  let { imageUrl, fallbackUrl = "", imgW, imgH, initial, readingDir, tool, onChange, translations = [], showTranslation = false, editable = true, canDraw = editable, onSelectForward, externalSelected = null, onEditTranslation, onDrawHint }: Props = $props();
 
   let holder: HTMLDivElement;
   let stage: Konva.Stage | null = null;
@@ -213,7 +216,9 @@
       if (b.shape && b.shape.length >= 3) {
         group.add(
           new Konva.Line({
-            points: b.shape.flatMap(([px, py]) => [px * s, py * s]),
+            // Relatif ke origin group (sudah di-offset b.x/b.y) — konsisten
+            // dengan vertex Circle + tail; absolut = double-offset (H2).
+            points: b.shape.flatMap(([px, py]) => [(px - b.x) * s, (py - b.y) * s]),
             closed: true,
             stroke: i === selectedIdx ? P.accent : P.cyan,
             strokeWidth: 2,
@@ -330,8 +335,12 @@
 
       group.on("click tap", (e) => {
         e.cancelBubble = true;
+        // Klik ulang bubble yang sama = no-op (redraw me-recreate node drag).
+        if (selectedIdx === i) return;
         selectedIdx = i;
-        if (!editable && onSelectForward) onSelectForward(i);
+        // D2: seleksi SELALU diteruskan ke parent — pane mana pun boleh mengisi
+        // sidebar & seleksi bersama (dulu hanya saat read-only).
+        if (onSelectForward) onSelectForward(i);
         redraw();
       });
 
@@ -347,30 +356,160 @@
 
       group.on("dragend", () => {
         if (!editable) { redraw(); return; }
-        const nb = { ...b, x: group.x() / s, y: group.y() / s };
+        const nx = Math.round(group.x() / s);
+        const ny = Math.round(group.y() / s);
+        // Repair R3: shape absolut ikut bergeser sebesar delta; tanpa ini
+        // polygon "ketinggalan" dan redraw berikutnya mismatch.
+        const dx = nx - b.x;
+        const dy = ny - b.y;
+        const shape = b.shape ? b.shape.map(([px, py]) => [px + dx, py + dy] as [number, number]) : b.shape;
+        const nb = { ...b, x: nx, y: ny, shape };
         commit(i, clampBubble(nb, imgW, imgH));
       });
 
-      // Resize handle kanan-bawah (rect/ellipse saja, editable saja).
-      if (!b.shape && editable) {
+      // Resize handle kanan-bawah (rect/ellipse, editable, HANYA terpilih — D3)
+      // agar pane After yang penuh overlay teks tak jadi hutan titik.
+      if (!b.shape && editable && i === selectedIdx) {
         const handle = new Konva.Circle({
           x: b.w * s,
           y: b.h * s,
-          radius: 6,
+          radius: 11,
           fill: P.accent,
+          stroke: "#fff",
+          strokeWidth: 2,
           draggable: true,
         });
+        // R6 lanjutan: kunci sejak HOVER (mousedown terlambat — Konva sudah
+        // memilih group sebagai drag-target). Buka saat mouseup/dragend/leave.
+        handle.on("mouseenter", () => {
+          group.draggable(false);
+        });
+        handle.on("mouseleave", () => {
+          group.draggable(editable);
+        });
+        handle.on("click tap", (e) => {
+          // Jangan teruskan ke group: klik handle tak boleh redraw
+          // (redraw membuat ulang node handle = drag target hilang + klik-2x).
+          e.cancelBubble = true;
+        });
+        handle.on("dragstart", () => {
+          // Repair R6: group draggable menelan drag anak — kunci selama
+          // handle di-drag, kembalikan saat selesai.
+          group.draggable(false);
+        });
+        // Pending lokal (bukan state): tulis bubbles[i] tiap move memicu
+          // effect sync + parent round-trip yang me-recreate node drag.
+        let pendW = b.w;
+        let pendH = b.h;
         handle.on("dragmove", () => {
-          const nw = Math.max(8, handle.x() / s);
-          const nh = Math.max(8, handle.y() / s);
-          bubbles[i] = clampBubble({ ...b, w: nw, h: nh }, imgW, imgH);
-          redrawKeep(handle);
+          pendW = Math.max(8, handle.x() / s);
+          pendH = Math.max(8, handle.y() / s);
+          const cl = clampBubble({ ...b, w: pendW, h: pendH }, imgW, imgH);
+          pendW = cl.w;
+          pendH = cl.h;
+          // Live-update visual saja (tanpa sentuh state).
+          const rect = group.findOne("Rect");
+          rect?.setAttrs({ width: pendW * s, height: pendH * s });
+          const ell = group.findOne("Ellipse");
+          ell?.setAttrs({ x: (pendW * s) / 2, y: (pendH * s) / 2, radiusX: (pendW * s) / 2, radiusY: (pendH * s) / 2 });
+          handle.position({ x: pendW * s, y: pendH * s });
+          overlayLayer?.batchDraw();
         });
         handle.on("dragend", () => {
-          onChange($state.snapshot(bubbles));
+          group.draggable(editable);
+          // Satu-satunya penulis state: commit + onChange sekali.
+          commit(i, clampBubble({ ...b, w: pendW, h: pendH }, imgW, imgH));
         });
-        handle.on("mousedown touchstart", (e) => e.cancelBubble = true);
+        handle.on("mousedown touchstart", (e) => {
+          e.cancelBubble = true;
+          // Kunci SEBELUM drag diputuskan (dragstart bisa kalah dari parent).
+          group.draggable(false);
+        });
+        handle.on("mouseup", () => {
+          // Klik-tanpa-drag tak memicu dragend — buka di sini juga.
+          group.draggable(editable);
+        });
         group.add(handle);
+      }
+
+      // Vertex polygon freeform (bubble-resize-full D2 + repair R1): tiap
+      // vertex jadi titik draggable; bbox = DERIVASI vertex (satu arah).
+      // State lokal cur* (bukan closure b) agar drag beruntun tak meleset
+      // setelah bbox bergeser.
+      if (b.shape && b.shape.length >= 3 && editable && i === selectedIdx) {
+        let curShape: [number, number][] = b.shape.map(([qx, qy]) => [qx, qy]);
+        let curX = b.x;
+        let curY = b.y;
+        const vNodes: Konva.Circle[] = [];
+        const syncVertexNodes = () => {
+          vNodes.forEach((node, j) => {
+            node.position({ x: (curShape[j][0] - curX) * s, y: (curShape[j][1] - curY) * s });
+          });
+          const poly = group.findOne("Line");
+          poly?.setAttrs({ points: curShape.flatMap(([qx, qy]) => [(qx - curX) * s, (qy - curY) * s]) });
+          group.position({ x: curX * s, y: curY * s });
+        };
+        curShape.forEach(([px, py], k) => {
+          const v = new Konva.Circle({
+            x: (px - curX) * s,
+            y: (py - curY) * s,
+            radius: 10,
+            fill: P.accent,
+            stroke: "#fff",
+            strokeWidth: 2,
+            draggable: true,
+          });
+          vNodes.push(v);
+          v.on("mouseenter", () => {
+            group.draggable(false);
+          });
+          v.on("mouseleave", () => {
+            group.draggable(editable);
+          });
+          v.on("click tap", (e) => {
+            e.cancelBubble = true;
+          });
+          v.on("dragstart", () => {
+            group.draggable(false);
+          });
+          v.on("dragmove", () => {
+            const nx = Math.round(curX + v.x() / s);
+            const ny = Math.round(curY + v.y() / s);
+            curShape = curShape.map(([qx, qy], j) =>
+              j === k
+                ? [
+                    Math.min(Math.max(0, nx), imgW - 1),
+                    Math.min(Math.max(0, ny), imgH - 1),
+                  ] as [number, number]
+                : [qx, qy] as [number, number],
+            );
+            const xs = curShape.map((p) => p[0]);
+            const ys = curShape.map((p) => p[1]);
+            curX = Math.min(...xs);
+            curY = Math.min(...ys);
+            // Pending lokal saja — state ditulis sekali di dragend.
+            syncVertexNodes();
+            overlayLayer?.batchDraw();
+          });
+          v.on("dragend", () => {
+            group.draggable(editable);
+            const xs = curShape.map((p) => p[0]);
+            const ys = curShape.map((p) => p[1]);
+            const fx = Math.min(...xs);
+            const fy = Math.min(...ys);
+            const fw = Math.max(8, Math.max(...xs) - fx);
+            const fh = Math.max(8, Math.max(...ys) - fy);
+            commit(i, clampBubble({ ...b, shape: [...curShape], x: fx, y: fy, w: fw, h: fh }, imgW, imgH));
+          });
+          v.on("mousedown touchstart", (e) => {
+            e.cancelBubble = true;
+            group.draggable(false);
+          });
+          v.on("mouseup", () => {
+            group.draggable(editable);
+          });
+          group.add(v);
+        });
       }
 
       overlayLayer!.add(group);
@@ -378,17 +517,6 @@
     overlayLayer.batchDraw();
   }
 
-  /** Redraw tanpa melepas handle yang sedang di-drag. */
-  function redrawKeep(activeHandle: Konva.Circle) {
-    void activeHandle;
-    // Sederhana: batchDraw layer yang sama (node handle tetap hidup karena
-    // redraw() tidak dipanggil di tengah dragmove — hanya update rect attrs).
-    const s = scale();
-    const node = overlayLayer?.findOne(`.bubble-${selectedIdx ?? -1}`);
-    void node;
-    void s;
-    overlayLayer?.batchDraw();
-  }
 
   function commit(i: number, nb: BubbleBox) {
     bubbles[i] = nb;
@@ -452,7 +580,7 @@
   }
 
   function onStageDown(e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) {
-    if (!editable) return;
+    if (!canDraw) return;
     if (tool === "select") return;
     // Ekor: user mengklik TEPAT pada bubble terpilih (itu titik melekat,
     // lalu drag keluar) atau di mana saja untuk menunjuk ujung ekor. Jadi
@@ -655,7 +783,10 @@
 
   onMount(() => {
     const s = holder.clientWidth / Math.max(1, imgW);
-    stage = new Konva.Stage({ container: holder, width: imgW * s, height: imgH * s });
+    // sharp-preview D2: buffer canvas ikut resolusi layar (tajam di HiDPI/
+    // scale-Windows); fallback 1 bila devicePixelRatio tak ada (SSR/test).
+    const dpr = typeof window !== "undefined" && window.devicePixelRatio ? window.devicePixelRatio : 1;
+    stage = new Konva.Stage({ container: holder, width: imgW * s, height: imgH * s, pixelRatio: dpr });
     overlayLayer = new Konva.Layer();
     stage.add(overlayLayer);
     stage.on("mousedown touchstart", onStageDown);

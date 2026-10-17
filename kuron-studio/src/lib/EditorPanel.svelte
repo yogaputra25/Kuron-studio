@@ -5,8 +5,8 @@
   import CanvasEditor from "../lib/CanvasEditor.svelte";
   import TranslatePanel from "../lib/TranslatePanel.svelte";
   import type { TranslateOpts } from "../lib/TranslatePanel.svelte";
-  import { chipNumbers } from "../lib/bubble";
-  import { mergeUserEdits } from "../lib/translation";
+  import { chipNumbers, clampBubble } from "../lib/bubble";
+  import { mergeUserEdits, syncGeometryToTranslation } from "../lib/translation";
   import type { BubbleBox, Page, PageTranslation, ReadingDirection, Tool } from "../lib/types";
   import { t } from "./i18n";
   import Button from "./ui/Button.svelte";
@@ -88,7 +88,7 @@
   }
   // Ref instance After (Before sudah punya editorRef): commit editor in-bubble
   // yang terbuka sebelum pane berganti — tak ada textarea basi.
-  let afterRef = $state<{ commitEditor: () => void; redraw: () => void } | null>(null);
+  let afterRef = $state<{ commitEditor: () => void; redraw: () => void; deleteSelected: () => boolean } | null>(null);
   function setMode(m: PaneMode) {
     afterRef?.commitEditor();
     drawHint = "";
@@ -141,7 +141,13 @@
   function syncFromPage() {
     const incoming = $state.snapshot(page.bubbles ?? []);
     const incomingTr = page.translation ? JSON.stringify(page.translation) : "";
-    if (syncedFor !== page.id || JSON.stringify(incoming) !== JSON.stringify(bubbles)) {
+    // D1 (fix-geometry-revert): cabang bubbles dulu TANPA guard — echo onSaved
+    // dari jalur save lain (debounce terjemahan) menimpa geometri lokal yang
+    // belum tersimpan. Guard = ada edit lokal (dirty) atau save terbang;
+    // ganti halaman tetap memaksa resync.
+    const samePage = syncedFor === page.id;
+    const localBusy = dirty || saving || savingTr || saveTimer !== null;
+    if (!samePage || (!localBusy && JSON.stringify(incoming) !== JSON.stringify(bubbles))) {
       bubbles = incoming;
       dirty = false;
       syncedFor = page.id;
@@ -190,6 +196,14 @@
       await api.detectBatch(pageIds);
       const proj = await api.getProject(projectId);
       for (const p of proj.pages) onSaved(p);
+      // fix-geometry-revert: guard `dirty` di syncFromPage menahan propagasi
+      // prop untuk halaman ini. Detect = penggantian geometri yang disengaja,
+      // jadi terapkan langsung (pola sama dengan runDetect).
+      const mine = proj.pages.find((p) => p.id === page.id);
+      if (mine) {
+        bubbles = $state.snapshot(mine.bubbles ?? []);
+        dirty = false;
+      }
     } catch (e) {
       error = String(e);
     } finally {
@@ -220,7 +234,8 @@
     }
     if (e.key === "Delete" || e.key === "Backspace") {
       if (saving) return;
-      if (editorRef?.deleteSelected()) void save();
+      // D4: Delete hidup di pane mana pun — Before (editorRef) atau After (afterRef).
+      if (editorRef?.deleteSelected() || afterRef?.deleteSelected()) void save();
     } else if (e.key === "s" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       void save();
@@ -232,6 +247,9 @@
   async function saveTranslationEdits() {
     if (draftBox.cur) commitDraft();
     if (!translation) return;
+    // Syarat sah resize (bubble-resize-full D1): salin geometri canvas
+    // ke translation by index SEBELUM kirim — backend hanya sentuh teks/ai*.
+    translation.bubbles = syncGeometryToTranslation(bubbles, translation.bubbles, page.width || 800, page.height || 1200);
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
     const my = ++saveGen;
     savingTr = true;
@@ -240,7 +258,7 @@
       const out = await api.saveTranslation(page.id, translation.bubbles);
       if (my !== saveGen) return; // respons basi: save lebih baru sudah dikirim
       translation = out;
-      onSaved({ ...page, status: "translated", translation: out });
+      onSaved({ ...page, bubbles: $state.snapshot(bubbles), status: "translated", translation: out });
     } catch (e) {
       error = String(e);
     } finally {
@@ -268,7 +286,7 @@
     const empty = {
       pageId: page.id, targetLang: "id", style: lastOpts?.style ?? "standard", model: "",
       bubbles: bubbles.map((b, i) => ({
-        index: i, x: b.x, y: b.y, w: b.w, h: b.h,
+        index: i, x: b.x, y: b.y, w: b.w, h: b.h, shape: b.shape,
         original: "", reading: "", translated: "",
         aiOriginal: "", aiReading: "", aiTranslated: "",
         needsWhitePatch: false, isUserEdited: false,
@@ -279,7 +297,7 @@
     try {
       const out = await api.saveTranslation(page.id, empty.bubbles);
       translation = out;
-      onSaved({ ...page, status: "translated", translation: out });
+      onSaved({ ...page, bubbles: $state.snapshot(bubbles), status: "translated", translation: out });
     } catch (e) {
       error = String(e);
     } finally {
@@ -303,7 +321,7 @@
       ...t,
       bubbles: mergeUserEdits(translation?.bubbles, t.bubbles),
     };
-    onSaved({ ...page, status: "translated", translation });
+    onSaved({ ...page, bubbles: $state.snapshot(bubbles), status: "translated", translation });
   }
 
   const selectedBubble = $derived(
@@ -380,6 +398,53 @@
     if (draftBox.cur) commitDraft();
     manualSel = idx;
     if (idx === null) { draftBox.cur = null; dirtyDraft = false; }
+  }
+
+  /** Geometri bubble terpilih via angka (bubble-resize-full D4/C).
+   *  Satu jalur onChange seperti drag-handle; clamp + min 8px konvensi existing. */
+  function setBubbleGeometry(i: number, patch: Partial<Pick<BubbleBox, "x" | "y" | "w" | "h">>) {
+    const b = bubbles[i];
+    if (!b) return;
+    const nb = {
+      ...b,
+      x: Math.round(patch.x ?? b.x),
+      y: Math.round(patch.y ?? b.y),
+      w: Math.round(patch.w ?? b.w),
+      h: Math.round(patch.h ?? b.h),
+    };
+    bubbles[i] = clampBubble(nb, page.width || 800, page.height || 1200);
+    bubbles = [...bubbles];
+    dirty = true;
+  }
+
+  /** Skala dari PUSAT agar kotak tak "lari" (bubble-resize-full D4). */
+  function scaleSelectedBubble(factor: number) {
+    const b = bubbles[selectedIdxForGeometry()];
+    if (!b) return;
+    const cx = b.x + b.w / 2;
+    const cy = b.y + b.h / 2;
+    const nw = Math.max(8, Math.round(b.w * factor));
+    const nh = Math.max(8, Math.round(b.h * factor));
+    setBubbleGeometry(selectedIdxForGeometry(), {
+      x: Math.round(cx - nw / 2),
+      y: Math.round(cy - nh / 2),
+      w: nw,
+      h: nh,
+    });
+  }
+
+  /** Index geometri: manualSel (translation.index) → posisi di bubbles[].
+   *  Repair R5: korespondensi hanya sah bila jumlah sama (belum hapus/tambah
+   *  tanpa save); tak sama → -1 agar tak edit bubble yang salah. */
+  function selectedIdxForGeometry(): number {
+    if (manualSel === null) return -1;
+    if (translation && bubbles.length !== translation.bubbles.length) return -1;
+    const byIndex = bubbles.findIndex((_, bi) => bi === manualSel);
+    return byIndex >= 0 ? byIndex : manualSel < bubbles.length ? manualSel : -1;
+  }
+  /** Repair R5: jumlah beda = baru hapus/tambah tanpa save → kontrol sembunyi. */
+  function geometryOutOfSync(): boolean {
+    return !!translation && manualSel !== null && bubbles.length !== translation.bubbles.length;
   }
 
   /** ↺ opsi A: current = baseline AI terakhir, kirim LANGSUNG (§4 D7). */
@@ -543,11 +608,12 @@
           tool="select"
           translations={translation?.bubbles ?? []}
           showTranslation={true}
-          editable={false}
+          editable={true}
+          canDraw={false}
           externalSelected={manualSel}
           onSelectForward={(i) => selectBubble(i)}
           onEditTranslation={(i, v) => editTr(i, "translated", v)}
-          onChange={() => {}}
+          onChange={(nb) => { bubbles = nb; dirty = true; drawHint = ""; }}
         />
       </div>
     {/if}
@@ -621,7 +687,7 @@
             onTranslated={onTranslated}
             onError={(m) => {
               error = m;
-              onSaved({ ...page, status: "failed" });
+              onSaved({ ...page, bubbles: $state.snapshot(bubbles), status: "failed" });
             }}
           />
         </section>
@@ -644,7 +710,7 @@
                 variant="default"
                 size="sm"
                 class="ml-auto"
-                onclick={() => { if (draftBox.cur) commitDraft(); void saveTranslationEdits(); }}
+                onclick={async () => { if (draftBox.cur) commitDraft(); if (dirty) await save(); await saveTranslationEdits(); }}
                 disabled={savingTr}
               >{savingTr ? "…" : dirtyDraft ? `${$t("save")}*` : $t("save")}</Button>
             </div>
@@ -717,6 +783,28 @@
                     onblur={commitDraft}
                   ></textarea>
                   {#if glossMsg}<p class="mt-1.5 text-[10px] text-success" role="status">{glossMsg}</p>{/if}
+                  {#if bubbles[selectedIdxForGeometry()]}
+                    <p class="mt-2 block text-[10px] text-ink-3">Geometri (px asli)</p>
+                    <div class="mt-1 grid grid-cols-4 gap-1.5">
+                      {#each [["x"], ["y"], ["w"], ["h"]] as [k] (k)}
+                        <label class="flex flex-col gap-0.5 text-[10px] text-ink-3">{k}
+                          <input
+                            type="number"
+                            min="0"
+                            class="tnum w-full rounded-md border border-line bg-surface px-1.5 py-1 text-[12px] text-ink outline-none focus:border-accent"
+                            value={bubbles[selectedIdxForGeometry()][k as "x" | "y" | "w" | "h"]}
+                            onchange={(e) => setBubbleGeometry(selectedIdxForGeometry(), { [k]: Number((e.target as HTMLInputElement).value) } as Partial<Pick<BubbleBox, "x" | "y" | "w" | "h">>)}
+                          />
+                        </label>
+                      {/each}
+                    </div>
+                    <div class="mt-1.5 flex gap-1.5">
+                      <Button variant="quiet" size="sm" title="Kecilkan 10% dari pusat" onclick={() => scaleSelectedBubble(0.9)}>−10%</Button>
+                      <Button variant="quiet" size="sm" title="Besarkan 10% dari pusat" onclick={() => scaleSelectedBubble(1.1)}>+10%</Button>
+                    </div>
+                  {:else if geometryOutOfSync()}
+                    <p class="mt-2 text-[10px] leading-relaxed text-warn" role="status">Geometri belum sinkron (bubble baru dihapus/ditambah) — Simpan dulu agar kontrol angka menunjuk bubble yang benar.</p>
+                  {/if}
                 </li>
               </ol>
             {:else}
