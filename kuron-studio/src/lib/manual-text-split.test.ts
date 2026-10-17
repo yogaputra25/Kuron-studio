@@ -104,9 +104,9 @@ describe("before|split|after (3.1–3.4)", () => {
     expect(canvasSrc).not.toContain("if (!editable && onSelectForward)");
     // D1: gerbang menggambar pakai canDraw (Before-only), bukan editable.
     // \r? — file bisa CRLF di Windows, pola harus toleran.
-    expect(canvasSrc).toMatch(/function onStageDown\(e: Konva\.KonvaEventObject<MouseEvent \| TouchEvent>\) \{\r?\n    if \(!canDraw\) return;/);
+    expect(canvasSrc).toMatch(/function onStageDown\(\) \{\r?\n    if \(!canDraw\) \{/);
     // D3: handle resize hanya bubble terpilih.
-    expect(canvasSrc).toContain("if (!b.shape && editable && i === selectedIdx) {");
+    expect(canvasSrc).toContain("if (!b.shape && editable && i === selectedIdx && tool === \"select\") {");
     // Canvas tetap jaga jalur non-editable (prop publik, default true).
     const drag = canvasSrc.slice(canvasSrc.indexOf('group.on("dragend"'), canvasSrc.indexOf('group.on("dragend"') + 250);
     expect(drag).toContain("if (!editable) { redraw(); return; }");
@@ -120,8 +120,9 @@ describe("bubble edit any pane", () => {
     expect(after).toContain("editable={true}");
     expect(after).toContain("canDraw={false}");
     expect(after).toContain('onChange={(nb) => { bubbles = nb; dirty = true; drawHint = ""; }}');
-    // tool tetap "select" → menggambar mustahil walau editable.
-    expect(after).toContain('tool="select"');
+    // fix-draw-tools B: tool asli diteruskan ke After, tapi canDraw={false}
+    // + hint menggantikan keheningan — menggambar tetap mustahil di sini.
+    expect(after).toContain("tool={tool}");
   });
 
   it("Delete hidup di After-only: coba editorRef lalu afterRef", () => {
@@ -132,8 +133,8 @@ describe("bubble edit any pane", () => {
     expect(panelSrc).toContain("deleteSelected: () => boolean");
   });
 
-  it("canDraw prop di canvas: default editable, gerbang onStageDown", () => {
+  it("canDraw prop di canvas: default literal false, gerbang onStageDown", () => {
     expect(canvasSrc).toContain("canDraw?: boolean;");
-    expect(canvasSrc).toContain("canDraw = editable");
+    expect(canvasSrc).toContain("canDraw = false");
   });
 });

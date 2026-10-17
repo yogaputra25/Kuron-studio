@@ -578,9 +578,11 @@
           translations={translation?.bubbles ?? []}
           showTranslation={false}
           editable={true}
+          canDraw={true}
           externalSelected={manualSel}
           onSelectForward={(i) => selectBubble(i)}
           onDrawHint={(m) => { drawHint = m; }}
+          onToolDone={() => setTool("select")}
           onChange={(nb) => {
             bubbles = nb;
             dirty = true;
@@ -605,7 +607,7 @@
           imgH={page.height || 1200}
           initial={bubbles}
           {readingDir}
-          tool="select"
+          tool={tool}
           translations={translation?.bubbles ?? []}
           showTranslation={true}
           editable={true}
@@ -613,6 +615,7 @@
           externalSelected={manualSel}
           onSelectForward={(i) => selectBubble(i)}
           onEditTranslation={(i, v) => editTr(i, "translated", v)}
+          onDrawHint={(m) => { drawHint = m; }}
           onChange={(nb) => { bubbles = nb; dirty = true; drawHint = ""; }}
         />
       </div>

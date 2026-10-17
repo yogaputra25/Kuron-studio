@@ -9,7 +9,7 @@ import canvasSrc from "./CanvasEditor.svelte?raw";
 describe("in-bubble edit (§1 canvas)", () => {
   it("props onEditTranslation opsional, default mati (Before aman)", () => {
     expect(canvasSrc).toContain("onEditTranslation?: (i: number, value: string) => void");
-    expect(canvasSrc).toMatch(/onEditTranslation, onDrawHint \}: Props/);
+    expect(canvasSrc).toMatch(/onEditTranslation, onDrawHint, onToolDone \}: Props/);
     // Editor hanya dibuka bila kabel dipasang.
     expect(canvasSrc).toMatch(/if \(!showTranslation \|\| !onEditTranslation\) return;/);
   });
