@@ -103,6 +103,21 @@ const STR: Record<string, Record<Lang, string>> = {
   expandSidebar: { en: "Expand sidebar", id: "Bentangkan sidebar", zh: "展开侧边栏" },
   sheetHandle: { en: "Drag to resize panel", id: "Geser untuk ubah ukuran panel", zh: "拖动调整面板大小" },
   shrinkSheet: { en: "Shrink panel", id: "Kecilkan panel", zh: "缩小面板" },
+  dashboard: { en: "Dashboard", id: "Dashboard", zh: "总览" },
+  openProject: { en: "Open", id: "Buka", zh: "打开" },
+  backToLibrary: { en: "Library", id: "Library", zh: "文库" },
+  newFolder: { en: "New folder", id: "Folder baru", zh: "新建文件夹" },
+  folderName: { en: "Folder name…", id: "Nama folder…", zh: "文件夹名称…" },
+  allFolders: { en: "All", id: "Semua", zh: "全部" },
+  kanbanTodo: { en: "Todo", id: "Belum", zh: "待办" },
+  kanbanDoing: { en: "Doing", id: "Proses", zh: "进行中" },
+  kanbanDone: { en: "Done", id: "Sudah", zh: "已完成" },
+  kanbanFailed: { en: "Failed", id: "Gagal", zh: "失败" },
+  remainingTodo: { en: "todo left", id: "sisa todo", zh: "剩余待办" },
+  lastWorked: { en: "Last worked", id: "Terakhir", zh: "上次" },
+  deleteFolder: { en: "Delete folder", id: "Hapus folder", zh: "删除文件夹" },
+  confirmDeleteFolder: { en: "Delete this folder?", id: "Hapus folder ini?", zh: "删除此文件夹？" },
+  moveToFolder: { en: "Move", id: "Pindah", zh: "移动" },
 };
 
 export const t = derived(lang, ($l) => (k: string): string => STR[k]?.[$l] ?? k);

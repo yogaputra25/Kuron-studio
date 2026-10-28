@@ -69,8 +69,7 @@ pub fn share_project(
         .ok_or_else(|| format!("project not found: {project_id}"))?
         .clone();
     drop(store);
-    let mut pages = proj.pages.clone();
-    pages.sort_by(|a, b| a.path.cmp(&b.path));
+    let pages = proj.sorted_all_pages();
     let manifest = serde_json::to_vec_pretty(&proj).map_err(|e| e.to_string())?;
     let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
     zip.start_file("project.json", zip::write::SimpleFileOptions::default())

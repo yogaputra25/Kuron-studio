@@ -47,7 +47,22 @@ const KEYS = [
   "expandSidebar",
   "sheetHandle",
   "shrinkSheet",
-] as const;
+  "dashboard",
+  "openProject",
+  "backToLibrary",
+  "newFolder",
+  "folderName",
+  "allFolders",
+  "kanbanTodo",
+  "kanbanDoing",
+  "kanbanDone",
+  "kanbanFailed",
+  "remainingTodo",
+  "lastWorked",
+  "deleteFolder",
+  "confirmDeleteFolder",
+  "moveToFolder",
+];
 
 const LANGS: Lang[] = ["en", "id", "zh"];
 

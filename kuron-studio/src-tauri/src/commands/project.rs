@@ -74,26 +74,138 @@ pub enum PageStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ChapterFolder {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub pages: Vec<Page>,
+    /// Epoch seconds; 0 = unknown (old data).
+    #[serde(default)]
+    pub created_at: i64,
+}
+
+impl ChapterFolder {
+    pub fn new(name: String) -> Self {
+        Self { id: Uuid::new_v4().to_string(), name, pages: Vec::new(), created_at: now_epoch() }
+    }
+}
+
+pub(crate) fn now_epoch() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+pub const DEFAULT_FOLDER_NAME: &str = "default";
+
+ #[derive(Debug, Clone, Serialize, Deserialize)]
+ #[serde(rename_all = "camelCase")]
 pub struct Project {
     pub id: String,
     pub name: String,
-    pub pages: Vec<Page>,
-}
+    /// Folder/chapter dalam project. Mode A (simple) = 1 folder `default`.
+    #[serde(default)]
+    pub folders: Vec<ChapterFolder>,
+    /// Epoch seconds terakhir dimodifikasi (import/detect/translate/folder).
+    #[serde(default)]
+    pub updated_at: i64,
+    /// Kompat baca: projects.json lama `{ pages[] }` tanpa `folders`.
+    /// Tidak diserialisasi — sekali load langsung dimigrasi ke folders.
+    #[serde(default, rename = "pages", skip_serializing)]
+    legacy_pages: Vec<Page>,
+ }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ImportResult {
-    pub pages: Vec<Page>,
-    pub skipped: usize,
-}
+impl Project {
+    pub fn new(name: String) -> Self {
+        let now = now_epoch();
+        let mut default = ChapterFolder::new(DEFAULT_FOLDER_NAME.to_string());
+        default.created_at = now;
+        Self { id: Uuid::new_v4().to_string(), name, folders: vec![default], updated_at: now, legacy_pages: Vec::new() }
+    }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectStore {
-    #[serde(skip)]
-    dir: PathBuf,
-    pub projects: HashMap<String, Project>,
+    /// Migrasi in-memory: flat lama -> 1 folder `default`. Idempoten.
+    pub fn migrate_legacy(&mut self) -> bool {
+        if !self.legacy_pages.is_empty() {
+            if self.folders.is_empty() {
+                let mut f = ChapterFolder::new(DEFAULT_FOLDER_NAME.to_string());
+                f.pages = std::mem::take(&mut self.legacy_pages);
+                self.folders.push(f);
+            } else {
+                // Data campuran (seharusnya tak terjadi): tempel ke folder pertama.
+                let extra = std::mem::take(&mut self.legacy_pages);
+                if let Some(first) = self.folders.first_mut() {
+                    first.pages.extend(extra);
+                }
+            }
+            if self.updated_at == 0 { self.updated_at = now_epoch(); }
+            return true;
+        }
+        if self.folders.is_empty() {
+            self.folders.push(ChapterFolder::new(DEFAULT_FOLDER_NAME.to_string()));
+            return true;
+        }
+        false
+    }
+
+    pub fn all_pages(&self) -> Vec<&Page> {
+        self.folders.iter().flat_map(|f| f.pages.iter()).collect()
+    }
+
+    pub fn all_pages_mut(&mut self) -> Vec<&mut Page> {
+        self.folders.iter_mut().flat_map(|f| f.pages.iter_mut()).collect()
+    }
+
+    pub fn sorted_all_pages(&self) -> Vec<Page> {
+        let mut out: Vec<Page> = self.folders.iter().flat_map(|f| f.pages.clone()).collect();
+        out.sort_by(|a, b| a.path.cmp(&b.path));
+        out
+    }
+
+    pub fn folder(&self, folder_id: &str) -> Option<&ChapterFolder> {
+        self.folders.iter().find(|f| f.id == folder_id)
+    }
+
+    pub fn folder_mut(&mut self, folder_id: &str) -> Option<&mut ChapterFolder> {
+        self.folders.iter_mut().find(|f| f.id == folder_id)
+    }
+
+    /// Folder tujuan import: id eksplisit > folder `default` > folder pertama > buat baru.
+    pub fn resolve_folder_mut(&mut self, folder_id: Option<&str>) -> &mut ChapterFolder {
+        if let Some(want) = folder_id.filter(|s| !s.is_empty()) {
+            if self.folders.iter().any(|f| f.id == want) {
+                return self.folders.iter_mut().find(|f| f.id == want).expect("checked");
+            }
+        }
+        if let Some(i) = self.folders.iter().position(|f| f.name == DEFAULT_FOLDER_NAME) {
+            return &mut self.folders[i];
+        }
+        if self.folders.is_empty() {
+            self.folders.push(ChapterFolder::new(DEFAULT_FOLDER_NAME.to_string()));
+        }
+        &mut self.folders[0]
+    }
+
+    pub fn touch(&mut self) {
+        self.updated_at = now_epoch();
+    }
 }
+ 
+ #[derive(Debug, Clone, Serialize)]
+ #[serde(rename_all = "camelCase")]
+ pub struct ImportResult {
+     pub pages: Vec<Page>,
+     pub skipped: usize,
+    pub folder_id: String,
+ }
+ 
+ #[derive(Debug, Default, Serialize, Deserialize)]
+ #[serde(rename_all = "camelCase")]
+ pub struct ProjectStore {
+     #[serde(skip)]
+     dir: PathBuf,
+     pub projects: HashMap<String, Project>,
+ }
 
 impl ProjectStore {
     pub fn load(dir: PathBuf) -> Result<Self, String> {
@@ -109,6 +221,13 @@ impl ProjectStore {
         let mut store: ProjectStore =
             serde_json::from_str(&raw).map_err(|e| format!("projects.json corrupt: {e}"))?;
         store.dir = dir;
+        // Migrasi #7: flat lama { pages[] } -> folders [default]. Idempoten,
+        // disimpan langsung supaya file di disk ikut bentuk baru.
+        let mut migrated = false;
+        for proj in store.projects.values_mut() {
+            if proj.migrate_legacy() { migrated = true; }
+        }
+        if migrated { let _ = store.save(); }
         Ok(store)
     }
 
@@ -125,6 +244,39 @@ impl ProjectStore {
         self.projects
             .get_mut(project_id)
             .ok_or_else(|| format!("project not found: {project_id}"))
+    }
+
+    /// Cari halaman di semua project/folder. Mengembalikan path saja (read-only).
+    pub fn page_path(&self, page_id: &str) -> Option<String> {
+        self.projects.values()
+            .flat_map(|p| p.folders.iter())
+            .flat_map(|f| f.pages.iter())
+            .find(|pg| pg.id == page_id)
+            .map(|pg| pg.path.clone())
+    }
+
+    /// Cari halaman mutable + touch project pemiliknya. Dipakai detect/translate.
+    pub fn find_page_mut(&mut self, page_id: &str) -> Option<&mut Page> {
+        for proj in self.projects.values_mut() {
+            let found = proj.folders.iter().any(|f| f.pages.iter().any(|pg| pg.id == page_id));
+            if found {
+                proj.touch();
+                for folder in proj.folders.iter_mut() {
+                    if let Some(pos) = folder.pages.iter().position(|pg| pg.id == page_id) {
+                        return Some(&mut folder.pages[pos]);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    pub fn find_page(&self, page_id: &str) -> Option<Page> {
+        self.projects.values()
+            .flat_map(|p| p.folders.iter())
+            .flat_map(|f| f.pages.iter())
+            .find(|pg| pg.id == page_id)
+            .cloned()
     }
 }
 
@@ -584,14 +736,77 @@ pub fn create_project(name: String, state: State<'_, AppState>) -> Result<Projec
         return Err("project name is empty".to_string());
     }
     let mut store = state.store.lock().map_err(|e| e.to_string())?;
-    let project = Project {
-        id: Uuid::new_v4().to_string(),
-        name,
-        pages: Vec::new(),
-    };
+    let project = Project::new(name);
     store.projects.insert(project.id.clone(), project.clone());
     store.save()?;
     Ok(project)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn create_folder(project_id: String, name: String, state: State<'_, AppState>) -> Result<ChapterFolder, String> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("folder name is empty".to_string());
+    }
+    let mut store = state.store.lock().map_err(|e| e.to_string())?;
+    let project = store.get_mut(&project_id)?;
+    if project.folders.iter().any(|f| f.name == name) {
+        return Err(format!("folder sudah ada: {name}"));
+    }
+    let folder = ChapterFolder::new(name);
+    let out = folder.clone();
+    project.folders.push(folder);
+    project.folders.sort_by(|a, b| a.name.cmp(&b.name));
+    project.touch();
+    store.save()?;
+    Ok(out)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn rename_folder(project_id: String, folder_id: String, name: String, state: State<'_, AppState>) -> Result<ChapterFolder, String> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("folder name is empty".to_string());
+    }
+    let mut store = state.store.lock().map_err(|e| e.to_string())?;
+    let project = store.get_mut(&project_id)?;
+    if project.folders.iter().any(|f| f.name == name && f.id != folder_id) {
+        return Err(format!("folder sudah ada: {name}"));
+    }
+    let folder = project.folder_mut(&folder_id).ok_or_else(|| format!("folder not found: {folder_id}"))?;
+    folder.name = name;
+    let out = folder.clone();
+    project.folders.sort_by(|a, b| a.name.cmp(&b.name));
+    project.touch();
+    store.save()?;
+    Ok(out)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn delete_folder(project_id: String, folder_id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let mut store = state.store.lock().map_err(|e| e.to_string())?;
+    let store_dir = store.dir.clone();
+    let doomed: Vec<String>;
+    {
+        let project = store.get_mut(&project_id)?;
+        if project.folders.len() <= 1 {
+            return Err("tidak bisa hapus folder terakhir; hapus project saja".to_string());
+        }
+        let idx = project.folders.iter().position(|f| f.id == folder_id).ok_or_else(|| format!("folder not found: {folder_id}"))?;
+        let removed = project.folders.remove(idx);
+        doomed = removed.pages.into_iter().map(|p| p.path).collect();
+        project.touch();
+    }
+    let mut removed_files = 0;
+    for p in &doomed {
+        let path = Path::new(p);
+        if is_inside_store(&store_dir, path) && path.is_file() && fs::remove_file(path).is_ok() {
+            removed_files += 1;
+        }
+    }
+    let _ = removed_files;
+    store.save()?;
+    Ok(())
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -642,6 +857,7 @@ pub fn import_pages(
     project_id: String,
     paths: Vec<String>,
     state: State<'_, AppState>,
+    folder_id: Option<String>,
 ) -> Result<ImportResult, String> {
     let mut store = state.store.lock().map_err(|e| e.to_string())?;
     let store_dir = store.dir.clone();
@@ -663,10 +879,13 @@ pub fn import_pages(
         }
     }
     let project = store.get_mut(&project_id)?;
-    project.pages.extend(pages.clone());
-    project.pages.sort_by(|a, b| a.path.cmp(&b.path));
+    let folder = project.resolve_folder_mut(folder_id.as_deref());
+    let fid = folder.id.clone();
+    folder.pages.extend(pages.clone());
+    folder.pages.sort_by(|a, b| a.path.cmp(&b.path));
+    project.touch();
     store.save()?;
-    Ok(ImportResult { pages, skipped })
+    Ok(ImportResult { pages, skipped, folder_id: fid })
 }
 
 /// Halaman bisa dibaca = file ada dan decoder bisa ambil dimensi.
@@ -695,21 +914,32 @@ pub struct CleanResult {
 }
 
 pub fn clean_pages_inner(store: &mut ProjectStore, project_id: &str) -> Result<CleanResult, String> {
+    clean_pages_inner_scoped(store, project_id, None)
+}
+
+pub fn clean_pages_inner_scoped(store: &mut ProjectStore, project_id: &str, folder_id: Option<&str>) -> Result<CleanResult, String> {
     let store_dir = store.dir.clone();
     let mut doomed = Vec::new();
+    let kept: usize;
     {
         let project = store.get_mut(project_id)?;
-        project.pages.retain(|pg| {
-            if is_page_readable(&pg.path) {
-                true
-            } else {
-                doomed.push(pg.path.clone());
-                false
+        if let Some(want) = folder_id.filter(|s| !s.is_empty()) {
+            let folder = project.folder_mut(want).ok_or_else(|| format!("folder not found: {want}"))?;
+            folder.pages.retain(|pg| {
+                if is_page_readable(&pg.path) { true } else { doomed.push(pg.path.clone()); false }
+            });
+            kept = folder.pages.len();
+        } else {
+            for folder in project.folders.iter_mut() {
+                folder.pages.retain(|pg| {
+                    if is_page_readable(&pg.path) { true } else { doomed.push(pg.path.clone()); false }
+                });
             }
-        });
+            kept = project.folders.iter().map(|f| f.pages.len()).sum();
+        }
+        project.touch();
     }
     let removed = doomed.len();
-    let kept = store.projects[project_id].pages.len();
     let mut removed_files = 0;
     for p in &doomed {
         let path = Path::new(p);
@@ -722,9 +952,38 @@ pub fn clean_pages_inner(store: &mut ProjectStore, project_id: &str) -> Result<C
 }
 
 #[tauri::command(rename_all = "snake_case")]
-pub fn clean_pages(project_id: String, state: State<'_, AppState>) -> Result<CleanResult, String> {
+pub fn clean_pages(project_id: String, state: State<'_, AppState>, folder_id: Option<String>) -> Result<CleanResult, String> {
     let mut store = state.store.lock().map_err(|e| e.to_string())?;
-    clean_pages_inner(&mut store, &project_id)
+    clean_pages_inner_scoped(&mut store, &project_id, folder_id.as_deref())
+}
+
+/// Pindah halaman antar folder dalam project yang sama (organize Mode A -> B).
+#[tauri::command(rename_all = "snake_case")]
+pub fn move_pages(project_id: String, page_ids: Vec<String>, folder_id: String, state: State<'_, AppState>) -> Result<usize, String> {
+    let mut store = state.store.lock().map_err(|e| e.to_string())?;
+    let project = store.get_mut(&project_id)?;
+    if !project.folders.iter().any(|f| f.id == folder_id) {
+        return Err(format!("folder not found: {folder_id}"));
+    }
+    let mut moving: Vec<Page> = Vec::new();
+    for folder in project.folders.iter_mut() {
+        if folder.id == folder_id { continue; }
+        let mut keep = Vec::new();
+        for pg in folder.pages.drain(..) {
+            if page_ids.contains(&pg.id) { moving.push(pg); } else { keep.push(pg); }
+        }
+        folder.pages = keep;
+    }
+    let n = moving.len();
+    if n == 0 {
+        return Err("tidak ada halaman yang dipindah (id salah / sudah di folder tujuan)".to_string());
+    }
+    let dest = project.folder_mut(&folder_id).expect("checked");
+    dest.pages.extend(moving);
+    dest.pages.sort_by(|a, b| a.path.cmp(&b.path));
+    project.touch();
+    store.save()?;
+    Ok(n)
 }
 
 /// Hapus project + folder ekstraksi miliknya. File gambar asli user di luar
@@ -913,22 +1172,18 @@ mod tests {
         fs::write(&junk_a, b"\x00\x05\x16\x07\x00\x02\x00\x00Mac ").unwrap();
         fs::write(&junk_b, b"\x00\x05\x16\x07\x00\x02\x00\x00Mac ").unwrap();
 
-        store.projects.insert(
-            "proj".to_string(),
-            Project {
-                id: "proj".to_string(),
-                name: "t".to_string(),
-                pages: vec![stub_page("g", &good), stub_page("a", &junk_a), stub_page("b", &junk_b)],
-            },
-        );
+        let mut proj = Project::new("t".to_string());
+        proj.id = "proj".to_string();
+        proj.folders[0].pages = vec![stub_page("g", &good), stub_page("a", &junk_a), stub_page("b", &junk_b)];
+        store.projects.insert("proj".to_string(), proj);
 
         let res = clean_pages_inner(&mut store, "proj").unwrap();
         assert_eq!((res.removed, res.kept, res.removed_files), (2, 1, 2));
         assert!(good.exists(), "gambar valid tidak boleh terhapus");
         assert!(!junk_a.exists() && !junk_b.exists());
         let reloaded = ProjectStore::load(dir.clone()).unwrap();
-        assert_eq!(reloaded.projects["proj"].pages.len(), 1);
-        assert_eq!(reloaded.projects["proj"].pages[0].id, "g");
+        assert_eq!(reloaded.projects["proj"].sorted_all_pages().len(), 1);
+        assert_eq!(reloaded.projects["proj"].sorted_all_pages()[0].id, "g");
         fs::remove_dir_all(&dir).ok();
     }
 
@@ -941,14 +1196,10 @@ mod tests {
         fs::write(&outside, b"\x00\x05\x16\x07Mac ").unwrap();
         let dir = temp_dir("kuron-studio-keep");
         let mut store = ProjectStore::load(dir.clone()).unwrap();
-        store.projects.insert(
-            "proj".to_string(),
-            Project {
-                id: "proj".to_string(),
-                name: "t".to_string(),
-                pages: vec![stub_page("x", &outside)],
-            },
-        );
+        let mut proj = Project::new("t".to_string());
+        proj.id = "proj".to_string();
+        proj.folders[0].pages = vec![stub_page("x", &outside)];
+        store.projects.insert("proj".to_string(), proj);
         let res = clean_pages_inner(&mut store, "proj").unwrap();
         assert_eq!((res.removed, res.removed_files), (1, 0));
         assert!(outside.exists(), "file user di luar store dir harus aman");
@@ -1022,17 +1273,14 @@ mod tests {
             }],
             translation: None,
         };
-        store.projects.insert(
-            "proj".to_string(),
-            Project {
-                id: "proj".to_string(),
-                name: "t".to_string(),
-                pages: vec![page],
-            },
-        );
+        let mut proj = Project::new("t".to_string());
+        proj.id = "proj".to_string();
+        proj.folders[0].pages = vec![page];
+        store.projects.insert("proj".to_string(), proj);
         store.save().unwrap();
         let reloaded = ProjectStore::load(dir).unwrap();
-        let pg = &reloaded.projects["proj"].pages[0];
+        let all_pages = reloaded.projects["proj"].sorted_all_pages();
+        let pg = &all_pages[0];
         assert_eq!(pg.bubbles.len(), 1);
         assert_eq!(pg.bubbles[0].shape.as_ref().unwrap().len(), 3);
         assert_eq!(pg.bubbles[0].tail.as_ref().unwrap().len(), 2);

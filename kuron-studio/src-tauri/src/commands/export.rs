@@ -498,6 +498,7 @@ pub fn render_page_png(
 pub fn collect_pages(
     state: &State<'_, AppState>,
     project_id: &str,
+    folder_id: Option<&str>,
 ) -> Result<Vec<(String, Vec<u8>)>, String> {
     let store = state.store.lock().map_err(|e| e.to_string())?;
     let proj = store
@@ -506,8 +507,17 @@ pub fn collect_pages(
         .ok_or_else(|| format!("project not found: {project_id}"))?
         .clone();
     drop(store);
-    let mut pages = proj.pages;
-    pages.sort_by(|a, b| a.path.cmp(&b.path));
+    let pages = match folder_id.filter(|s| !s.is_empty()) {
+        Some(fid) => {
+            let folder = proj
+                .folder(fid)
+                .ok_or_else(|| format!("folder not found: {fid}"))?;
+            let mut p = folder.pages.clone();
+            p.sort_by(|a, b| a.path.cmp(&b.path));
+            p
+        }
+        None => proj.sorted_all_pages(),
+    };
     let mut out = Vec::new();
     for (i, pg) in pages.iter().enumerate() {
         let Some(t) = pg.translation.clone() else {
@@ -528,6 +538,7 @@ pub fn collect_pages(
 pub fn export_json_bytes(
     state: &State<'_, AppState>,
     project_id: &str,
+    folder_id: Option<&str>,
 ) -> Result<Vec<u8>, String> {
     let store = state.store.lock().map_err(|e| e.to_string())?;
     let proj = store
@@ -535,8 +546,17 @@ pub fn export_json_bytes(
         .get(project_id)
         .ok_or_else(|| format!("project not found: {project_id}"))?
         .clone();
-    let mut pages = proj.pages;
-    pages.sort_by(|a, b| a.path.cmp(&b.path));
+    let pages = match folder_id.filter(|s| !s.is_empty()) {
+        Some(fid) => {
+            let folder = proj
+                .folder(fid)
+                .ok_or_else(|| format!("folder not found: {fid}"))?;
+            let mut p = folder.pages.clone();
+            p.sort_by(|a, b| a.path.cmp(&b.path));
+            p
+        }
+        None => proj.sorted_all_pages(),
+    };
     let ts: Vec<&PageTranslation> = pages.iter().filter_map(|p| p.translation.as_ref()).collect();
     serde_json::to_vec_pretty(&ts).map_err(|e| e.to_string())
 }
@@ -544,8 +564,9 @@ pub fn export_json_bytes(
 pub fn export_cbz_bytes(
     state: &State<'_, AppState>,
     project_id: &str,
+    folder_id: Option<&str>,
 ) -> Result<Vec<u8>, String> {
-    let pages = collect_pages(state, project_id)?;
+    let pages = collect_pages(state, project_id, folder_id)?;
     let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
     for (name, png) in &pages {
         zip.start_file(name, zip::write::SimpleFileOptions::default())
@@ -563,15 +584,17 @@ pub fn export_project(
     project_id: String,
     format: String,
     path: String,
+    folder_id: Option<String>,
 ) -> Result<String, String> {
+    let fid = folder_id.as_deref();
     match format.as_str() {
         "json" => {
-            let bytes = export_json_bytes(&state, &project_id)?;
+            let bytes = export_json_bytes(&state, &project_id, fid)?;
             std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
             Ok(path)
         }
         "png" => {
-            let pages = collect_pages(&state, &project_id)?;
+            let pages = collect_pages(&state, &project_id, fid)?;
             std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
             for (name, png) in &pages {
                 let f = std::path::Path::new(&path).join(name);
@@ -580,7 +603,7 @@ pub fn export_project(
             Ok(path)
         }
         "cbz" => {
-            let bytes = export_cbz_bytes(&state, &project_id)?;
+            let bytes = export_cbz_bytes(&state, &project_id, fid)?;
             std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
             Ok(path)
         }
@@ -593,8 +616,17 @@ pub fn export_project(
                 .ok_or_else(|| format!("project not found: {project_id}"))?
                 .clone();
             drop(store);
-            let mut pages = proj.pages;
-            pages.sort_by(|a, b| a.path.cmp(&b.path));
+            let pages = match fid.filter(|s| !s.is_empty()) {
+                Some(fid) => {
+                    let folder = proj
+                        .folder(fid)
+                        .ok_or_else(|| format!("folder not found: {fid}"))?;
+                    let mut p = folder.pages.clone();
+                    p.sort_by(|a, b| a.path.cmp(&b.path));
+                    p
+                }
+                None => proj.sorted_all_pages(),
+            };
             std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
             let mut n = 0;
             for (i, pg) in pages.iter().enumerate() {

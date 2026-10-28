@@ -21,10 +21,22 @@ export interface Page {
   translation?: PageTranslation | null;
 }
 
-export interface Project {
+export interface ChapterFolder {
   id: string;
   name: string;
   pages: Page[];
+  createdAt?: number;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  /** Folder/chapter. Mode A (simple) = 1 folder `default`. */
+  folders: ChapterFolder[];
+  /** Epoch seconds terakhir dimodifikasi. */
+  updatedAt?: number;
+  /** Kompat baca: projects.json lama flat. Jangan dipakai kode baru. */
+  pages?: Page[];
 }
 
 // --- M0: import contract (values, bukan type) ---
@@ -53,6 +65,7 @@ export const PDF_EXTS = ["pdf"] as const;
 export interface ImportResult {
   pages: Page[];
   skipped: number;
+  folderId: string;
 }
 
 /** Mirror Rust `CleanResult` — hasil `clean_pages`. */

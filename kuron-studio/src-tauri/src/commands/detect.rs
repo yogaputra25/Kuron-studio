@@ -145,13 +145,7 @@ pub fn save_bubbles(
 
 fn page_path_of(state: &State<'_, AppState>, page_id: &str) -> Result<String, String> {
     let store = state.store.lock().map_err(|e| e.to_string())?;
-    store
-        .projects
-        .values()
-        .flat_map(|p| p.pages.iter())
-        .find(|pg| pg.id == page_id)
-        .map(|pg| pg.path.clone())
-        .ok_or_else(|| format!("page not found: {page_id}"))
+    store.page_path(page_id).ok_or_else(|| format!("page not found: {page_id}"))
 }
 
 fn persist_bubbles(
@@ -160,12 +154,7 @@ fn persist_bubbles(
     cleaned: Vec<BubbleBox>,
 ) -> Result<Vec<BubbleBox>, String> {
     let mut store = state.store.lock().map_err(|e| e.to_string())?;
-    let page = store
-        .projects
-        .values_mut()
-        .flat_map(|p| p.pages.iter_mut())
-        .find(|pg| pg.id == page_id)
-        .ok_or_else(|| format!("page not found: {page_id}"))?;
+    let page = store.find_page_mut(page_id).ok_or_else(|| format!("page not found: {page_id}"))?;
     page.bubbles = cleaned.clone();
     page.status = if cleaned.is_empty() {
         crate::commands::project::PageStatus::NoBubbles
@@ -179,12 +168,7 @@ fn persist_bubbles(
 fn set_page_status(state: State<'_, AppState>, page_id: &str, status: &str) -> Result<(), String> {
     use crate::commands::project::PageStatus as S;
     let mut store = state.store.lock().map_err(|e| e.to_string())?;
-    let page = store
-        .projects
-        .values_mut()
-        .flat_map(|p| p.pages.iter_mut())
-        .find(|pg| pg.id == page_id)
-        .ok_or_else(|| format!("page not found: {page_id}"))?;
+    let page = store.find_page_mut(page_id).ok_or_else(|| format!("page not found: {page_id}"))?;
     page.status = match status {
         "detecting" => S::Detecting,
         "idle" => S::Idle,
