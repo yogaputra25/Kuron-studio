@@ -16,3 +16,6 @@ target/
 !kuron-studio/src-tauri/resources/models/bubble.onnx
 # Xcode project hasil `tauri ios init` — generated per mesin (signing team lokal)
 kuron-studio/src-tauri/gen/apple/
+.claude/*
+.opencode/*
+.agents/*

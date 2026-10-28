@@ -29,6 +29,9 @@
   let folderId = $state<string | "all">("all");
   let kanban = $state<"all" | "todo" | "doing" | "done" | "failed">("all");
   let folderName = $state("");
+  let showProjMenu = $state(false);
+  let projQuery = $state("");
+  let menuName = $state("");
   let thumbs = $state<Record<string, string>>({});
   let fullUrls = $state<Record<string, string>>({});
   let selectedId = $state<string | null>(null);
@@ -84,6 +87,11 @@
   /** Halaman yang preview-nya gagal → jumlah tombol "Bersihkan". */
   const brokenCount = $derived(Object.keys(broken).length);
   const fileName = (path: string) => path.split(/[/\\]/).pop() ?? path;
+  const filteredProjects = $derived(
+    projQuery.trim()
+      ? projects.filter((p) => p.name.toLowerCase().includes(projQuery.trim().toLowerCase()))
+      : projects,
+  );
 
   async function refresh() {
     try {
@@ -257,13 +265,17 @@
     }
   }
 
-  async function createProject() {
-    const n = name.trim();
+  async function createProject(explicit?: string) {
+    const n = (explicit ?? name).trim();
     if (!n) return;
     busy = true;
+    error = "";
     try {
       const p = await api.createProject(n);
       name = "";
+      menuName = "";
+      showProjMenu = false;
+      projQuery = "";
       projects = [...projects, p];
       currentId = p.id;
       folderId = "all";
@@ -274,6 +286,12 @@
     } finally {
       busy = false;
     }
+  }
+
+  function pickProject(id: string) {
+    showProjMenu = false;
+    projQuery = "";
+    openProject(id);
   }
 
   async function doImport(paths: string[]) {
@@ -436,18 +454,79 @@
     <h1 class="font-display shrink-0 text-base font-semibold tracking-tight">Kuron Studio</h1>
     <div class="h-5 w-px shrink-0 bg-line" aria-hidden="true"></div>
     {#if projects.length > 0}
-      <select
-        class="tnum h-8 max-w-56 rounded-md border border-line bg-surface-2 px-2 text-sm text-ink
-               outline-none transition-colors hover:border-line-strong focus:border-accent"
-        bind:value={currentId}
-        onchange={() => currentId && openProject(currentId)}
+      {@const cur = current}
+      {@const curSt = cur ? projectStats(cur) : null}
+      <div
+        class="relative"
+        onfocusout={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) showProjMenu = false; }}
       >
-        {#each projects as p (p.id)}
-          {@const st = projectStats(p)}
-          <option value={p.id}>{p.name} · {st.done}/{st.total}</option>
-        {/each}
-      </select>
-      <span class="tnum text-xs text-ink-3">{current ? projectStats(current).total : 0} {$t("pages")}</span>
+        <button
+          class="flex h-8 max-w-64 items-center gap-2 rounded-md border border-line bg-surface-2 px-2.5 text-sm text-ink
+                 outline-none transition-colors hover:border-line-strong focus:border-accent"
+          aria-haspopup="listbox"
+          aria-expanded={showProjMenu}
+          aria-label={$t("selectProject")}
+          onclick={() => (showProjMenu = !showProjMenu)}
+          onkeydown={(e) => { if (e.key === "Escape") showProjMenu = false; }}
+        >
+          <span class="min-w-0 flex-1 truncate text-left">{cur?.name ?? "—"}</span>
+          {#if curSt}
+            <span class="tnum shrink-0 text-[11px] text-ink-3">{curSt.done}/{curSt.total}</span>
+            <span class="h-1 w-12 shrink-0 overflow-hidden rounded bg-raised" aria-hidden="true">
+              <span class="block h-full rounded bg-accent" style="width: {Math.round(curSt.progress * 100)}%"></span>
+            </span>
+          {/if}
+          <span class="shrink-0 text-[10px] text-ink-3" aria-hidden="true">{showProjMenu ? "▴" : "▾"}</span>
+        </button>
+        {#if showProjMenu}
+          <div
+            class="absolute left-0 top-full z-50 mt-1 w-72 overflow-hidden rounded-md border border-line-strong bg-surface-2 py-1"
+            role="listbox"
+            aria-label={$t("projectList")}
+          >
+            <div class="px-1 pb-1">
+              <input
+                class="h-8 w-full rounded border border-line bg-surface px-2 text-xs text-ink
+                       placeholder:text-ink-3 outline-none focus:border-accent"
+                placeholder={$t("searchProject")}
+                aria-label={$t("searchProject")}
+                bind:value={projQuery}
+                onkeydown={(e) => { if (e.key === "Escape") showProjMenu = false; }}
+              />
+            </div>
+            <div class="max-h-64 overflow-y-auto py-0.5">
+              {#each filteredProjects as p (p.id)}
+                {@const st = projectStats(p)}
+                <button
+                  class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-raised {p.id === currentId ? 'bg-accent/10' : ''}"
+                  role="option"
+                  aria-selected={p.id === currentId}
+                  onclick={() => pickProject(p.id)}
+                  title="{p.name} · {st.done}/{st.total}"
+                >
+                  <span class="min-w-0 flex-1 truncate {p.id === currentId ? 'font-semibold' : ''}">{p.name}</span>
+                  <span class="tnum shrink-0 text-[11px] {st.failed > 0 ? 'text-danger' : 'text-ink-3'}">{st.done}/{st.total}</span>
+                </button>
+              {:else}
+                <p class="px-2.5 py-2 text-xs text-ink-3">{$t("noProjectMatch")}</p>
+              {/each}
+            </div>
+            <div class="border-t border-line p-1">
+              <form class="flex gap-1" onsubmit={(e) => { e.preventDefault(); void createProject(menuName); }}>
+                <input
+                  class="h-7 min-w-0 flex-1 rounded border border-line bg-surface px-2 text-xs text-ink
+                         placeholder:text-ink-3 outline-none focus:border-accent"
+                  placeholder={$t("projectName")}
+                  aria-label={$t("projectName")}
+                  bind:value={menuName}
+                />
+                <Button type="submit" variant="default" size="sm" disabled={busy || !menuName.trim()} title={$t("create")}>+</Button>
+              </form>
+            </div>
+          </div>
+        {/if}
+      </div>
+      <span class="tnum text-xs text-ink-3">{curSt ? curSt.total : 0} {$t("pages")}</span>
     {/if}
 
     <div class="ml-auto flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto sm:flex-none sm:flex-wrap sm:overflow-visible">
@@ -639,11 +718,13 @@
       </form>
     </section>
     <section class="flex flex-wrap items-center gap-1.5 px-5 pt-3" aria-label="kanban">
-      {#each [["all", allPages(current).length], ["todo", kanbanGroups.todo.length], ["doing", kanbanGroups.doing.length], ["done", kanbanGroups.done.length], ["failed", kanbanGroups.failed.length]] as [key, n]}
+      {#each [["all", allPages(current).length, "bg-ink-3"], ["todo", kanbanGroups.todo.length, "bg-warn"], ["doing", kanbanGroups.doing.length, "bg-info"], ["done", kanbanGroups.done.length, "bg-success"], ["failed", kanbanGroups.failed.length, "bg-danger"]] as [key, n, dot]}
         <button
-          class="tnum rounded-full border px-3 py-1 text-xs {kanban === key ? 'border-accent bg-accent/10 font-semibold' : 'border-line hover:border-accent/60'}"
+          class="tnum flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs {kanban === key ? 'border-accent bg-accent/10 font-semibold' : 'border-line hover:border-accent/60'}"
           onclick={() => (kanban = key as typeof kanban)}
+          aria-pressed={kanban === key}
         >
+          <span class="h-1.5 w-1.5 shrink-0 rounded-full {dot}" aria-hidden="true"></span>
           {key === "all" ? $t("allFolders") : $t(key === "todo" ? "kanbanTodo" : key === "doing" ? "kanbanDoing" : key === "done" ? "kanbanDone" : "kanbanFailed")} · {n}
         </button>
       {/each}
