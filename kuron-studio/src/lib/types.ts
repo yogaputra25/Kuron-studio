@@ -26,6 +26,8 @@ export interface ChapterFolder {
   name: string;
   pages: Page[];
   createdAt?: number;
+  /** Parent folder; null/undefined = root. */
+  parentId?: string | null;
 }
 
 export interface Project {
@@ -66,6 +68,12 @@ export interface ImportResult {
   pages: Page[];
   skipped: number;
   folderId: string;
+}
+
+/** Mirror Rust `MoveResult` — hasil `move_pages`. */
+export interface MoveResult {
+  moved: number;
+  skipped: number;
 }
 
 /** Mirror Rust `CleanResult` — hasil `clean_pages`. */

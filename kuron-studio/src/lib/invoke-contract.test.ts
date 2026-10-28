@@ -19,11 +19,12 @@ import apiSrc from "./api.ts?raw";
 const EXPECTED: Record<string, string[]> = {
   list_projects: [],
   create_project: ["name"],
+  create_sample_project: ["name"],
   get_project: ["project_id"],
   import_pages: ["project_id", "paths", "folder_id"],
   clean_pages: ["project_id", "folder_id"],
   delete_project: ["project_id"],
-  create_folder: ["project_id", "name"],
+  create_folder: ["project_id", "name", "parent_id"],
   rename_folder: ["project_id", "folder_id", "name"],
   delete_folder: ["project_id", "folder_id"],
   move_pages: ["project_id", "page_ids", "folder_id"],

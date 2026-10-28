@@ -32,8 +32,8 @@ use commands::glossary::{
 };
 use commands::image::get_image_preview;
 use commands::project::{
-    PageStatus, ProjectStore, clean_pages, create_folder, create_project, delete_folder,
-    delete_project, get_project, import_pages, list_projects, move_pages, rename_folder,
+    PageStatus, ProjectStore, clean_pages, create_folder, create_project, create_sample_project,
+    delete_folder, delete_project, get_project, import_pages, list_projects, move_pages, rename_folder,
 };
 use commands::provider::{
     delete_provider, get_providers, list_models, list_models_draft, save_provider, validate_provider,
@@ -150,6 +150,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_projects,
             create_project,
+            create_sample_project,
             get_project,
             import_pages,
             clean_pages,
