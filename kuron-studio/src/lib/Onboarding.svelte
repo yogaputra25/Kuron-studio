@@ -15,6 +15,8 @@
   let wstep = $state(0);
   let name = $state("");
 
+  const sampleCta = $derived(busy ? $t("running") : `${$t("onboardOptSampleT")} →`);
+  const createCta = $derived(busy ? $t("running") : $t("create"));
   const slides = [1, 2, 3, 4];
   const last = $derived(wstep === slides.length - 1);
 
@@ -55,7 +57,7 @@
           <b class="text-sm font-semibold">{$t("onboardOptSampleT")}</b>
           <small class="flex-1 text-xs leading-relaxed text-ink-2">{$t("onboardOptSampleD")}</small>
           <Button variant="primary" size="sm" onclick={onSample} disabled={busy}>
-            {$t("onboardOptSampleT")} →
+            {sampleCta}
           </Button>
         </div>
       </div>
@@ -123,7 +125,7 @@
             aria-label={$t("projectName")}
             bind:value={name}
           />
-          <Button type="submit" variant="primary" disabled={busy || !name.trim()}>{$t("create")}</Button>
+          <Button type="submit" variant="primary" disabled={busy || !name.trim()}>{createCta}</Button>
         </form>
       {/if}
       <div class="mt-4 flex items-center justify-between">

@@ -40,7 +40,10 @@ describe("onboarding choice + wizard", () => {
     expect(onbSrc).toContain('{$t("onboardNext")}');
   });
 
-  it("tanpa spinner standar", () => {
-    expect(onbSrc).not.toContain("animate-spin");
+  it("CTA kasih feedback saat sibuk + cegah double submit", () => {
+    expect(onbSrc).toContain("{sampleCta}");
+    expect(onbSrc).toContain("{createCta}");
+    expect(appSrc).toContain("if (busy || !n) return;");
+    expect(appSrc).toContain("if (busy) return;");
   });
 });
