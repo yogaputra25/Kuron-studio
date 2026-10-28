@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Onboarding — 4 varian</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d0d10; color: #ececf1; font: 13px/1.5 "Inter", system-ui, sans-serif; padding: 28px; }
+  h1 { font-size: 15px; margin-bottom: 4px; }
+  .sub { color: #71727d; font-size: 12px; margin-bottom: 24px; max-width: 720px; }
+  .v { margin-bottom: 30px; }
+  .v > .lab { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+  .v .n { font-family: monospace; color: #35e7f5; font-size: 12px; }
+  .v .t { font-size: 13px; font-weight: 600; }
+  .v .d { color: #71727d; font-size: 11.5px; }
+  .v .pro { color: #5fd99a; font-size: 11.5px; }
+  .v .kon { color: #ff8a7a; font-size: 11.5px; }
+  .stage { border: 1px solid #26262e; border-radius: 12px; background: #f5f3ef; padding: 36px 20px; display: flex; justify-content: center; }
+
+  /* ---- bahasa visual mock (tema terang app) ---- */
+  .mock { --bg: #f5f3ef; --surface: #fffdf9; --surface2: #efebe3; --ink: #221f1b; --ink2: #57534b; --ink3: #8a8478; --line: #ddd6c8; --ac: #c2543f; --acfg: #fff8f4; color: var(--ink); font: 13px/1.5 "Inter", system-ui, sans-serif; }
+  .mock .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 12px 40px #3a2f2614; }
+  .mock .kick { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; color: var(--ac); }
+  .mock h2 { font-size: 20px; letter-spacing: -.02em; font-weight: 700; }
+  .mock .lede { font-size: 12.5px; color: var(--ink2); }
+  .mock .btn { border: none; border-radius: 8px; font-size: 13px; font-weight: 600; padding: 10px 18px; cursor: pointer; }
+  .mock .btn.pri { background: var(--ac); color: var(--acfg); }
+  .mock .btn.gho { background: transparent; border: 1px solid var(--line); color: var(--ink2); }
+  .mock input { height: 40px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 0 12px; font-size: 13px; color: var(--ink); outline: none; }
+  .mock input:focus { border-color: var(--ac); }
+  .num { width: 22px; height: 22px; flex: none; border-radius: 50%; background: var(--ac); color: var(--acfg); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+
+  /* V1 kartu ilustrasi */
+  .v1 { width: 460px; padding: 28px 28px 24px; text-align: left; }
+  .v1 .art { border-radius: 10px; background: linear-gradient(135deg, #f0e4d4, #e4d5e2 60%, #d4e0ea); margin: 16px 0 18px; }
+  .v1 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 16px; }
+  .v1 .cell { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; gap: 10px; align-items: flex-start; background: var(--surface); }
+  .v1 .cell b { display: block; font-size: 12.5px; }
+  .v1 .cell small { color: var(--ink3); font-size: 11px; line-height: 1.45; display: block; }
+  .v1 form { display: flex; gap: 8px; margin-top: 18px; }
+  .v1 form input { flex: 1; min-width: 0; }
+
+  /* V2 split hero */
+  .v2 { width: 760px; display: grid; grid-template-columns: 1fr 300px; overflow: hidden; }
+  .v2 .left { padding: 30px 28px 26px; }
+  .v2 .steps { margin: 18px 0 20px; display: flex; flex-direction: column; }
+  .v2 .step { display: flex; gap: 12px; position: relative; padding-bottom: 16px; }
+  .v2 .step:last-child { padding-bottom: 0; }
+  .v2 .step::before { content: ""; position: absolute; left: 10px; top: 24px; bottom: 0; width: 2px; background: var(--line); }
+  .v2 .step:last-child::before { display: none; }
+  .v2 .step b { font-size: 13px; display: block; }
+  .v2 .step small { color: var(--ink2); font-size: 12px; }
+  .v2 .right { background: #221f1b; padding: 22px 18px; display: flex; flex-direction: column; gap: 10px; }
+  .v2 .shot { border-radius: 8px; background: #2e2a25; border: 1px solid #453e35; }
+  .v2 .cap { color: #b9b2a6; font-size: 11px; }
+  .v2 form { display: flex; gap: 8px; }
+  .v2 form input { flex: 1; min-width: 0; }
+
+  /* V3 wizard */
+  .v3 { width: 460px; padding: 28px; }
+  .v3 .dots { display: flex; gap: 6px; margin: 16px 0 4px; }
+  .v3 .dots i { height: 6px; border-radius: 3px; background: var(--line); flex: 1; cursor: pointer; }
+  .v3 .dots i.on { background: var(--ac); }
+  .v3 .slide { display: none; }
+  .v3 .slide.on { display: block; animation: fade .25s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px); } }
+  .v3 .art { border-radius: 10px; margin: 14px 0; background: var(--surface2); display: flex; align-items: center; justify-content: center; height: 150px; }
+  .v3 .nav { display: flex; justify-content: space-between; margin-top: 18px; }
+  .v3 form { display: flex; gap: 8px; margin-top: 14px; }
+  .v3 form input { flex: 1; min-width: 0; }
+
+  /* V4 dual CTA + sample */
+  .v4 { width: 620px; padding: 30px 28px 26px; text-align: center; }
+  .v4 .art { margin: 6px auto 4px; display: block; }
+  .v4 .opts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; text-align: left; }
+  .v4 .opt { border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 6px; background: var(--surface); }
+  .v4 .opt.hot { border-color: var(--ac); box-shadow: 0 0 0 1px var(--ac); }
+  .v4 .opt b { font-size: 13.5px; }
+  .v4 .opt small { color: var(--ink2); font-size: 12px; flex: 1; }
+  .v4 .tag { align-self: flex-start; font-size: 10px; font-weight: 700; background: var(--ac); color: var(--acfg); border-radius: 20px; padding: 2px 8px; }
+  .v4 form { display: flex; gap: 8px; margin-top: 10px; }
+  .v4 form input { flex: 1; min-width: 0; height: 38px; }
+</style>
+</head>
+<body>
+<h1>Onboarding — 4 varian</h1>
+<p class="sub">Mock layar kosong (0 project), tema terang. V3 wizard bisa diklik (titik / Lanjut / Kembali). Pilih 1 untuk diimplementasikan ke <code>App.svelte</code>; string tetap lewat <code>i18n.ts</code>.</p>
+
+<!-- ============ V1 ============ -->
+<div class="v">
+  <div class="lab"><span class="n">V1</span><span class="t">Kartu ilustrasi</span><span class="d">Evolusi layar sekarang: ilustrasi besar + 4 langkah 2×2 + form.</span></div>
+  <div class="lab"><span class="pro">+ Paling murah (1 kolom, tanpa JS) · visual langsung menjelaskan alur.</span><span class="kon">− Butuh 1 ilustrasi final yang bagus.</span></div>
+  <div class="stage"><div class="mock"><div class="card v1">
+    <span class="kick">KURON STUDIO</span>
+    <h2 style="margin-top:4px">Selamat datang di Kuron Studio</h2>
+    <p class="lede">Ruang kerja terjemahan manga — dari gambar mentah sampai siap dibaca.</p>
+    <svg class="art" width="100%" height="150" viewBox="0 0 404 150" role="img" aria-label="Alur import, detect, terjemah, ekspor">
+      <rect x="12" y="18" width="80" height="114" rx="6" fill="#fffdf9" stroke="#c9bfae"/>
+      <rect x="20" y="28" width="64" height="40" rx="3" fill="#e8e0d0"/><rect x="20" y="74" width="64" height="26" rx="3" fill="#e8e0d0"/>
+      <ellipse cx="52" cy="48" rx="22" ry="14" fill="#fff" stroke="#8a8478"/>
+      <text x="104" y="80" font-size="16" fill="#8a8478">→</text>
+      <rect x="124" y="18" width="80" height="114" rx="6" fill="#fffdf9" stroke="#c9bfae"/>
+      <ellipse cx="150" cy="52" rx="20" ry="13" fill="#fff" stroke="#c2543f" stroke-width="2"/>
+      <ellipse cx="176" cy="92" rx="14" ry="10" fill="#fff" stroke="#c2543f" stroke-width="2"/>
+      <circle cx="196" cy="66" r="10" fill="#c2543f"/><text x="196" y="70" font-size="11" text-anchor="middle" fill="#fff8f4">✓</text>
+      <text x="216" y="80" font-size="16" fill="#8a8478">→</text>
+      <rect x="236" y="18" width="74" height="114" rx="6" fill="#221f1b"/>
+      <text x="248" y="52" font-size="12" fill="#b9b2a6">あの…</text>
+      <text x="248" y="92" font-size="12" font-weight="bold" fill="#fffdf9">Anu…</text>
+      <text x="322" y="80" font-size="16" fill="#8a8478">→</text>
+      <rect x="342" y="42" width="50" height="66" rx="6" fill="#fffdf9" stroke="#c9bfae"/>
+      <rect x="348" y="50" width="38" height="6" rx="3" fill="#c2543f"/><rect x="348" y="60" width="38" height="6" rx="3" fill="#e8e0d0"/>
+      <rect x="348" y="70" width="24" height="6" rx="3" fill="#e8e0d0"/><rect x="348" y="86" width="38" height="12" rx="3" fill="#221f1b"/>
+    </svg>
+    <div class="grid2">
+      <div class="cell"><span class="num">1</span><div><b>Import halaman</b><small>Folder / ZIP gambar manga.</small></div></div>
+      <div class="cell"><span class="num">2</span><div><b>Detect bubble</b><small>Otomatis + rapikan di editor.</small></div></div>
+      <div class="cell"><span class="num">3</span><div><b>Terjemahkan</b><small>Provider + glossary istilah.</small></div></div>
+      <div class="cell"><span class="num">4</span><div><b>Review &amp; ekspor</b><small>PNG / PSD / JSON / CBZ.</small></div></div>
+    </div>
+    <form onsubmit="return false"><input placeholder="Nama project…"><button class="btn pri" type="button">Buat</button></form>
+  </div></div></div>
+</div>
+
+<!-- ============ V2 ============ -->
+<div class="v">
+  <div class="lab"><span class="n">V2</span><span class="t">Split hero</span><span class="d">Kiri: copy + timeline + form. Kanan: panel gelap berisi pratinjau app.</span></div>
+  <div class="lab"><span class="pro">+ Paling premium, ruang lega untuk copywriting.</span><span class="kon">− Lebar (760px); di mobile jadi kolom — perlu varian susun.</span></div>
+  <div class="stage"><div class="mock"><div class="card v2">
+    <div class="left">
+      <span class="kick">KURON STUDIO</span>
+      <h2 style="margin:4px 0 6px">Dari halaman mentah<br>jadi siap dibaca.</h2>
+      <p class="lede">Satu ruang kerja untuk seluruh proses scanlation kamu.</p>
+      <div class="steps">
+        <div class="step"><span class="num">1</span><div><b>Import</b><small>Folder / ZIP gambar manga.</small></div></div>
+        <div class="step"><span class="num">2</span><div><b>Detect bubble</b><small>Otomatis, rapikan di editor.</small></div></div>
+        <div class="step"><span class="num">3</span><div><b>Terjemahkan</b><small>Provider + glossary istilah.</small></div></div>
+        <div class="step"><span class="num">4</span><div><b>Review &amp; ekspor</b><small>PNG / PSD / JSON / CBZ.</small></div></div>
+      </div>
+      <form onsubmit="return false"><input placeholder="Nama project…"><button class="btn pri" type="button">Buat</button></form>
+    </div>
+    <div class="right">
+      <svg class="shot" width="100%" height="120" viewBox="0 0 264 120">
+        <rect x="10" y="10" width="76" height="100" rx="4" fill="#3a352e"/><rect x="16" y="16" width="64" height="60" rx="2" fill="#57534b"/>
+        <ellipse cx="48" cy="40" rx="18" ry="11" fill="none" stroke="#c2543f" stroke-width="2"/>
+        <rect x="16" y="82" width="64" height="8" rx="4" fill="#57534b"/>
+        <rect x="94" y="10" width="76" height="100" rx="4" fill="#3a352e"/><rect x="100" y="16" width="64" height="60" rx="2" fill="#57534b"/>
+        <text x="112" y="52" font-size="10" fill="#ececf1">Anu…</text>
+        <rect x="100" y="82" width="64" height="8" rx="4" fill="#c2543f"/>
+        <rect x="178" y="10" width="76" height="100" rx="4" fill="#3a352e"/><rect x="184" y="16" width="64" height="60" rx="2" fill="#57534b"/>
+        <rect x="184" y="82" width="64" height="8" rx="4" fill="#57534b"/>
+      </svg>
+      <p class="cap">Grid halaman + status tiap kartu: Belum / Proses / Sudah / Gagal.</p>
+      <svg class="shot" width="100%" height="70" viewBox="0 0 264 70">
+        <rect x="10" y="12" width="244" height="10" rx="5" fill="#3a352e"/><rect x="10" y="12" width="160" height="10" rx="5" fill="#c2543f"/>
+        <text x="10" y="52" font-size="12" fill="#b9b2a6">27 / 41 · 66%</text>
+        <text x="254" y="52" font-size="12" text-anchor="end" fill="#5fd99a">24 ✓</text>
+      </svg>
+      <p class="cap">Progress detect per halaman, bukan loading buta.</p>
+    </div>
+  </div></div></div>
+</div>
+
+<!-- ============ V3 ============ -->
+<div class="v">
+  <div class="lab"><span class="n">V3</span><span class="t">Wizard 4 langkah</span><span class="d">Satu fokus per layar, bisa klik titik / Lanjut / Kembali. Slide terakhir = form.</span></div>
+  <div class="lab"><span class="pro">+ Paling interaktif; tiap langkah dapat ilustrasi sendiri.</span><span class="kon">− Butuh state + JS (tapi kecil); user harus klik 3× sampai CTA.</span></div>
+  <div class="stage"><div class="mock"><div class="card v3" id="wiz">
+    <span class="kick">KURON STUDIO · MULAI CEPAT</span>
+    <h2 id="wTitle" style="margin:4px 0 2px">Import halaman</h2>
+    <p class="lede" id="wDesc">Masukkan folder atau ZIP berisi gambar manga.</p>
+    <div class="art" id="wArt"></div>
+    <div class="dots" id="wDots"><i class="on" data-i="0"></i><i data-i="1"></i><i data-i="2"></i><i data-i="3"></i></div>
+    <div id="wForm" style="display:none"><form onsubmit="return false"><input placeholder="Nama project…" style="flex:1;min-width:0"><button class="btn pri" type="button">Buat</button></form></div>
+    <div class="nav">
+      <button class="btn gho" type="button" id="wBack">← Kembali</button>
+      <button class="btn pri" type="button" id="wNext">Lanjut →</button>
+    </div>
+  </div></div></div>
+</div>
+
+<!-- ============ V4 ============ -->
+<div class="v">
+  <div class="lab"><span class="n">V4</span><span class="t">Dua pintu: kosong vs contoh</span><span class="d">Pilih mulai dari nol, atau jelajahi project contoh berisi 3 halaman.</span></div>
+  <div class="lab"><span class="pro">+ User langsung pegang app nyata; menurunkan takut salah.</span><span class="kon">− Butuh konten contoh + logika "project sample" (bisa dihapus).</span></div>
+  <div class="stage"><div class="mock"><div class="card v4">
+    <span class="kick">KURON STUDIO</span>
+    <h2 style="margin:4px 0 6px">Mulai dari mana?</h2>
+    <p class="lede">Bikin project kosong, atau oprek-oprek dulu project contoh — aman, bisa dihapus kapan saja.</p>
+    <svg class="art" width="300" height="110" viewBox="0 0 300 110">
+      <rect x="20" y="14" width="76" height="88" rx="6" fill="#fff" stroke="#c9bfae" transform="rotate(-6 58 58)"/>
+      <ellipse cx="58" cy="52" rx="20" ry="12" fill="#fff" stroke="#8a8478" transform="rotate(-6 58 58)"/>
+      <rect x="112" y="14" width="76" height="88" rx="6" fill="#fff" stroke="#c2543f" stroke-width="2"/>
+      <ellipse cx="150" cy="52" rx="20" ry="12" fill="#fff" stroke="#c2543f" stroke-width="2"/>
+      <circle cx="176" cy="40" r="11" fill="#c2543f"/><text x="176" y="44" font-size="11" text-anchor="middle" fill="#fff8f4">✓</text>
+      <rect x="204" y="14" width="76" height="88" rx="6" fill="#221f1b" transform="rotate(6 242 58)"/>
+      <text x="222" y="58" font-size="11" fill="#fffdf9">Anu…</text>
+    </svg>
+    <div class="opts">
+      <div class="opt">
+        <b>Project kosong</b>
+        <small>Kanvasi bersih. Import halamanmu sendiri lalu ikuti 4 langkah.</small>
+        <form onsubmit="return false"><input placeholder="Nama project…"><button class="btn gho" type="button">Buat</button></form>
+      </div>
+      <div class="opt hot">
+        <span class="tag">DISARANKAN</span>
+        <b>Project contoh</b>
+        <small>3 halaman + bubble terdeteksi. Coba editor &amp; translate tanpa risiko.</small>
+        <button class="btn pri" type="button" style="margin-top:4px">Jelajahi contoh →</button>
+      </div>
+    </div>
+  </div></div></div>
+</div>
+
+<script>
+(function () {
+  var arts = [
+    '<svg width="200" height="120" viewBox="0 0 200 120"><rect x="55" y="8" width="90" height="104" rx="6" fill="#fffdf9" stroke="#c9bfae"/><rect x="65" y="18" width="70" height="40" rx="3" fill="#e8e0d0"/><rect x="65" y="64" width="70" height="28" rx="3" fill="#e8e0d0"/><ellipse cx="100" cy="38" rx="24" ry="14" fill="#fff" stroke="#8a8478"/><text x="152" y="66" font-size="20" fill="#c2543f">⤵</text></svg>',
+    '<svg width="200" height="120" viewBox="0 0 200 120"><rect x="55" y="8" width="90" height="104" rx="6" fill="#fffdf9" stroke="#c9bfae"/><ellipse cx="100" cy="48" rx="28" ry="17" fill="#fff" stroke="#c2543f" stroke-width="3"/><circle cx="126" cy="34" r="12" fill="#c2543f"/><text x="126" y="39" font-size="12" text-anchor="middle" fill="#fff8f4">✓</text></svg>',
+    '<svg width="220" height="120" viewBox="0 0 220 120"><rect x="10" y="30" width="80" height="60" rx="6" fill="#221f1b"/><text x="22" y="66" font-size="13" fill="#b9b2a6">あの…</text><text x="100" y="66" font-size="18" fill="#c2543f">→</text><rect x="130" y="30" width="80" height="60" rx="6" fill="#c2543f"/><text x="142" y="66" font-size="13" font-weight="bold" fill="#fff8f4">Anu…</text></svg>',
+    '<svg width="200" height="120" viewBox="0 0 200 120"><rect x="60" y="14" width="80" height="60" rx="6" fill="#fffdf9" stroke="#c9bfae"/><rect x="68" y="22" width="64" height="8" rx="4" fill="#c2543f"/><rect x="68" y="34" width="64" height="8" rx="4" fill="#e8e0d0"/><rect x="68" y="46" width="40" height="8" rx="4" fill="#e8e0d0"/><rect x="60" y="82" width="80" height="22" rx="6" fill="#221f1b"/><text x="100" y="97" font-size="11" text-anchor="middle" fill="#fffdf9">Ekspor ✓</text></svg>'
+  ];
+  var titles = ["Import halaman", "Detect bubble", "Terjemahkan", "Review & ekspor"];
+  var descs = [
+    "Masukkan folder atau ZIP berisi gambar manga.",
+    "Kenali bubble otomatis, lalu rapikan di editor.",
+    "Pakai provider pilihan + glossary istilah.",
+    "Cek kualitas, lalu ekspor. Terakhir: bikin project ↓"
+  ];
+  var i = 0, total = 4;
+  var wTitle = document.getElementById("wTitle"), wDesc = document.getElementById("wDesc"),
+      wArt = document.getElementById("wArt"), wDots = document.getElementById("wDots"),
+      wBack = document.getElementById("wBack"), wNext = document.getElementById("wNext"),
+      wForm = document.getElementById("wForm");
+  function render() {
+    wTitle.textContent = titles[i];
+    wDesc.textContent = descs[i];
+    wArt.innerHTML = arts[i];
+    var ds = wDots.children;
+    for (var k = 0; k < ds.length; k++) ds[k].className = k === i ? "on" : "";
+    wBack.style.visibility = i === 0 ? "hidden" : "visible";
+    wNext.textContent = i === total - 1 ? "Mulai →" : "Lanjut →";
+    wForm.style.display = i === total - 1 ? "block" : "none";
+  }
+  wNext.onclick = function () { if (i < total - 1) { i++; render(); } };
+  wBack.onclick = function () { if (i > 0) { i--; render(); } };
+  wDots.onclick = function (e) { var t = e.target; if (t.dataset && t.dataset.i !== undefined) { i = +t.dataset.i; render(); } };
+  render();
+})();
+</script>
+</body>
+</html>

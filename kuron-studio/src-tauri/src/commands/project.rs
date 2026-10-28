@@ -82,11 +82,18 @@ pub struct ChapterFolder {
     /// Epoch seconds; 0 = unknown (old data).
     #[serde(default)]
     pub created_at: i64,
+    /// Parent folder; None = root. File lama tanpa field ini jadi root semua.
+    #[serde(default)]
+    pub parent_id: Option<String>,
 }
 
 impl ChapterFolder {
     pub fn new(name: String) -> Self {
-        Self { id: Uuid::new_v4().to_string(), name, pages: Vec::new(), created_at: now_epoch() }
+        Self { id: Uuid::new_v4().to_string(), name, pages: Vec::new(), created_at: now_epoch(), parent_id: None }
+    }
+
+    pub fn new_child(name: String, parent_id: String) -> Self {
+        Self { id: Uuid::new_v4().to_string(), name, pages: Vec::new(), created_at: now_epoch(), parent_id: Some(parent_id) }
     }
 }
 
@@ -162,12 +169,92 @@ impl Project {
         out
     }
 
+    /// Halaman satu subtree (folder + semua keturunan), urut filename.
+    pub fn sorted_subtree_pages(&self, folder_id: &str) -> Result<Vec<Page>, String> {
+        if self.folder(folder_id).is_none() {
+            return Err(format!("folder not found: {folder_id}"));
+        }
+        let ids = self.subtree_ids(folder_id);
+        let mut out: Vec<Page> = self
+            .folders
+            .iter()
+            .filter(|f| ids.contains(&f.id))
+            .flat_map(|f| f.pages.clone())
+            .collect();
+        out.sort_by(|a, b| a.path.cmp(&b.path));
+        Ok(out)
+    }
+
+    /// Halaman untuk scope export/clean: None/kosong = semua folder.
+    pub fn pages_in_scope(&self, folder_id: Option<&str>) -> Result<Vec<Page>, String> {
+        match folder_id.filter(|s| !s.is_empty()) {
+            Some(fid) => self.sorted_subtree_pages(fid),
+            None => Ok(self.sorted_all_pages()),
+        }
+    }
+
     pub fn folder(&self, folder_id: &str) -> Option<&ChapterFolder> {
         self.folders.iter().find(|f| f.id == folder_id)
     }
 
     pub fn folder_mut(&mut self, folder_id: &str) -> Option<&mut ChapterFolder> {
         self.folders.iter_mut().find(|f| f.id == folder_id)
+    }
+
+    /// Id semua folder dalam subtree (termasuk root-nya sendiri).
+    pub fn subtree_ids(&self, folder_id: &str) -> Vec<String> {
+        let mut out = vec![folder_id.to_string()];
+        let mut i = 0;
+        while i < out.len() {
+            let cur = out[i].clone();
+            for f in self.folders.iter().filter(|f| f.parent_id.as_deref() == Some(cur.as_str())) {
+                out.push(f.id.clone());
+            }
+            i += 1;
+        }
+        out.retain(|id| self.folders.iter().any(|f| &f.id == id));
+        out
+    }
+
+    /// Rantai ancestor dari folder (parent, grandparent, …). Dipakai guard siklus.
+    pub fn ancestors_of(&self, folder_id: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut cur = self.folder(folder_id).and_then(|f| f.parent_id.clone());
+        while let Some(id) = cur {
+            if out.contains(&id) { break; } // data korup: putus rantai
+            out.push(id.clone());
+            cur = self.folder(&id).and_then(|f| f.parent_id.clone());
+        }
+        out
+    }
+
+    /// Pindah parent folder. Menolak: folder/parent tak dikenal, parent = diri
+    /// sendiri, parent = keturunan sendiri (siklus). `None` = jadikan root.
+    pub fn set_parent(&mut self, folder_id: &str, new_parent: Option<&str>) -> Result<(), String> {
+        if self.folder(folder_id).is_none() {
+            return Err(format!("folder not found: {folder_id}"));
+        }
+        if let Some(p) = new_parent.filter(|s| !s.is_empty()) {
+            if p == folder_id {
+                return Err("folder tidak bisa menjadi parent dirinya sendiri".to_string());
+            }
+            if self.folder(p).is_none() {
+                return Err(format!("parent folder not found: {p}"));
+            }
+            if self.subtree_ids(folder_id).contains(&p.to_string()) {
+                return Err("parent adalah keturunan folder ini (siklus)".to_string());
+            }
+            // Nama harus unik di antara saudara kandung yang baru.
+            let name = self.folder(folder_id).expect("checked").name.clone();
+            if self.folders.iter().any(|f| f.id != folder_id && f.parent_id.as_deref() == Some(p) && f.name == name) {
+                return Err(format!("folder sudah ada: {name}"));
+            }
+            self.folder_mut(folder_id).expect("checked").parent_id = Some(p.to_string());
+        } else {
+            self.folder_mut(folder_id).expect("checked").parent_id = None;
+        }
+        self.touch();
+        Ok(())
     }
 
     /// Folder tujuan import: id eksplisit > folder `default` > folder pertama > buat baru.
@@ -742,18 +829,153 @@ pub fn create_project(name: String, state: State<'_, AppState>) -> Result<Projec
     Ok(project)
 }
 
+/// Project contoh untuk onboarding: 3 halaman PNG generik + bubble seed.
+/// File tinggal di store dir (`{id}_sample`) → ikut terhapus saat project
+/// dihapus, seperti folder ekstraksi CBZ.
+pub fn create_sample_project_inner(store: &mut ProjectStore, name: &str) -> Result<Project, String> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("project name is empty".to_string());
+    }
+    let mut project = Project::new(name);
+    let dir = store.dir.join(format!("{}_sample", project.id));
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let folder = project.folders.first_mut().expect("Project::new selalu punya folder default");
+    for (i, slug) in ["p001", "p002", "p003"].iter().enumerate() {
+        let (img, bubbles) = sample_page(i);
+        let path = dir.join(format!("{slug}.png"));
+        img.save(&path).map_err(|e| e.to_string())?;
+        folder.pages.push(Page {
+            id: Uuid::new_v4().to_string(),
+            path: path.to_string_lossy().to_string(),
+            width: img.width(),
+            height: img.height(),
+            status: PageStatus::Detected,
+            bubbles,
+            translation: None,
+        });
+    }
+    folder.pages.sort_by(|a, b| a.path.cmp(&b.path));
+    project.touch();
+    store.projects.insert(project.id.clone(), project.clone());
+    store.save()?;
+    Ok(project)
+}
+
 #[tauri::command(rename_all = "snake_case")]
-pub fn create_folder(project_id: String, name: String, state: State<'_, AppState>) -> Result<ChapterFolder, String> {
+pub fn create_sample_project(name: String, state: State<'_, AppState>) -> Result<Project, String> {
+    let mut store = state.store.lock().map_err(|e| e.to_string())?;
+    create_sample_project_inner(&mut store, &name)
+}
+
+fn px(img: &mut image::RgbImage, x: i32, y: i32, c: image::Rgb<u8>) {
+    if x >= 0 && y >= 0 && (x as u32) < img.width() && (y as u32) < img.height() {
+        img.put_pixel(x as u32, y as u32, c);
+    }
+}
+
+fn fill_rect(img: &mut image::RgbImage, x: u32, y: u32, w: u32, h: u32, c: image::Rgb<u8>) {
+    for dy in 0..h {
+        for dx in 0..w {
+            px(img, (x + dx) as i32, (y + dy) as i32, c);
+        }
+    }
+}
+
+/// Panel manga: fill + bingkai hitam tebal.
+fn panel(img: &mut image::RgbImage, x: u32, y: u32, w: u32, h: u32, fill: image::Rgb<u8>) {
+    let ink = image::Rgb([24, 22, 20]);
+    fill_rect(img, x, y, w, h, fill);
+    let t = 6;
+    fill_rect(img, x, y, w, t, ink);
+    fill_rect(img, x, y + h - t, w, t, ink);
+    fill_rect(img, x, y, t, h, ink);
+    fill_rect(img, x + w - t, y, t, h, ink);
+}
+
+/// Bubble ellipse: fill terang + tepi hitam; kembalikan BubbleBox-nya.
+fn ellipse_bubble(
+    img: &mut image::RgbImage,
+    cx: i32,
+    cy: i32,
+    rx: i32,
+    ry: i32,
+) -> BubbleBox {
+    let fill = image::Rgb([255, 253, 248]);
+    let edge = image::Rgb([24, 22, 20]);
+    let t = 5;
+    for dy in -ry - t..=ry + t {
+        for dx in -rx - t..=rx + t {
+            let inner = (dx * dx) as f32 / ((rx * rx) as f32) + (dy * dy) as f32 / ((ry * ry) as f32);
+            if inner <= 1.0 {
+                px(img, cx + dx, cy + dy, fill);
+            } else {
+                let outer = (dx * dx) as f32 / (((rx + t) * (rx + t)) as f32)
+                    + (dy * dy) as f32 / (((ry + t) * (ry + t)) as f32);
+                if outer <= 1.0 {
+                    px(img, cx + dx, cy + dy, edge);
+                }
+            }
+        }
+    }
+    BubbleBox { x: cx - rx, y: cy - ry, w: rx * 2, h: ry * 2, confidence: 1.0, shape: None, kind: Some("ellipse".to_string()), tail: None }
+}
+
+/// Satu halaman contoh (800×1152): panel + 2–3 bubble. Layout beda per indeks.
+fn sample_page(i: usize) -> (image::RgbImage, Vec<BubbleBox>) {
+    let mut img = image::RgbImage::new(800, 1152);
+    let paper = image::Rgb([250, 249, 246]);
+    let tone = image::Rgb([226, 221, 213]);
+    let tone2 = image::Rgb([206, 199, 189]);
+    fill_rect(&mut img, 0, 0, 800, 1152, paper);
+    let mut bubbles = Vec::new();
+    match i % 3 {
+        0 => {
+            panel(&mut img, 48, 48, 704, 560, tone);
+            panel(&mut img, 48, 640, 704, 464, paper);
+            bubbles.push(ellipse_bubble(&mut img, 220, 230, 92, 64));
+            bubbles.push(ellipse_bubble(&mut img, 580, 430, 80, 58));
+            bubbles.push(ellipse_bubble(&mut img, 320, 820, 110, 72));
+        }
+        1 => {
+            panel(&mut img, 48, 48, 704, 400, paper);
+            panel(&mut img, 48, 480, 340, 624, tone2);
+            panel(&mut img, 408, 480, 344, 624, tone);
+            bubbles.push(ellipse_bubble(&mut img, 600, 210, 86, 60));
+            bubbles.push(ellipse_bubble(&mut img, 200, 710, 96, 66));
+            bubbles.push(ellipse_bubble(&mut img, 570, 920, 80, 56));
+        }
+        _ => {
+            panel(&mut img, 48, 48, 704, 1056, tone);
+            bubbles.push(ellipse_bubble(&mut img, 260, 310, 100, 70));
+            bubbles.push(ellipse_bubble(&mut img, 530, 760, 90, 62));
+        }
+    }
+    (img, bubbles)
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn create_folder(project_id: String, name: String, state: State<'_, AppState>, parent_id: Option<String>) -> Result<ChapterFolder, String> {
     let name = name.trim().to_string();
     if name.is_empty() {
         return Err("folder name is empty".to_string());
     }
     let mut store = state.store.lock().map_err(|e| e.to_string())?;
     let project = store.get_mut(&project_id)?;
-    if project.folders.iter().any(|f| f.name == name) {
+    let parent = parent_id.as_deref().filter(|s| !s.is_empty());
+    if let Some(p) = parent {
+        if project.folder(p).is_none() {
+            return Err(format!("parent folder not found: {p}"));
+        }
+    }
+    // Unik di antara saudara kandung (parent sama), bukan global.
+    if project.folders.iter().any(|f| f.name == name && f.parent_id.as_deref() == parent) {
         return Err(format!("folder sudah ada: {name}"));
     }
-    let folder = ChapterFolder::new(name);
+    let folder = match parent {
+        Some(p) => ChapterFolder::new_child(name, p.to_string()),
+        None => ChapterFolder::new(name),
+    };
     let out = folder.clone();
     project.folders.push(folder);
     project.folders.sort_by(|a, b| a.name.cmp(&b.name));
@@ -770,7 +992,8 @@ pub fn rename_folder(project_id: String, folder_id: String, name: String, state:
     }
     let mut store = state.store.lock().map_err(|e| e.to_string())?;
     let project = store.get_mut(&project_id)?;
-    if project.folders.iter().any(|f| f.name == name && f.id != folder_id) {
+    let parent_of_target = project.folder(&folder_id).and_then(|f| f.parent_id.clone());
+    if project.folders.iter().any(|f| f.name == name && f.id != folder_id && f.parent_id == parent_of_target) {
         return Err(format!("folder sudah ada: {name}"));
     }
     let folder = project.folder_mut(&folder_id).ok_or_else(|| format!("folder not found: {folder_id}"))?;
@@ -792,9 +1015,19 @@ pub fn delete_folder(project_id: String, folder_id: String, state: State<'_, App
         if project.folders.len() <= 1 {
             return Err("tidak bisa hapus folder terakhir; hapus project saja".to_string());
         }
-        let idx = project.folders.iter().position(|f| f.id == folder_id).ok_or_else(|| format!("folder not found: {folder_id}"))?;
-        let removed = project.folders.remove(idx);
-        doomed = removed.pages.into_iter().map(|p| p.path).collect();
+        if project.folder(&folder_id).is_none() {
+            return Err(format!("folder not found: {folder_id}"));
+        }
+        // Hapus subtree: folder + semua keturunan + halaman mereka.
+        let kill: Vec<String> = project.subtree_ids(&folder_id);
+        let mut gone = Vec::new();
+        project.folders.retain(|f| {
+            if kill.contains(&f.id) {
+                gone.extend(f.pages.iter().map(|p| p.path.clone()));
+                false
+            } else { true }
+        });
+        doomed = gone;
         project.touch();
     }
     let mut removed_files = 0;
@@ -970,10 +1203,20 @@ pub fn clean_pages(project_id: String, state: State<'_, AppState>, folder_id: Op
 }
 
 /// Pindah halaman antar folder dalam project yang sama (organize Mode A -> B).
-#[tauri::command(rename_all = "snake_case")]
-pub fn move_pages(project_id: String, page_ids: Vec<String>, folder_id: String, state: State<'_, AppState>) -> Result<usize, String> {
-    let mut store = state.store.lock().map_err(|e| e.to_string())?;
-    let project = store.get_mut(&project_id)?;
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MoveResult {
+    pub moved: usize,
+    pub skipped: usize,
+}
+
+pub fn move_pages_inner(
+    store: &mut ProjectStore,
+    project_id: &str,
+    page_ids: &[String],
+    folder_id: &str,
+) -> Result<MoveResult, String> {
+    let project = store.get_mut(project_id)?;
     if !project.folders.iter().any(|f| f.id == folder_id) {
         return Err(format!("folder not found: {folder_id}"));
     }
@@ -986,16 +1229,29 @@ pub fn move_pages(project_id: String, page_ids: Vec<String>, folder_id: String, 
         }
         folder.pages = keep;
     }
-    let n = moving.len();
-    if n == 0 {
-        return Err("tidak ada halaman yang dipindah (id salah / sudah di folder tujuan)".to_string());
+    // Id yang tidak ketemu di folder mana pun = unknown; yang sudah di tujuan
+    // tidak ikut drain, jadi skipped = diminta − benar-benar pindah.
+    let skipped = page_ids.len().saturating_sub(moving.len());
+    if moving.is_empty() {
+        return Err(if skipped > 0 {
+            "semua halaman sudah di folder tujuan".to_string()
+        } else {
+            "tidak ada halaman yang dipindah (id salah / sudah di folder tujuan)".to_string()
+        });
     }
-    let dest = project.folder_mut(&folder_id).expect("checked");
+    let moved = moving.len();
+    let dest = project.folder_mut(folder_id).expect("checked");
     dest.pages.extend(moving);
     dest.pages.sort_by(|a, b| a.path.cmp(&b.path));
     project.touch();
     store.save()?;
-    Ok(n)
+    Ok(MoveResult { moved, skipped })
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub fn move_pages(project_id: String, page_ids: Vec<String>, folder_id: String, state: State<'_, AppState>) -> Result<MoveResult, String> {
+    let mut store = state.store.lock().map_err(|e| e.to_string())?;
+    move_pages_inner(&mut store, &project_id, &page_ids, &folder_id)
 }
 
 /// Hapus project + folder ekstraksi miliknya. File gambar asli user di luar
@@ -1011,6 +1267,10 @@ pub fn delete_project(project_id: String, state: State<'_, AppState>) -> Result<
     let extract = store.dir.join(format!("{project_id}_extracted"));
     if extract.is_dir() {
         fs::remove_dir_all(&extract).map_err(|e| format!("hapus folder ekstraksi: {e}"))?;
+    }
+    let sample = store.dir.join(format!("{project_id}_sample"));
+    if sample.is_dir() {
+        fs::remove_dir_all(&sample).map_err(|e| format!("hapus folder sample: {e}"))?;
     }
     Ok(())
 }
@@ -1298,7 +1558,123 @@ mod tests {
         assert_eq!(pg.bubbles[0].tail.as_ref().unwrap().len(), 2);
         assert_eq!(pg.status, PageStatus::Detected);
     }
+
+    fn tree_proj() -> Project {
+        let mut proj = Project::new("t".to_string());
+        proj.id = "proj".to_string();
+        let root = proj.folders[0].id.clone();
+        let mut ch = ChapterFolder::new_child("Ch 12".to_string(), root.clone());
+        ch.id = "ch12".to_string();
+        let mut b = ChapterFolder::new_child("Batch 1".to_string(), "ch12".to_string());
+        b.id = "b1".to_string();
+        proj.folders.push(ch);
+        proj.folders.push(b);
+        proj
+    }
+
+    #[test]
+    fn set_parent_rejects_self_and_cycles() {
+        let mut proj = tree_proj();
+        assert!(proj.set_parent("ch12", Some("ch12")).is_err());
+        assert!(proj.set_parent("ch12", Some("b1")).is_err());
+        assert!(proj.set_parent("ch12", Some("nope")).is_err());
+        assert!(proj.set_parent("ch12", Some(proj.folders[0].id.clone().as_str())).is_ok());
+        assert!(proj.set_parent("b1", None).is_ok());
+        assert_eq!(proj.folder("b1").unwrap().parent_id, None);
+    }
+
+    #[test]
+    fn subtree_ids_cover_descendants() {
+        let proj = tree_proj();
+        let mut ids = proj.subtree_ids("ch12");
+        ids.sort();
+        assert_eq!(ids, vec!["b1".to_string(), "ch12".to_string()]);
+    }
+
+    #[test]
+    fn sibling_names_may_repeat_across_parents() {
+        let proj = tree_proj();
+        let root = proj.folders[0].id.clone();
+        // "Batch 1" sudah ada di bawah ch12 — tolak duplikat sesaudara.
+        assert!(proj.folders.iter().any(|f| f.name == "Batch 1"
+            && f.parent_id.as_deref() == Some("ch12")));
+        // Nama sama di bawah root = saudara beda → boleh (cek aturan manual).
+        let clash = proj.folders.iter().any(|f| f.name == "Batch 1"
+            && f.id != "b1" && f.parent_id.as_deref() == Some(root.as_str()));
+        assert!(!clash);
+    }
+
+    #[test]
+    fn subtree_scope_aggregates_descendants_sorted() {
+        let mut proj = tree_proj();
+        proj.folders[0].pages = vec![stub_page("r", Path::new("r.jpg"))];
+        proj.folders.iter_mut().find(|f| f.id == "ch12").unwrap().pages =
+            vec![stub_page("c", Path::new("c.jpg"))];
+        proj.folders.iter_mut().find(|f| f.id == "b1").unwrap().pages =
+            vec![stub_page("b", Path::new("b.jpg"))];
+        // Scope ch12 = dirinya + Batch 1, urut filename.
+        let got = proj.pages_in_scope(Some("ch12")).unwrap();
+        assert_eq!(got.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(), vec!["b", "c"]);
+        // Scope kosong = semua folder termasuk root.
+        let all = proj.pages_in_scope(None).unwrap();
+        assert_eq!(all.len(), 3);
+        assert_eq!(all[0].id, "b");
+        // Folder tak dikenal = error jujur.
+        assert!(proj.pages_in_scope(Some("nope")).is_err());
+    }
+
+    #[test]
+    fn move_pages_reports_moved_and_skipped() {
+        let dir = temp_dir("kuron-studio-move");
+        let mut store = ProjectStore::load(dir).unwrap();
+        let mut proj = tree_proj();
+        proj.id = "proj".to_string();
+        proj.folders.iter_mut().find(|f| f.id == "ch12").unwrap().pages =
+            vec![stub_page("c1", Path::new("c1.jpg")), stub_page("c2", Path::new("c2.jpg"))];
+        proj.folders.iter_mut().find(|f| f.id == "b1").unwrap().pages =
+            vec![stub_page("b1p", Path::new("b1p.jpg"))];
+        store.projects.insert("proj".to_string(), proj);
+        // Parsial: 1 pindah, 1 sudah di tujuan, 1 id asing.
+        let r = move_pages_inner(
+            &mut store,
+            "proj",
+            &["c1".to_string(), "b1p".to_string(), "ghost".to_string()],
+            "b1",
+        )
+        .unwrap();
+        assert_eq!((r.moved, r.skipped), (1, 2));
+        let dest = store.projects["proj"].folder("b1").unwrap();
+        assert!(dest.pages.iter().any(|p| p.id == "c1"));
+        // Full overlap = tolak sebelum tulis.
+        let err = move_pages_inner(&mut store, "proj", &["c1".to_string()], "b1").unwrap_err();
+        assert!(err.contains("sudah di folder tujuan"));
+    }
+    #[test]
+    fn sample_project_has_pages_with_seeded_bubbles() {
+        let dir = temp_dir("kuron-studio-sample");
+        let mut store = ProjectStore::load(dir.clone()).unwrap();
+        let proj = create_sample_project_inner(&mut store, "Contoh").unwrap();
+        let pages = &proj.folders[0].pages;
+        assert_eq!(proj.folders.len(), 1);
+        assert_eq!(pages.len(), 3);
+        for pg in pages {
+            assert!(pg.path.ends_with(".png"));
+            assert!(std::path::Path::new(&pg.path).is_file());
+            assert_eq!(pg.status, PageStatus::Detected);
+            assert!(pg.bubbles.len() >= 2);
+            for b in &pg.bubbles {
+                assert!(b.w >= 8 && b.h >= 8);
+                assert_eq!(b.kind.as_deref(), Some("ellipse"));
+                assert!(b.x >= 0 && b.y >= 0);
+                assert!(b.x + b.w <= pg.width as i32 && b.y + b.h <= pg.height as i32);
+            }
+        }
+        // File di store dir → ikut terhapus saat project dihapus.
+        assert!(dir.join(format!("{}_sample", proj.id)).is_dir());
+        assert!(create_sample_project_inner(&mut store, "  ").is_err());
+    }
 }
+
 
 #[cfg(test)]
 mod pdf_tests {

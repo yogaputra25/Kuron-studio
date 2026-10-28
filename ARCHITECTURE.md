@@ -25,8 +25,12 @@ Import folder/files/zip → Detect bubble (ONNX, per halaman)
 
 ## 3. Frontend (`kuron-studio/src/`)
 
-- `App.svelte`: state root — `projects`, `currentId`, `thumbs`,
-  panel mana yang terbuka. Grid + header + panel di sini.
+- `App.svelte`: state root — `projects`, `currentId`, `folderId`,
+  `selectedIds` (multi-select), `thumbs`, panel mana yang terbuka.
+  Dashboard + breadcrumb + grid + header + panel di sini.
+- `lib/library.ts`: agregat murni — `subtreePages/Stats`,
+  `folderPath/childrenOf/hasNesting`, `rangeSelect`,
+  `isSiblingNameTaken` (cermin guard backend). Unit-testable.
 - `lib/api.ts`: satu-satunya jembatan invoke. **Kontrak**:
   key top-level `snake_case` persis nama param Rust
   (`project_id`, `page_ids`); field struct `camelCase`.
@@ -36,7 +40,9 @@ Import folder/files/zip → Detect bubble (ONNX, per halaman)
   ekstensi di satu sisi saja.
 - Panel: `EditorPanel` (canvas Rect/Ellipse/Freeform/Tail),
   `ReviewGrid` (progres, QA, TM, ekspor), `BatchPanel`,
-  `GlossaryPanel`, `ProviderSettings`, `DiagnosticsPanel`.
+  `GlossaryPanel`, `ProviderSettings`, `DiagnosticsPanel`,
+  `MoveDialog` (pindah halaman + LOV tujuan), `FolderChip`
+  (rename inline + hapus).
 - `i18n.ts`: id/en/zh, tombol header cycler, persist localStorage.
   `i18n.test.ts` gagal kalau ada key hilang di satu bahasa.
 - `app.css`: token `--ks-*` (netral warm, aksen coral, sekunder cyan),
@@ -53,7 +59,11 @@ Import folder/files/zip → Detect bubble (ONNX, per halaman)
   - `project`: `list/create/get/delete_project`, `import_pages`
     (JPG/PNG/WebP, urut nama file; ZIP/CBZ/PDF diekstrak; sidecar
     `._*`/0-byte/korup = skipped, bukan halaman rusak),
-    `clean_pages`, preview 512px (`image.rs`).
+    `clean_pages` (+ scope `folder_id` = subtree), preview 512px (`image.rs`).
+  - `folders`: `create_folder` (opsional `parent_id`), `rename_folder`
+    (unik per saudara), `delete_folder` (rekursif subtree),
+    `move_pages` (`{moved, skipped}`, tolak no-op penuh).
+    Guard siklus di `set_parent`; agregat/export selalu subtree.
   - `detect`: satu/Batch, status `detecting → detected/noBubbles`.
     `bubble.rs::sanitize_bubbles`: buang nol-area, cap 500/page.
   - `translate`: 9 provider BYOK, validate, `<15s`, status
@@ -64,11 +74,11 @@ Import folder/files/zip → Detect bubble (ONNX, per halaman)
     `share_project` (zip slice projects.json + gambar), diagnostics/log.
   - `glossary`: CRUD + CSV import/export, dipakai otomatis + manual.
 - `projects.json`: `Project { id, name, folders[], updatedAt }`,
-  `ChapterFolder { id, name, pages[], createdAt }`,
+  `ChapterFolder { id, name, pages[], createdAt, parentId? }`,
   `Page { id, path, w/h, status, bubbles[], translation? }`.
-  1 project = 1 judul; Mode A = 1 folder `default`, Mode B = folder
-  per chapter/volume/batch. File lama flat `{ pages[] }` dimigrasi
-  otomatis ke 1 folder `default` saat load (#7).
+  1 project = 1 judul; folder = tree rekursif (`None` = root).
+  File lama flat `{ pages[] }` / tanpa `parentId` dimigrasi otomatis
+  ke 1 folder `default` root saat load (#7, nested-folders-page-move).
 
 ## 5. iOS (sebagian, bukan target penuh)
 

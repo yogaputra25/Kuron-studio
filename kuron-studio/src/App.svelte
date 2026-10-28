@@ -15,8 +15,12 @@
   import type { Lang, Theme } from "./lib/i18n";
   import type { BatchOpts, Page, Project, ReadingDirection } from "./lib/types";
   import { ARCHIVE_EXTS, IMAGE_EXTS, PDF_EXTS } from "./lib/types";
-  import { allPages, folderStats, groupKanban, projectStats } from "./lib/library";
+  import { allPages, childrenOf, folderPath, groupKanban, hasNesting, projectStats, rangeSelect, subtreePages, subtreeStats } from "./lib/library";
   import Button from "./lib/ui/Button.svelte";
+  import FolderChip from "./lib/FolderChip.svelte";
+  import MoveDialog from "./lib/MoveDialog.svelte";
+  import Onboarding from "./lib/Onboarding.svelte";
+  import Snackbar from "./lib/ui/Snackbar.svelte";
   import StatusBadge from "./lib/ui/StatusBadge.svelte";
   import DiagnosticsPanel from "./lib/DiagnosticsPanel.svelte";
   import { onInvoke } from "./lib/log";
@@ -24,14 +28,23 @@
   import { summarizePreviews, type PreviewSample } from "./lib/previewMetrics";
 
   let projects = $state<Project[]>([]);
+  /** false sampai daftar project pertama selesai dimuat (cegah flash onboarding). */
+  let loaded = $state(false);
   let currentId = $state<string | null>(null);
   let name = $state("");
   let folderId = $state<string | "all">("all");
   let kanban = $state<"all" | "todo" | "doing" | "done" | "failed">("all");
   let folderName = $state("");
+  /** Halaman terpilih (multi-select untuk pindah folder). */
+  let selectedIds = $state<string[]>([]);
+  let selAnchor = $state<string | null>(null);
+  /** Mode pilih manual: checkbox + "Pilih semua" baru muncul di mode ini. */
+  let selectMode = $state(false);
+  let holdTimer: ReturnType<typeof setTimeout> | null = null;
+  let heldSelect = false;
+  let showMove = $state(false);
   let showProjMenu = $state(false);
   let projQuery = $state("");
-  let menuName = $state("");
   let thumbs = $state<Record<string, string>>({});
   let fullUrls = $state<Record<string, string>>({});
   let selectedId = $state<string | null>(null);
@@ -76,8 +89,15 @@
   const currentFolder = $derived(
     current && folderId !== "all" ? (current.folders.find((f) => f.id === folderId) ?? null) : null,
   );
+  const nested = $derived(current ? hasNesting(current) : false);
+  const crumb = $derived(current && currentFolder ? folderPath(current, folderId as string) : []);
+  const childFolders = $derived(
+    !current ? [] : folderId === "all"
+      ? current.folders.filter((f) => f.parentId == null || f.parentId === "")
+      : childrenOf(current, folderId as string),
+  );
   const scopedPages = $derived(
-    !current ? [] : currentFolder ? currentFolder.pages : allPages(current),
+    !current ? [] : currentFolder ? subtreePages(current, folderId as string) : allPages(current),
   );
   const kanbanGroups = $derived(groupKanban(scopedPages));
   const visiblePages = $derived(
@@ -101,7 +121,8 @@
       // Hanya `list_projects` yang gagal di sini. Label "Backend
       // unreachable" hanya sah kalau invoke-nya sendiri yang tidak jalan.
       error = `Backend unreachable (jalankan via 'pnpm tauri dev'): ${e}`;
-      return;
+    } finally {
+      loaded = true;
     }
     if (currentId) await loadThumbs(currentId);
   }
@@ -273,14 +294,26 @@
     try {
       const p = await api.createProject(n);
       name = "";
-      menuName = "";
-      showProjMenu = false;
-      projQuery = "";
       projects = [...projects, p];
       currentId = p.id;
       folderId = "all";
       kanban = "all";
       selectedId = null;
+    } catch (e) {
+      error = String(e);
+    } finally {
+      busy = false;
+    }
+  }
+
+  /** Onboarding V4: project contoh siap-oprek (3 halaman + bubble seed). */
+  async function createSample() {
+    busy = true;
+    error = "";
+    try {
+      const p = await api.createSample($t("onboardSample"));
+      projects = [...projects, p];
+      openProject(p.id);
     } catch (e) {
       error = String(e);
     } finally {
@@ -338,6 +371,72 @@
     openError = "";
   }
 
+  /** Seleksi ikut konteks: ganti project/folder = mulai dari kosong. */
+  $effect(() => {
+    const _scope = currentId + "|" + folderId;
+    void _scope;
+    selectedIds = [];
+    selAnchor = null;
+    selectMode = false;
+  });
+
+  function toggleSelect(id: string) {
+    selectedIds = selectedIds.includes(id)
+      ? selectedIds.filter((x) => x !== id)
+      : [...selectedIds, id];
+    selAnchor = id;
+  }
+
+  /** Pilih semua halaman yang tampil (ikut filter folder + kanban). */
+  function selectAll() {
+    selectedIds = visiblePages.map((p) => p.id);
+    selAnchor = null;
+  }
+
+  function cancelHold() {
+    if (holdTimer !== null) {
+      clearTimeout(holdTimer);
+      holdTimer = null;
+    }
+  }
+
+  /** Tahan gambar ±0.5 dtk = masuk mode pilih + pilih kartu itu (pola mobile). */
+  function onCardPress(pg: Page) {
+    if (selectMode) return;
+    heldSelect = false;
+    cancelHold();
+    holdTimer = setTimeout(() => {
+      heldSelect = true;
+      selectMode = true;
+      if (!selectedIds.includes(pg.id)) {
+        selectedIds = [...selectedIds, pg.id];
+        selAnchor = pg.id;
+      }
+    }, 500);
+  }
+
+  function onCardClick(e: MouseEvent, pg: Page) {
+    if (heldSelect) {
+      // Lepas-tahan setelah long-press: jangan buka editor.
+      heldSelect = false;
+      return;
+    }
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      selectMode = true;
+      toggleSelect(pg.id);
+    } else if (e.shiftKey && selAnchor) {
+      e.preventDefault();
+      selectMode = true;
+      const order = sortPagesByName(visiblePages).map((p) => p.id);
+      const range = rangeSelect(order, selAnchor, pg.id);
+      selectedIds = [...new Set([...selectedIds, ...range])];
+      selAnchor = pg.id;
+    } else {
+      openEditor(pg);
+    }
+  }
+
   function onSaved(updated: Page) {
     if (!currentId) return;
     projects = projects.map((p) =>
@@ -362,7 +461,8 @@
     busy = true;
     error = "";
     try {
-      const f = await api.createFolder(currentId, n);
+      const parent = folderId === "all" ? null : folderId;
+      const f = await api.createFolder(currentId, n, parent);
       folderName = "";
       const updated = await api.getProject(currentId);
       projects = projects.map((p) => (p.id === currentId ? updated : p));
@@ -450,6 +550,7 @@
 </script>
 
 <main class="flex min-h-screen flex-col bg-bg text-ink" data-theme={$theme}>
+  {#if loaded && projects.length > 0}
   <header class="sticky top-0 z-30 flex flex-wrap items-center gap-2 border-b border-line bg-surface/80 px-4 py-2 backdrop-blur-md">
     <h1 class="font-display shrink-0 text-base font-semibold tracking-tight">Kuron Studio</h1>
     <div class="h-5 w-px shrink-0 bg-line" aria-hidden="true"></div>
@@ -510,18 +611,6 @@
               {:else}
                 <p class="px-2.5 py-2 text-xs text-ink-3">{$t("noProjectMatch")}</p>
               {/each}
-            </div>
-            <div class="border-t border-line p-1">
-              <form class="flex gap-1" onsubmit={(e) => { e.preventDefault(); void createProject(menuName); }}>
-                <input
-                  class="h-7 min-w-0 flex-1 rounded border border-line bg-surface px-2 text-xs text-ink
-                         placeholder:text-ink-3 outline-none focus:border-accent"
-                  placeholder={$t("projectName")}
-                  aria-label={$t("projectName")}
-                  bind:value={menuName}
-                />
-                <Button type="submit" variant="default" size="sm" disabled={busy || !menuName.trim()} title={$t("create")}>+</Button>
-              </form>
             </div>
           </div>
         {/if}
@@ -603,6 +692,7 @@
       >⚙</Button>{/if}
     </div>
   </header>
+  {/if}
 
   {#if lastInvokeError}
     <p
@@ -623,33 +713,22 @@
     <p role="alert" class="border-b border-warn-soft bg-warn-soft px-5 py-2 text-sm text-warn">{error}</p>
   {/if}
   {#if info}
-    <p role="status" class="border-b border-success-soft bg-success-soft px-5 py-2 text-sm text-success">{info}</p>
+    {#key info}
+      <Snackbar message={info} onClose={() => (info = "")} />
+    {/key}
   {/if}
 
-  {#if projects.length === 0}
-    <section class="mx-auto mt-20 w-full max-w-sm rounded-card border border-line bg-surface p-6">
-      <h2 class="font-display mb-1 text-sm font-semibold">{$t("newProject")}</h2>
-      <p class="mb-4 text-xs text-ink-3">Satu project = satu judul. Halaman bisa diimpor kapan saja.</p>
-      <form
-        class="flex gap-2"
-        onsubmit={(e) => { e.preventDefault(); void createProject(); }}
-      >
-        <input
-          class="h-9 min-w-0 flex-1 rounded-md border border-line bg-surface-2 px-3 text-sm text-ink
-                 placeholder:text-ink-3 outline-none transition-colors
-                 focus:border-accent focus:ring-2 focus:ring-accent/25"
-          placeholder={$t("projectName")}
-          aria-label={$t("projectName")}
-          bind:value={name}
-        />
-        <Button type="submit" variant="primary" disabled={busy || !name.trim()}>{$t("create")}</Button>
-      </form>
-    </section>
+  {#if !loaded}
+    <div class="flex flex-1 items-center justify-center p-10" aria-hidden="true">
+      <div class="h-10 w-10 animate-pulse rounded-full bg-raised"></div>
+    </div>
+  {:else if projects.length === 0}
+    <Onboarding busy={busy} onCreate={(n) => void createProject(n)} onSample={() => void createSample()} />
   {:else if current}
     {@const dashStats = projectStats(current)}
     {@const dashPct = Math.round(dashStats.progress * 100)}
-    <section class="flex items-stretch gap-3 border-b border-line bg-surface/50 px-5 py-2.5" aria-label={$t("dashboard")}>
-      <div class="w-60 shrink-0">
+    <section class="flex flex-col gap-2 border-b border-line bg-surface/50 px-5 py-2.5 sm:flex-row sm:items-stretch sm:gap-3" aria-label={$t("dashboard")}>
+      <div class="w-full sm:w-60 sm:shrink-0">
         <div class="truncate text-sm font-semibold" title={current.name}>{current.name}</div>
         <div class="tnum mt-0.5 text-[11px] text-ink-3">
           {dashStats.done}/{dashStats.total} · {dashPct}%{#if dashStats.failed > 0}<span class="text-danger"> · {dashStats.failed} {$t("kanbanFailed")}</span>{/if}
@@ -661,7 +740,7 @@
           {dashStats.todo + dashStats.doing} {$t("remainingTodo")} · {current.updatedAt ? new Date((current.updatedAt ?? 0) * 1000).toLocaleDateString() : "—"}
         </div>
       </div>
-      <div class="w-px self-stretch bg-line" aria-hidden="true"></div>
+      <div class="hidden w-px self-stretch bg-line sm:block" aria-hidden="true"></div>
       <div class="flex min-w-0 flex-1 items-stretch gap-1.5 overflow-x-auto">
         {#each projects as p (p.id)}
           {@const st = projectStats(p)}
@@ -679,8 +758,8 @@
           </button>
         {/each}
       </div>
-      <div class="w-px self-stretch bg-line" aria-hidden="true"></div>
-      <form class="flex w-44 shrink-0 flex-col justify-center gap-1" onsubmit={(e) => { e.preventDefault(); void createProject(); }}>
+      <div class="hidden w-px self-stretch bg-line sm:block" aria-hidden="true"></div>
+      <form class="flex w-full flex-col justify-center gap-1 sm:w-44 sm:shrink-0" onsubmit={(e) => { e.preventDefault(); void createProject(); }}>
         <input
           class="h-7 w-full rounded-md border border-line bg-surface-2 px-2 text-xs text-ink
                  placeholder:text-ink-3 outline-none transition-colors focus:border-accent"
@@ -696,17 +775,59 @@
         class="rounded-md border px-2.5 py-1 text-xs {folderId === 'all' ? 'border-accent bg-accent/10 font-semibold' : 'border-line hover:border-accent/60'}"
         onclick={() => (folderId = "all")}
       >{$t("allFolders")} ({allPages(current).length})</button>
-      {#each current.folders as f (f.id)}
-        {@const fs = folderStats(f)}
-        <div class="flex items-center overflow-hidden rounded-md border {folderId === f.id ? 'border-accent bg-accent/10' : 'border-line'}">
-          <button class="px-2.5 py-1 text-xs {folderId === f.id ? 'font-semibold' : ''}" onclick={() => (folderId = f.id)} title="{fs.done}/{fs.total}">
-            {f.name} ({fs.done}/{fs.total}{fs.failed > 0 ? ` ⚠${fs.failed}` : ""})
-          </button>
-          {#if current.folders.length > 1}
-            <button class="px-1.5 py-1 text-[11px] text-danger hover:bg-danger-soft" onclick={() => void deleteFolder(f.id)} title={$t("deleteFolder")} aria-label="{$t('deleteFolder')}: {f.name}">×</button>
-          {/if}
-        </div>
-      {/each}
+      {#if nested}
+        {#each crumb as f, i (f.id)}
+          <span class="text-ink-3" aria-hidden="true">›</span>
+          <FolderChip
+            projectId={current.id}
+            folders={current.folders}
+            folder={f}
+            stats={subtreeStats(current, f.id)}
+            active={i === crumb.length - 1}
+            canDelete={current.folders.length > 1}
+            {busy}
+            onSelect={(id) => (folderId = id)}
+            onDelete={(id) => void deleteFolder(id)}
+            onRenamed={() => currentId && void refreshProject(currentId)}
+            onError={(msg) => (error = msg)}
+          />
+        {/each}
+        {#if childFolders.length > 0}
+          <span class="mx-1 h-4 w-px bg-line" aria-hidden="true"></span>
+          {#each childFolders as f (f.id)}
+            <FolderChip
+              projectId={current.id}
+              folders={current.folders}
+              folder={f}
+              stats={subtreeStats(current, f.id)}
+              active={false}
+              dashed
+              canDelete={false}
+              {busy}
+              onSelect={(id) => (folderId = id)}
+              onDelete={(id) => void deleteFolder(id)}
+              onRenamed={() => currentId && void refreshProject(currentId)}
+              onError={(msg) => (error = msg)}
+            />
+          {/each}
+        {/if}
+      {:else}
+        {#each current.folders as f (f.id)}
+          <FolderChip
+            projectId={current.id}
+            folders={current.folders}
+            folder={f}
+            stats={subtreeStats(current, f.id)}
+            active={folderId === f.id}
+            canDelete={current.folders.length > 1}
+            {busy}
+            onSelect={(id) => (folderId = id)}
+            onDelete={(id) => void deleteFolder(id)}
+            onRenamed={() => currentId && void refreshProject(currentId)}
+            onError={(msg) => (error = msg)}
+          />
+        {/each}
+      {/if}
       <form class="ml-1 flex gap-1" onsubmit={(e) => { e.preventDefault(); void createFolder(); }}>
         <input
           class="h-7 w-32 rounded-md border border-line bg-surface-2 px-2 text-xs outline-none focus:border-accent"
@@ -714,7 +835,7 @@
           aria-label={$t("folderName")}
           bind:value={folderName}
         />
-        <Button type="submit" variant="default" size="sm" disabled={busy || !folderName.trim()}>{$t("newFolder")}</Button>
+        <Button type="submit" variant="default" size="sm" disabled={busy || !folderName.trim()} title={folderId === "all" ? $t("newFolder") : `${$t("newFolder")} → ${currentFolder?.name ?? ""}`}>{$t("newFolder")}</Button>
       </form>
     </section>
     <section class="flex flex-wrap items-center gap-1.5 px-5 pt-3" aria-label="kanban">
@@ -728,7 +849,33 @@
           {key === "all" ? $t("allFolders") : $t(key === "todo" ? "kanbanTodo" : key === "doing" ? "kanbanDoing" : key === "done" ? "kanbanDone" : "kanbanFailed")} · {n}
         </button>
       {/each}
+      {#if !selectMode}
+        <Button
+          variant="default"
+          size="sm"
+          onclick={() => (selectMode = true)}
+          disabled={busy || visiblePages.length === 0}
+        >{$t("selectMode")}</Button>
+      {:else}
+        <span class="mx-1 h-4 w-px bg-line" aria-hidden="true"></span>
+        <Button
+          variant="default"
+          size="sm"
+          onclick={selectAll}
+          disabled={busy || visiblePages.length === 0 || visiblePages.every((p) => selectedIds.includes(p.id))}
+        >{$t("selectAll")} ({visiblePages.length})</Button>
+        {#if selectedIds.length === 0}
+          <Button variant="ghost" size="sm" onclick={() => (selectMode = false)}>{$t("close")}</Button>
+        {/if}
+      {/if}
     </section>
+    {#if selectedIds.length > 0}
+      <div class="tnum mx-5 mt-3 flex items-center gap-2 rounded-md border border-line bg-surface-2 px-3 py-1.5 text-xs" role="status">
+        <span class="font-semibold">{$t("selectedCount").replace("{n}", String(selectedIds.length))}</span>
+        <Button variant="default" size="sm" onclick={() => (showMove = true)} disabled={busy}>{$t("moveTo")}</Button>
+        <Button variant="ghost" size="sm" onclick={() => { selectedIds = []; selAnchor = null; selectMode = false; }}>{$t("clearSelection")}</Button>
+      </div>
+    {/if}
     {#if thumbTotal > 0 && thumbDone < thumbTotal}
       <p role="status" class="tnum border-b border-line bg-surface-2 px-5 py-1.5 text-xs text-ink-2">
         {$t("loadingPreviews").replace("{done}", String(thumbDone)).replace("{total}", String(thumbTotal))}
@@ -745,12 +892,18 @@
       class:outline-accent={dragging}
     >
       {#each sortPagesByName(visiblePages) as pg (pg.id)}
+        {@const sel = selectedIds.includes(pg.id)}
+        <div class="relative">
         <button
           use:observeCard={pg.id}
-          class="group overflow-hidden rounded-lg border border-line bg-surface text-left transition-colors
+          class="group block w-full overflow-hidden rounded-lg border bg-surface text-left transition-colors
                  hover:border-accent/60 focus-visible:border-accent
-                 disabled:cursor-not-allowed disabled:opacity-60"
-          onclick={() => openEditor(pg)}
+                 disabled:cursor-not-allowed disabled:opacity-60 {sel ? 'border-accent' : 'border-line'}"
+          onclick={(e) => onCardClick(e, pg)}
+          onpointerdown={() => onCardPress(pg)}
+          onpointerup={cancelHold}
+          onpointerleave={cancelHold}
+          onpointercancel={cancelHold}
           disabled={!!broken[pg.id]}
         >
           <div class="relative">
@@ -788,6 +941,17 @@
             <StatusBadge status={pg.status} class="ml-auto" />
           </div>
         </button>
+        {#if selectMode}
+          <input
+            type="checkbox"
+            class="absolute top-1.5 left-1.5 h-4 w-4 cursor-pointer accent-accent"
+            checked={sel}
+            aria-label="{$t('selectPage')}: {fileName(pg.path)}"
+            onclick={(e) => e.stopPropagation()}
+            onchange={() => toggleSelect(pg.id)}
+          />
+        {/if}
+        </div>
       {/each}
     </section>
     {#if scopedPages.length === 0}
@@ -829,6 +993,39 @@
 
   {#if showGlossary}
     <GlossaryPanel onClose={() => (showGlossary = false)} />
+  {/if}
+
+  {#if showMove && current && currentId}
+    {@const cur = current}
+    {@const cid = currentId}
+    <MoveDialog
+      project={cur}
+      fromFolderId={folderId}
+      pageIds={selectedIds}
+      {busy}
+      onClose={() => (showMove = false)}
+      onError={(msg) => (error = msg)}
+      onMoved={(res, destName) => {
+        // Dialog tetap terbuka: tampilkan layar sukses, user yang menutup.
+        void (async () => {
+          const updated = await api.getProject(cid);
+          projects = projects.map((p) => (p.id === cid ? updated : p));
+          // Seleksi + thumbnail basi dibuang: halaman sudah pindah folder.
+          const live = new Set(allPages(updated).map((pg) => pg.id));
+          for (const id of Object.keys(thumbs)) if (!live.has(id)) delete thumbs[id];
+          for (const id of Object.keys(fullUrls)) if (!live.has(id)) delete fullUrls[id];
+          for (const id of Object.keys(broken)) if (!live.has(id)) delete broken[id];
+          selectedIds = [];
+          selAnchor = null;
+          selectMode = false;
+          thumbs = { ...thumbs };
+          fullUrls = { ...fullUrls };
+          broken = { ...broken };
+          info = $t("moveDone").replace("{n}", String(res.moved)).replace("{d}", destName)
+            + (res.skipped > 0 ? ` (${$t("skippedCount").replace("{n}", String(res.skipped))})` : "");
+        })();
+      }}
+    />
   {/if}
 
   {#if showReview && current}

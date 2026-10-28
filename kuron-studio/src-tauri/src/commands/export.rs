@@ -507,17 +507,7 @@ pub fn collect_pages(
         .ok_or_else(|| format!("project not found: {project_id}"))?
         .clone();
     drop(store);
-    let pages = match folder_id.filter(|s| !s.is_empty()) {
-        Some(fid) => {
-            let folder = proj
-                .folder(fid)
-                .ok_or_else(|| format!("folder not found: {fid}"))?;
-            let mut p = folder.pages.clone();
-            p.sort_by(|a, b| a.path.cmp(&b.path));
-            p
-        }
-        None => proj.sorted_all_pages(),
-    };
+    let pages = proj.pages_in_scope(folder_id)?;
     let mut out = Vec::new();
     for (i, pg) in pages.iter().enumerate() {
         let Some(t) = pg.translation.clone() else {
@@ -546,17 +536,7 @@ pub fn export_json_bytes(
         .get(project_id)
         .ok_or_else(|| format!("project not found: {project_id}"))?
         .clone();
-    let pages = match folder_id.filter(|s| !s.is_empty()) {
-        Some(fid) => {
-            let folder = proj
-                .folder(fid)
-                .ok_or_else(|| format!("folder not found: {fid}"))?;
-            let mut p = folder.pages.clone();
-            p.sort_by(|a, b| a.path.cmp(&b.path));
-            p
-        }
-        None => proj.sorted_all_pages(),
-    };
+    let pages = proj.pages_in_scope(folder_id)?;
     let ts: Vec<&PageTranslation> = pages.iter().filter_map(|p| p.translation.as_ref()).collect();
     serde_json::to_vec_pretty(&ts).map_err(|e| e.to_string())
 }
@@ -616,17 +596,7 @@ pub fn export_project(
                 .ok_or_else(|| format!("project not found: {project_id}"))?
                 .clone();
             drop(store);
-            let pages = match fid.filter(|s| !s.is_empty()) {
-                Some(fid) => {
-                    let folder = proj
-                        .folder(fid)
-                        .ok_or_else(|| format!("folder not found: {fid}"))?;
-                    let mut p = folder.pages.clone();
-                    p.sort_by(|a, b| a.path.cmp(&b.path));
-                    p
-                }
-                None => proj.sorted_all_pages(),
-            };
+            let pages = proj.pages_in_scope(fid)?;
             std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
             let mut n = 0;
             for (i, pg) in pages.iter().enumerate() {

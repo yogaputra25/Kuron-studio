@@ -11,6 +11,7 @@ import type {
   ExportFormat,
   GlossaryEntry,
   ImportResult,
+  MoveResult,
   PageTranslation,
   Project,
   ProviderView,
@@ -33,19 +34,20 @@ export const api = {
   listProjects: () => invoke<Project[]>("list_projects"),
   createProject: (name: string) => invoke<Project>("create_project", { name }),
   getProject: (project_id: string) => invoke<Project>("get_project", { project_id }),
-  createFolder: (project_id: string, name: string) =>
-    invoke<ChapterFolder>("create_folder", { project_id, name }),
+  createFolder: (project_id: string, name: string, parent_id?: string | null) =>
+    invoke<ChapterFolder>("create_folder", { project_id, name, parent_id: parent_id ?? null }),
   renameFolder: (project_id: string, folder_id: string, name: string) =>
     invoke<ChapterFolder>("rename_folder", { project_id, folder_id, name }),
   deleteFolder: (project_id: string, folder_id: string) =>
     invoke<void>("delete_folder", { project_id, folder_id }),
   movePages: (project_id: string, page_ids: string[], folder_id: string) =>
-    invoke<number>("move_pages", { project_id, page_ids, folder_id }),
+    invoke<MoveResult>("move_pages", { project_id, page_ids, folder_id }),
   importPages: (project_id: string, paths: string[], folder_id?: string | null) =>
     invoke<ImportResult>("import_pages", { project_id, paths, folder_id: folder_id ?? null }),
   cleanPages: (project_id: string, folder_id?: string | null) =>
     invoke<CleanResult>("clean_pages", { project_id, folder_id: folder_id ?? null }),
   deleteProject: (project_id: string) => invoke<void>("delete_project", { project_id }),
+  createSample: (name: string) => invoke<Project>("create_sample_project", { name }),
   getImagePreview: (path: string, max_side = 512) =>
     invoke<string>("get_image_preview", { path, max_side }),
   detectStatus: () => invoke<DetectStatus>("detect_status"),

@@ -80,3 +80,88 @@ export function folderById(project: Project, folderId: string | null): ChapterFo
   if (!folderId) return project.folders[0] ?? null;
   return project.folders.find((f) => f.id === folderId) ?? null;
 }
+
+/** Anak langsung sebuah folder. */
+export function childrenOf(project: Project, folderId: string): ChapterFolder[] {
+  return project.folders.filter((f) => f.parentId === folderId);
+}
+
+/** True bila ada folder bersarang (punya parent). */
+export function hasNesting(project: Project): boolean {
+  return project.folders.some((f) => f.parentId != null && f.parentId !== "");
+}
+
+/** Rantai root → … → parent → folder itu sendiri. Korup (siklus) diputus. */
+export function folderPath(project: Project, folderId: string): ChapterFolder[] {
+  const byId = new Map(project.folders.map((f) => [f.id, f]));
+  const chain: ChapterFolder[] = [];
+  const seen = new Set<string>();
+  let cur = byId.get(folderId);
+  while (cur && !seen.has(cur.id)) {
+    seen.add(cur.id);
+    chain.unshift(cur);
+    cur = cur.parentId ? (byId.get(cur.parentId) ?? undefined) : undefined;
+  }
+  return chain;
+}
+
+/** Semua halaman subtree (folder + keturunan), urut nama file. */
+export function subtreePages(project: Project, folderId: string): Page[] {
+  const ids = new Set<string>([folderId]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const f of project.folders) {
+      if (f.parentId != null && f.parentId !== "" && ids.has(f.parentId) && !ids.has(f.id)) {
+        ids.add(f.id);
+        grew = true;
+      }
+    }
+  }
+  return sortPagesByName(project.folders.filter((f) => ids.has(f.id)).flatMap((f) => f.pages));
+}
+
+function statsOf(pages: Page[]): FolderStats {
+  const total = pages.length;
+  const k = groupKanban(pages);
+  return { total, done: k.done.length, failed: k.failed.length, todo: k.todo.length, doing: k.doing.length, progress: total === 0 ? 0 : k.done.length / total };
+}
+
+/** Agregat subtree (folder + keturunan). */
+export function subtreeStats(project: Project, folderId: string): FolderStats {
+  return statsOf(subtreePages(project, folderId));
+}
+
+/** True bila `name` sudah dipakai saudara sekandung (parent sama). Cermin aturan backend. */
+export function isSiblingNameTaken(folders: ChapterFolder[], folderId: string, name: string): boolean {
+  const self = folders.find((f) => f.id === folderId);
+  if (!self) return false;
+  const want = name.trim();
+  if (!want) return true;
+  return folders.some((f) => f.id !== folderId && f.parentId === self.parentId && f.name === want);
+}
+
+/** Id dalam rentang anchor→klik (inklusif) menurut urutan tampil. Tanpa anchor = klik saja. */
+export function rangeSelect(orderedIds: string[], anchorId: string | null, clickedId: string): string[] {
+  if (!anchorId) return [clickedId];
+  const a = orderedIds.indexOf(anchorId);
+  const b = orderedIds.indexOf(clickedId);
+  if (a === -1 || b === -1) return [clickedId];
+  const [lo, hi] = a < b ? [a, b] : [b, a];
+  return orderedIds.slice(lo, hi + 1);
+}
+
+/** Folder langsung tempat SEMUA pageIds berada; null bila kosong/tak ketemu/tersebar.
+ *  Dipakai dialog pindah: folder asal ditampilkan disabled (tak bisa jadi tujuan). */
+export function singleOwnerFolderId(folders: ChapterFolder[], pageIds: string[]): string | null {
+  if (pageIds.length === 0) return null;
+  const wanted = new Set(pageIds);
+  let owner: string | null = null;
+  for (const f of folders) {
+    if (f.pages.some((p) => wanted.has(p.id))) {
+      if (owner !== null) return null;
+      owner = f.id;
+    }
+  }
+  return owner;
+}
