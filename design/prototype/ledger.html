@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C · Bubble ledger — Kuron Studio</title>
+<link rel="stylesheet" href="tokens.css">
+</head>
+<body>
+<div class="app">
+  <div class="appbar">
+    <span class="brand">Kuron Studio</span>
+    <span class="field" style="height:24px">Chapter 12 <span class="caret">▾</span></span>
+    <span class="count tnum">007/182</span>
+    <span class="sp"></span>
+    <span class="btn def sm">Terjemahkan tersaring</span>
+    <span class="btn gho sm">Ekspor</span>
+  </div>
+  <div class="ledger-bar">
+    <div class="seg">
+      <span class="on">Semua <b class="c tnum">87</b></span>
+      <span>Belum terjemah <b class="c tnum">23</b></span>
+      <span>Belum dicek <b class="c tnum">64</b></span>
+      <span>Muat gagal <b class="c tnum">4</b></span>
+    </div>
+    <span class="field" style="height:24px;max-width:200px"><span style="color:var(--ks-text-3)">Cari teks sumber…</span></span>
+    <span class="sp" style="flex:1"></span>
+    <span class="mono" style="font-size:10.5px;color:var(--ks-text-3)">↑↓ pindah · ⏎ buka halaman</span>
+  </div>
+  <div style="overflow:auto">
+    <table class="ledger">
+      <thead><tr><th>#</th><th>Hlm</th><th>Asli</th><th>Terjemahan</th><th>Muat</th><th>Dicek</th></tr></thead>
+      <tbody>
+        <tr><td class="idx">01</td><td class="pg">007</td><td class="src">なんだって…</td><td class="out">Apa-apaan…</td><td><span class="badge ok">Muat</span></td><td><span class="badge ok">Sudah</span></td></tr>
+        <tr class="on"><td class="idx">02</td><td class="pg">007</td><td class="src">これは嘘だ</td><td class="out mut">belum diterjemahkan</td><td><span class="badge mute">—</span></td><td><span class="badge mute">—</span></td></tr>
+        <tr><td class="idx">03</td><td class="pg">007</td><td class="src">もう遅い</td><td class="out">Sudah terlambat sekali</td><td><span class="badge warn">Sesak</span></td><td><span class="badge mute">Belum</span></td></tr>
+        <tr><td class="idx">04</td><td class="pg">008</td><td class="src">行くぞ</td><td class="out">Ayo pergi</td><td><span class="badge ok">Muat</span></td><td><span class="badge ok">Sudah</span></td></tr>
+        <tr><td class="idx">05</td><td class="pg">008</td><td class="src">何をしている</td><td class="out">Apa yang kamu lakukan</td><td><span class="badge err">Kelebihan</span></td><td><span class="badge mute">Belum</span></td></tr>
+        <tr><td class="idx">06</td><td class="pg">009</td><td class="src">先に行け</td><td class="out">Pergi duluan</td><td><span class="badge ok">Muat</span></td><td><span class="badge ok">Sudah</span></td></tr>
+        <tr><td class="idx">07</td><td class="pg">009</td><td class="src">信じていたのに</td><td class="out mut">belum diterjemahkan</td><td><span class="badge mute">—</span></td><td><span class="badge mute">—</span></td></tr>
+        <tr><td class="idx">08</td><td class="pg">010</td><td class="src">分かっている</td><td class="out">Ku tahu</td><td><span class="badge ok">Muat</span></td><td><span class="badge warn">Belum</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="ledger-foot">
+    <span class="tnum">87 bubble · 23 belum terjemah · 4 gagal muat</span>
+    <span class="sp"></span>
+    <span class="btn def sm">Tandai 64 dicek</span>
+    <span class="btn pri sm">Terjemahkan 23</span>
+  </div>
+</div>
+</body>
+</html>
