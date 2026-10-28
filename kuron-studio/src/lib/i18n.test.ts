@@ -62,6 +62,10 @@ const KEYS = [
   "deleteFolder",
   "confirmDeleteFolder",
   "moveToFolder",
+  "selectProject",
+  "projectList",
+  "searchProject",
+  "noProjectMatch",
 ];
 
 const LANGS: Lang[] = ["en", "id", "zh"];

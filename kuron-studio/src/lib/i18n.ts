@@ -118,6 +118,10 @@ const STR: Record<string, Record<Lang, string>> = {
   deleteFolder: { en: "Delete folder", id: "Hapus folder", zh: "删除文件夹" },
   confirmDeleteFolder: { en: "Delete this folder?", id: "Hapus folder ini?", zh: "删除此文件夹？" },
   moveToFolder: { en: "Move", id: "Pindah", zh: "移动" },
+  selectProject: { en: "Choose project", id: "Pilih project", zh: "选择项目" },
+  projectList: { en: "Project list", id: "Daftar project", zh: "项目列表" },
+  searchProject: { en: "Search projects…", id: "Cari project…", zh: "搜索项目…" },
+  noProjectMatch: { en: "No match.", id: "Tidak ada yang cocok.", zh: "无匹配。" },
 };
 
 export const t = derived(lang, ($l) => (k: string): string => STR[k]?.[$l] ?? k);

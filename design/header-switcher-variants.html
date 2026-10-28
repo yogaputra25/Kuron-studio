@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Header project-switcher — 4 varian</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d0d10; color: #ececf1; font: 13px/1.45 "Inter", system-ui, sans-serif; padding: 28px; }
+  h1 { font-size: 15px; margin-bottom: 4px; }
+  .sub { color: #71727d; font-size: 12px; margin-bottom: 22px; }
+  .v { margin-bottom: 26px; }
+  .v > .lab { display: flex; baseline: 0; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+  .v .n { font-family: monospace; color: #35e7f5; font-size: 12px; }
+  .v .t { font-size: 13px; font-weight: 600; }
+  .v .d { color: #71727d; font-size: 11.5px; }
+  .v .pro { color: #5fd99a; font-size: 11.5px; }
+  .v .kon { color: #ff8a7a; font-size: 11.5px; }
+  .bar { border: 1px solid #26262e; border-radius: 8px; background: #141418cc; display: flex; align-items: center; gap: 8px; padding: 8px 14px; min-height: 52px; }
+  .logo { font-weight: 700; letter-spacing: -0.02em; font-size: 15px; white-space: nowrap; }
+  .div { width: 1px; height: 20px; background: #26262e; flex: none; }
+  .ghost { border: 1px solid transparent; background: none; color: #a5a6b0; font-size: 12px; padding: 6px 8px; border-radius: 6px; white-space: nowrap; }
+  .mono { font-family: monospace; font-variant-numeric: tabular-nums; }
+  /* V1 dropdown */
+  .dd { position: relative; }
+  .ddbtn { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 10px 0 12px; background: #1a1a20; border: 1px solid #35353f; border-radius: 6px; color: #ececf1; font-size: 13px; }
+  .ddbtn small { color: #71727d; font-size: 11px; }
+  .ddbtn .mini { width: 56px; height: 3px; background: #22222a; border-radius: 2px; overflow: hidden; }
+  .ddbtn .mini i { display: block; height: 100%; background: #ff6b5a; }
+  .menu { position: absolute; top: 40px; left: 0; width: 264px; background: #1a1a20; border: 1px solid #35353f; border-radius: 8px; padding: 6px; display: none; z-index: 5; }
+  .dd.open .menu { display: block; }
+  .menu input { width: 100%; height: 30px; background: #141418; border: 1px solid #26262e; border-radius: 6px; color: #ececf1; font-size: 12px; padding: 0 8px; margin-bottom: 4px; }
+  .mi { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; font-size: 12.5px; }
+  .mi.on { background: #ff6b5a1a; }
+  .mi .r { margin-left: auto; color: #71727d; font-size: 11px; }
+  .mi.new { color: #ff6b5a; }
+  /* V2 tabs */
+  .tabs { display: flex; align-items: stretch; gap: 2px; overflow: hidden; }
+  .tab { position: relative; padding: 8px 12px 10px; font-size: 12.5px; color: #a5a6b0; background: none; border: none; white-space: nowrap; }
+  .tab.on { color: #ececf1; font-weight: 600; }
+  .tab::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 0; height: 2px; border-radius: 2px; background: transparent; }
+  .tab.on::after { background: #ff6b5a; }
+  .tab small { color: #71727d; font-weight: 400; }
+  .tab.plus { color: #ff6b5a; font-size: 15px; padding-bottom: 8px; }
+  /* V3 breadcrumb */
+  .crumb { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px; background: #1a1a20; border: 1px solid #26262e; border-radius: 6px; font-size: 13px; }
+  .crumb .lib { color: #71727d; }
+  .crumb kbd { font-family: monospace; font-size: 10.5px; color: #71727d; border: 1px solid #35353f; border-radius: 4px; padding: 1px 5px; background: #141418; }
+  /* V4 stepper */
+  .step { display: flex; align-items: center; gap: 4px; height: 36px; padding: 0 6px; background: #1a1a20; border: 1px solid #26262e; border-radius: 6px; }
+  .step button { width: 24px; height: 24px; border: none; background: none; color: #a5a6b0; font-size: 14px; border-radius: 4px; }
+  .step .nm { font-size: 12.5px; font-weight: 600; padding: 0 6px; white-space: nowrap; }
+  .step .ct { font-size: 11px; color: #71727d; padding-right: 6px; white-space: nowrap; }
+</style>
+</head>
+<body>
+<h1>Project switcher — 4 varian</h1>
+<p class="sub">Klik: dropdown V1 bisa dibuka/tutup · tab V2 bisa pindah aktif. Data mock: Solo Leveling 1/5 · One Piece 0/1 · Jujutsu 4/4.</p>
+
+<div class="v">
+  <div class="lab"><span class="n">V1</span><span class="t">Dropdown custom</span><span class="d">pengganti &lt;select&gt; 1:1, ruang sama</span></div>
+  <div class="lab"><span class="pro">+ Tetap ramping; muat cari + statistik + buat baru.</span><span class="kon">− Satu klik ekstra untuk pindah.</span></div>
+  <div class="bar">
+    <span class="logo">Kuron Studio</span><span class="div"></span>
+    <div class="dd" id="dd1">
+      <button class="ddbtn" onclick="document.getElementById('dd1').classList.toggle('open')">
+        Solo Leveling <small class="mono">1/5</small>
+        <span class="mini"><i style="width:20%"></i></span> ▾
+      </button>
+      <div class="menu">
+        <input placeholder="Cari project…">
+        <div class="mi on">Solo Leveling <span class="r mono">1/5 · 20%</span></div>
+        <div class="mi">One Piece <span class="r mono">0/1 · 0%</span></div>
+        <div class="mi">Jujutsu Kaisen <span class="r mono">4/4 · 100%</span></div>
+        <div class="mi new">+ Project baru…</div>
+      </div>
+    </div>
+    <span class="ghost">RTL→</span><span class="ghost">ID</span>
+  </div>
+</div>
+
+<div class="v">
+  <div class="lab"><span class="n">V2</span><span class="t">Tab bar</span><span class="d">pindah 1 klik, seperti tab browser</span></div>
+  <div class="lab"><span class="pro">+ Paling cepat; progres terlihat semua.</span><span class="kon">− Penuh kalau project &gt; 6.</span></div>
+  <div class="bar">
+    <span class="logo">Kuron Studio</span><span class="div"></span>
+    <div class="tabs" id="tabs2">
+      <button class="tab on">Solo Leveling <small>1/5</small></button>
+      <button class="tab">One Piece <small>0/1</small></button>
+      <button class="tab">Jujutsu Kaisen <small>4/4</small></button>
+      <button class="tab plus" title="Project baru">+</button>
+    </div>
+  </div>
+</div>
+
+<div class="v">
+  <div class="lab"><span class="n">V3</span><span class="t">Breadcrumb + ⌘K</span><span class="d">gaya palette modern, skala besar</span></div>
+  <div class="lab"><span class="pro">+ Rapi + cari keyboard; muat puluhan project.</span><span class="kon">− Butuh palette ⌘K (kerjaan baru).</span></div>
+  <div class="bar">
+    <span class="logo">Kuron Studio</span><span class="div"></span>
+    <div class="crumb"><span class="lib">Library</span><span style="color:#35353f">/</span><b>Solo Leveling</b> <span class="mono" style="font-size:11px;color:#71727d">1/5</span> <kbd>⌘K</kbd></div>
+    <span class="ghost">RTL→</span><span class="ghost">ID</span>
+  </div>
+</div>
+
+<div class="v">
+  <div class="lab"><span class="n">V4</span><span class="t">Stepper ‹ ›</span><span class="d">paling hemat tempat, jalan 2–4 project</span></div>
+  <div class="lab"><span class="pro">+ Header tetap lega; cocok + tombol [+].</span><span class="kon">− Pindah jauh (pertama→terakhir) lambat.</span></div>
+  <div class="bar">
+    <span class="logo">Kuron Studio</span><span class="div"></span>
+    <div class="step">
+      <button>‹</button><span class="nm">Solo Leveling</span><span class="ct mono">1/5 · 20%</span><button>›</button>
+    </div>
+    <span class="ghost" style="color:#ff6b5a">+ Baru</span>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll("#tabs2 .tab").forEach(b => b.addEventListener("click", () => {
+    if (b.classList.contains("plus")) return;
+    document.querySelectorAll("#tabs2 .tab").forEach(x => x.classList.remove("on"));
+    b.classList.add("on");
+  }));
+</script>
+</body>
+</html>
