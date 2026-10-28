@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>H · Home Mobile + Drawer — Kuron Studio</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .mbar { display: flex; align-items: center; gap: 8px;
+    background: var(--ks-surface); border-bottom: 1px solid var(--ks-line);
+    padding: 8px 10px; position: sticky; top: 0; z-index: 30; }
+  .mbar .brand { font-family: var(--display); font-size: 14px; font-weight: 600;
+    letter-spacing: -0.01em; white-space: nowrap; }
+  .mbar .count { font-family: var(--mono); font-size: 10.5px; color: var(--ks-text-3); white-space: nowrap; }
+  .mbar .sp { flex: 1; }
+  .iconbtn { width: 40px; height: 40px; flex: none; display: grid; place-items: center;
+    background: transparent; border: 1px solid transparent; border-radius: var(--r);
+    color: var(--ks-text); font-size: 17px; cursor: pointer; }
+  .iconbtn:hover { background: var(--ks-hover); }
+  .projstrip { display: flex; align-items: center; gap: 8px; margin: 10px 12px 0;
+    background: var(--ks-surface); border: 1px solid var(--ks-line);
+    border-radius: var(--r); padding: 9px 10px; font-size: 12px; }
+  .projstrip .nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .projstrip .pg { font-family: var(--mono); font-size: 10.5px; color: var(--ks-text-3); white-space: nowrap; }
+  .projstrip .caret { color: var(--ks-text-3); margin-left: auto; }
+  .mhint { padding: 14px 16px 24px; text-align: center; font-size: 11px; color: var(--ks-text-3); }
+
+  /* ---------- drawer ---------- */
+  .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 40; }
+  .scrim[hidden] { display: none; }
+  .drawer { position: fixed; top: 0; bottom: 0; left: 0; width: min(320px, 86vw); z-index: 41;
+    background: var(--ks-surface); border-right: 1px solid var(--ks-line);
+    display: flex; flex-direction: column;
+    transform: translateX(-102%); transition: transform .22s ease; }
+  .drawer.open { transform: none; }
+  .drawer .dh { display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px; border-bottom: 1px solid var(--ks-line); }
+  .drawer .dh b { font-family: var(--display); font-size: 13px; }
+  .drawer .dh .sp { flex: 1; }
+  .drawer .db { overflow-y: auto; flex: 1; padding: 8px 8px 16px; display: flex; flex-direction: column; gap: 14px; }
+  .dsec h3 { margin: 4px 4px 6px; font-size: 10px; font-weight: 700;
+    letter-spacing: .07em; text-transform: uppercase; color: var(--ks-text-3); }
+  .drow { display: flex; align-items: center; gap: 10px; width: 100%;
+    min-height: 44px; padding: 8px 10px; border-radius: var(--r);
+    background: transparent; border: 1px solid transparent; color: var(--ks-text);
+    font-size: 13px; text-align: left; cursor: pointer; }
+  .drow:hover { background: var(--ks-hover); }
+  .drow .ic { width: 22px; text-align: center; color: var(--ks-text-2); flex: none; }
+  .drow .tag { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--ks-text-3); }
+  .drow.pri { background: var(--ks-accent); color: var(--ks-accent-fg); font-weight: 600; }
+  .drow.dgr { color: var(--ks-danger); }
+  .drow.on { background: var(--ks-accent-soft); box-shadow: inset 2px 0 0 var(--ks-accent); }
+  .segrow { display: flex; border: 1px solid var(--ks-line); border-radius: var(--r);
+    overflow: hidden; margin: 0 4px; }
+  .segrow button { flex: 1; min-height: 40px; background: var(--ks-surface);
+    border: 0; border-right: 1px solid var(--ks-line); color: var(--ks-text-3);
+    font-size: 12px; cursor: pointer; }
+  .segrow button:last-child { border-right: 0; }
+  .segrow button.on { background: var(--ks-raised); color: var(--ks-text); font-weight: 600; }
+  .dnote { margin: 0 4px; font-size: 10.5px; color: var(--ks-text-3); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="mobile">
+    <div class="mbar">
+      <button class="iconbtn" id="burger" aria-expanded="false" aria-controls="drawer" aria-label="Buka menu">☰</button>
+      <span class="brand">Kuron Studio</span>
+      <span class="count tnum">3 projek</span>
+      <span class="sp"></span>
+      <button class="btn pri sm" style="height:40px;padding:0 12px;font-size:12px">＋ Import</button>
+    </div>
+
+    <button class="projstrip" id="projstrip" style="cursor:pointer;background:var(--ks-surface);color:var(--ks-text);text-align:left;width:calc(100% - 24px)">
+      <span class="nm">Judul-07</span>
+      <span class="pg tnum">182 hlm</span>
+      <span class="caret">▾</span>
+    </button>
+
+    <div class="mgrid">
+      <div class="pcard sel"><div class="ov"><span class="chip">⬢12</span></div><div class="mg"><i class="p"></i><i class="p"></i><i class="d"></i><i class="b"></i></div><div class="foot"><span class="nm">p001.jpg</span><span class="badge run">●</span></div></div>
+      <div class="pcard"><div class="ov"><span class="chip">⬢8</span></div><div class="mg"><i class="p"></i><i class="d"></i><i class="p"></i><i class="b"></i></div><div class="foot"><span class="nm">p002.jpg</span><span class="badge run">●</span></div></div>
+      <div class="pcard"><div class="ov"><span class="chip">⬢5</span></div><div class="mg"><i class="d"></i><i class="p"></i><i class="p"></i><i class="b"></i></div><div class="foot"><span class="nm">p003.jpg</span><span class="badge ok">●</span></div></div>
+      <div class="pcard"><div class="ov"><span class="chip">⬢9</span></div><div class="mg"><i class="p"></i><i class="p"></i><i class="d"></i><i class="b"></i></div><div class="foot"><span class="nm">p004.jpg</span><span class="badge ok">●</span></div></div>
+      <div class="pcard"><div class="ov"><span class="chip">⬢0</span></div><div class="mg"><i class="p"></i><i class="p"></i><i class="p"></i><i class="p"></i></div><div class="foot"><span class="nm">p005.jpg</span><span class="badge mute">●</span></div></div>
+      <div class="pcard"><div class="ov"><span class="chip">⬢0</span></div><div class="mg"><i class="d"></i><i class="d"></i><i class="p"></i><i class="k"></i></div><div class="foot"><span class="nm">p006.jpg</span><span class="badge err">●</span></div></div>
+    </div>
+    <p class="mhint">Ketuk kartu untuk buka editor · ☰ untuk semua aksi &amp; pengaturan</p>
+  </div>
+</div>
+
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Menu" aria-hidden="true">
+  <div class="dh">
+    <b>Kuron Studio</b>
+    <span class="sp"></span>
+    <button class="iconbtn" id="close" aria-label="Tutup menu">✕</button>
+  </div>
+  <div class="db">
+    <div class="dsec">
+      <h3>Projek</h3>
+      <button class="drow on"><span class="ic">▦</span>Judul-07<span class="tag tnum">182</span></button>
+      <button class="drow"><span class="ic">▦</span>Judul-06<span class="tag tnum">96</span></button>
+      <button class="drow"><span class="ic">▦</span>Judul-05<span class="tag tnum">210</span></button>
+      <button class="drow"><span class="ic">＋</span>Projek baru</button>
+    </div>
+    <div class="dsec">
+      <h3>Aksi</h3>
+      <button class="drow pri"><span class="ic">◉</span>Detect semua</button>
+      <button class="drow"><span class="ic">⤓</span>Import file<span class="tag">copy sandbox</span></button>
+      <button class="drow"><span class="ic">⚡</span>Batch terjemahan</button>
+      <button class="drow"><span class="ic">☰</span>Review grid</button>
+      <button class="drow"><span class="ic">📖</span>Glosarium</button>
+    </div>
+    <div class="dsec">
+      <h3>Tampilan &amp; bahasa</h3>
+      <div class="segrow" role="group" aria-label="Tema"><button>Terang</button><button class="on">Gelap</button></div>
+      <div style="height:6px"></div>
+      <div class="segrow" role="group" aria-label="Bahasa"><button class="on">ID</button><button>EN</button><button>中文</button></div>
+      <div style="height:6px"></div>
+      <button class="drow"><span class="ic">⇄</span>Urutan baca<span class="tag">RTL →</span></button>
+    </div>
+    <div class="dsec">
+      <h3>Lainnya</h3>
+      <button class="drow"><span class="ic">🔌</span>Provider &amp; pengaturan</button>
+      <button class="drow"><span class="ic">⚙</span>Diagnostik &amp; log</button>
+    </div>
+    <div class="dsec">
+      <h3>Zona hati-hati</h3>
+      <button class="drow"><span class="ic">🧹</span>Bersihkan preview rusak<span class="tag tnum" style="color:var(--ks-danger)">2</span></button>
+      <button class="drow dgr"><span class="ic">🗑</span>Hapus projek ini</button>
+    </div>
+    <p class="dnote">Hanya aksi primer (Import) yang tetap di bar — sisanya masuk drawer supaya bar 360px tidak overflow.</p>
+  </div>
+</aside>
+
+<script>
+  const burger = document.getElementById('burger');
+  const drawer = document.getElementById('drawer');
+  const scrim = document.getElementById('scrim');
+  const closeBtn = document.getElementById('close');
+  function open() {
+    drawer.classList.add('open');
+    drawer.setAttribute('aria-hidden', 'false');
+    burger.setAttribute('aria-expanded', 'true');
+    scrim.hidden = false;
+    closeBtn.focus();
+  }
+  function close() {
+    drawer.classList.remove('open');
+    drawer.setAttribute('aria-hidden', 'true');
+    burger.setAttribute('aria-expanded', 'false');
+    scrim.hidden = true;
+    burger.focus();
+  }
+  burger.addEventListener('click', () => drawer.classList.contains('open') ? close() : open());
+  document.getElementById('projstrip').addEventListener('click', open);
+  closeBtn.addEventListener('click', close);
+  scrim.addEventListener('click', close);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && drawer.classList.contains('open')) close();
+  });
+</script>
+</body>
+</html>

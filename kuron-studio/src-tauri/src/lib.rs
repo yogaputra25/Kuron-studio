@@ -31,8 +31,8 @@ use commands::glossary::{
 };
 use commands::image::get_image_preview;
 use commands::project::{
-    PageStatus, ProjectStore, clean_pages, create_project, delete_project, get_project,
-    import_pages, list_projects,
+    PageStatus, ProjectStore, clean_pages, create_folder, create_project, delete_folder,
+    delete_project, get_project, import_pages, list_projects, move_pages, rename_folder,
 };
 use commands::provider::{
     delete_provider, get_providers, list_models, list_models_draft, save_provider, validate_provider,
@@ -150,6 +150,10 @@ pub fn run() {
             import_pages,
             clean_pages,
             delete_project,
+            create_folder,
+            rename_folder,
+            delete_folder,
+            move_pages,
             get_image_preview,
             detect_status,
             detect_bubbles,

@@ -10,6 +10,7 @@
   import { computeTextLayout } from "../lib/textLayout";
   import { textMeasure } from "../lib/textMeasure";
   import type { BubbleBox, Page, PageTranslation, ReadingDirection, Tool } from "../lib/types";
+  import { allPages } from "./library";
   import { t } from "./i18n";
   import Button from "./ui/Button.svelte";
   import StatusBadge from "./ui/StatusBadge.svelte";
@@ -288,11 +289,11 @@
     try {
       await api.detectBatch(pageIds);
       const proj = await api.getProject(projectId);
-      for (const p of proj.pages) onSaved(p);
+      for (const p of allPages(proj)) onSaved(p);
       // fix-geometry-revert: guard `dirty` di syncFromPage menahan propagasi
       // prop untuk halaman ini. Detect = penggantian geometri yang disengaja,
       // jadi terapkan langsung (pola sama dengan runDetect).
-      const mine = proj.pages.find((p) => p.id === page.id);
+      const mine = allPages(proj).find((p) => p.id === page.id);
       if (mine) {
         bubbles = $state.snapshot(mine.bubbles ?? []);
         dirty = false;

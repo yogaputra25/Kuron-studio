@@ -15,6 +15,7 @@
   import type { Lang, Theme } from "./lib/i18n";
   import type { BatchOpts, Page, Project, ReadingDirection } from "./lib/types";
   import { ARCHIVE_EXTS, IMAGE_EXTS, PDF_EXTS } from "./lib/types";
+  import { allPages, folderStats, groupKanban, projectStats } from "./lib/library";
   import Button from "./lib/ui/Button.svelte";
   import StatusBadge from "./lib/ui/StatusBadge.svelte";
   import DiagnosticsPanel from "./lib/DiagnosticsPanel.svelte";
@@ -23,6 +24,9 @@
   let projects = $state<Project[]>([]);
   let currentId = $state<string | null>(null);
   let name = $state("");
+  let folderId = $state<string | "all">("all");
+  let kanban = $state<"all" | "todo" | "doing" | "done" | "failed">("all");
+  let folderName = $state("");
   let thumbs = $state<Record<string, string>>({});
   let fullUrls = $state<Record<string, string>>({});
   let selectedId = $state<string | null>(null);
@@ -50,7 +54,17 @@
   }
 
   const current = $derived(projects.find((p) => p.id === currentId) ?? null);
-  const selectedPage = $derived(current?.pages.find((p) => p.id === selectedId) ?? null);
+  const currentFolder = $derived(
+    current && folderId !== "all" ? (current.folders.find((f) => f.id === folderId) ?? null) : null,
+  );
+  const scopedPages = $derived(
+    !current ? [] : currentFolder ? currentFolder.pages : allPages(current),
+  );
+  const kanbanGroups = $derived(groupKanban(scopedPages));
+  const visiblePages = $derived(
+    kanban === "all" ? [...kanbanGroups.todo, ...kanbanGroups.doing, ...kanbanGroups.done, ...kanbanGroups.failed] : kanbanGroups[kanban],
+  );
+  const selectedPage = $derived(allPages(current ?? { id: "", name: "", folders: [] } as Project).find((p) => p.id === selectedId) ?? null);
   /** Halaman yang preview-nya gagal → jumlah tombol "Bersihkan". */
   const brokenCount = $derived(Object.keys(broken).length);
   const fileName = (path: string) => path.split(/[/\\]/).pop() ?? path;
@@ -85,7 +99,7 @@
     if (!proj) return;
     // Skip yang sudah broken: retry 179 file sidecar tiap ganti project
     // mahal. `cleanPages` yang membersihkan peta ini sebagai jalur recovery.
-    const missing = sortPagesByName(proj.pages).filter((pg) => !thumbs[pg.id] && !broken[pg.id]);
+    const missing = sortPagesByName(allPages(proj)).filter((pg) => !thumbs[pg.id] && !broken[pg.id]);
     const settled = await Promise.allSettled(
       missing.map((pg) => api.getImagePreview(pg.path)),
     );
@@ -110,11 +124,11 @@
     busy = true;
     error = "";
     try {
-      const res = await api.cleanPages(currentId);
+      const res = await api.cleanPages(currentId, folderId === "all" ? null : folderId);
       const updated = await api.getProject(currentId);
       projects = projects.map((p) => (p.id === currentId ? updated : p));
       // Halaman hilang dari store — buang juga thumbnail-nya.
-      const live = new Set(updated.pages.map((pg) => pg.id));
+      const live = new Set(allPages(updated).map((pg) => pg.id));
       for (const id of Object.keys(thumbs)) if (!live.has(id)) delete thumbs[id];
       for (const id of Object.keys(fullUrls)) if (!live.has(id)) delete fullUrls[id];
       for (const id of Object.keys(broken)) if (!live.has(id)) delete broken[id];
@@ -167,6 +181,9 @@
       name = "";
       projects = [...projects, p];
       currentId = p.id;
+      folderId = "all";
+      kanban = "all";
+      selectedId = null;
     } catch (e) {
       error = String(e);
     } finally {
@@ -178,7 +195,8 @@
     if (!currentId || paths.length === 0) return;
     busy = true;
     try {
-      const res = await api.importPages(currentId, paths);
+      const target = folderId === "all" ? null : folderId;
+      const res = await api.importPages(currentId, paths, target);
       const updated = await api.getProject(currentId);
       projects = projects.map((p) => (p.id === currentId ? updated : p));
       await loadThumbs(currentId);
@@ -221,9 +239,55 @@
     if (!currentId) return;
     projects = projects.map((p) =>
       p.id === currentId
-        ? { ...p, pages: p.pages.map((pg) => (pg.id === updated.id ? updated : pg)) }
+        ? { ...p, folders: p.folders.map((f) => ({ ...f, pages: f.pages.map((pg) => (pg.id === updated.id ? updated : pg)) })) }
         : p,
     );
+  }
+
+  function openProject(id: string) {
+    currentId = id;
+    folderId = "all";
+    kanban = "all";
+    selectedId = null;
+    void loadThumbs(id);
+  }
+
+  async function createFolder() {
+    if (!currentId) return;
+    const n = folderName.trim();
+    if (!n) return;
+    busy = true;
+    error = "";
+    try {
+      const f = await api.createFolder(currentId, n);
+      folderName = "";
+      const updated = await api.getProject(currentId);
+      projects = projects.map((p) => (p.id === currentId ? updated : p));
+      folderId = f.id;
+    } catch (e) {
+      error = String(e);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function deleteFolder(id: string) {
+    if (!currentId) return;
+    if (!confirm($t("confirmDeleteFolder"))) return;
+    busy = true;
+    error = "";
+    try {
+      await api.deleteFolder(currentId, id);
+      const updated = await api.getProject(currentId);
+      projects = projects.map((p) => (p.id === currentId ? updated : p));
+      if (folderId === id) folderId = "all";
+      selectedId = null;
+      await loadThumbs(currentId);
+    } catch (e) {
+      error = String(e);
+    } finally {
+      busy = false;
+    }
   }
 
   async function detectAll() {
@@ -231,7 +295,7 @@
     busy = true;
     error = "";
     try {
-      await api.detectBatch(current.pages.map((p) => p.id));
+      await api.detectBatch(scopedPages.map((p) => p.id));
       const updated = await api.getProject(current.id);
       projects = projects.map((p) => (p.id === current.id ? updated : p));
     } catch (e) {
@@ -283,21 +347,22 @@
 </script>
 
 <main class="flex min-h-screen flex-col bg-bg text-ink" data-theme={$theme}>
-  <header class="sticky top-0 z-30 flex flex-wrap items-center gap-3 border-b border-line bg-surface/80 px-5 py-2.5 backdrop-blur-md">
+  <header class="sticky top-0 z-30 flex flex-wrap items-center gap-2 border-b border-line bg-surface/80 px-4 py-2 backdrop-blur-md">
     <h1 class="font-display shrink-0 text-base font-semibold tracking-tight">Kuron Studio</h1>
-
+    <div class="h-5 w-px shrink-0 bg-line" aria-hidden="true"></div>
     {#if projects.length > 0}
       <select
         class="tnum h-8 max-w-56 rounded-md border border-line bg-surface-2 px-2 text-sm text-ink
                outline-none transition-colors hover:border-line-strong focus:border-accent"
         bind:value={currentId}
-        onchange={() => currentId && loadThumbs(currentId)}
+        onchange={() => currentId && openProject(currentId)}
       >
         {#each projects as p (p.id)}
-          <option value={p.id}>{p.name} · {p.pages.length}</option>
+          {@const st = projectStats(p)}
+          <option value={p.id}>{p.name} · {st.done}/{st.total}</option>
         {/each}
       </select>
-      <span class="tnum text-xs text-ink-3">{current?.pages.length ?? 0} halaman</span>
+      <span class="tnum text-xs text-ink-3">{current ? projectStats(current).total : 0} {$t("pages")}</span>
     {/if}
 
     <div class="ml-auto flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto sm:flex-none sm:flex-wrap sm:overflow-visible">
@@ -336,7 +401,7 @@
         variant="primary"
         size="sm"
         onclick={detectAll}
-        disabled={!current || busy || (current?.pages.length ?? 0) === 0}
+        disabled={!current || busy || scopedPages.length === 0}
       >{$t("detectAll")}</Button>
       {#if !isMobile}<Button variant="default" size="sm" onclick={importFolder} disabled={!current || busy}>{$t("importFolder")}</Button>{/if}
       <Button variant="default" size="sm" onclick={importFiles} disabled={!current || busy}>{$t("importFiles")}</Button>
@@ -417,12 +482,93 @@
       </form>
     </section>
   {:else if current}
+    {@const dashStats = projectStats(current)}
+    {@const dashPct = Math.round(dashStats.progress * 100)}
+    <section class="flex items-stretch gap-3 border-b border-line bg-surface/50 px-5 py-2.5" aria-label={$t("dashboard")}>
+      <div class="w-60 shrink-0">
+        <div class="truncate text-sm font-semibold" title={current.name}>{current.name}</div>
+        <div class="tnum mt-0.5 text-[11px] text-ink-3">
+          {dashStats.done}/{dashStats.total} · {dashPct}%{#if dashStats.failed > 0}<span class="text-danger"> · {dashStats.failed} {$t("kanbanFailed")}</span>{/if}
+        </div>
+        <div class="mt-1.5 h-1 overflow-hidden rounded bg-raised">
+          <div class="h-full rounded bg-accent" style="width: {dashPct}%"></div>
+        </div>
+        <div class="tnum mt-1 truncate text-[10px] text-ink-3" title={$t("lastWorked")}>
+          {dashStats.todo + dashStats.doing} {$t("remainingTodo")} · {current.updatedAt ? new Date((current.updatedAt ?? 0) * 1000).toLocaleDateString() : "—"}
+        </div>
+      </div>
+      <div class="w-px self-stretch bg-line" aria-hidden="true"></div>
+      <div class="flex min-w-0 flex-1 items-stretch gap-1.5 overflow-x-auto">
+        {#each projects as p (p.id)}
+          {@const st = projectStats(p)}
+          {@const pct = Math.round(st.progress * 100)}
+          <button
+            class="relative w-36 shrink-0 self-center overflow-hidden rounded-md border px-2.5 pt-1.5 pb-2.5 text-left transition-colors {p.id === currentId ? 'border-accent bg-accent/10' : 'border-line bg-surface hover:border-accent/60'}"
+            onclick={() => openProject(p.id)}
+            title="{p.name} · {st.done}/{st.total} · {st.failed} {$t('kanbanFailed')}"
+          >
+            <div class="truncate text-xs font-semibold">{p.name}</div>
+            <div class="tnum mt-0.5 text-[10px] {st.failed > 0 ? 'text-danger' : 'text-ink-3'}">{st.done}/{st.total} · {pct}%{st.failed > 0 ? ` · ${st.failed}` : ""}</div>
+            <div class="absolute inset-x-0 bottom-0 h-0.5 bg-raised">
+              <div class="h-full bg-accent" style="width: {pct}%"></div>
+            </div>
+          </button>
+        {/each}
+      </div>
+      <div class="w-px self-stretch bg-line" aria-hidden="true"></div>
+      <form class="flex w-44 shrink-0 flex-col justify-center gap-1" onsubmit={(e) => { e.preventDefault(); void createProject(); }}>
+        <input
+          class="h-7 w-full rounded-md border border-line bg-surface-2 px-2 text-xs text-ink
+                 placeholder:text-ink-3 outline-none transition-colors focus:border-accent"
+          placeholder={$t("projectName")}
+          aria-label={$t("projectName")}
+          bind:value={name}
+        />
+        <Button type="submit" variant="default" size="sm" disabled={busy || !name.trim()}>{$t("create")}</Button>
+      </form>
+    </section>
+    <section class="flex flex-wrap items-center gap-1.5 border-b border-line px-5 py-2" aria-label="folders">
+      <button
+        class="rounded-md border px-2.5 py-1 text-xs {folderId === 'all' ? 'border-accent bg-accent/10 font-semibold' : 'border-line hover:border-accent/60'}"
+        onclick={() => (folderId = "all")}
+      >{$t("allFolders")} ({allPages(current).length})</button>
+      {#each current.folders as f (f.id)}
+        {@const fs = folderStats(f)}
+        <div class="flex items-center overflow-hidden rounded-md border {folderId === f.id ? 'border-accent bg-accent/10' : 'border-line'}">
+          <button class="px-2.5 py-1 text-xs {folderId === f.id ? 'font-semibold' : ''}" onclick={() => (folderId = f.id)} title="{fs.done}/{fs.total}">
+            {f.name} ({fs.done}/{fs.total}{fs.failed > 0 ? ` ⚠${fs.failed}` : ""})
+          </button>
+          {#if current.folders.length > 1}
+            <button class="px-1.5 py-1 text-[11px] text-danger hover:bg-danger-soft" onclick={() => void deleteFolder(f.id)} title={$t("deleteFolder")} aria-label="{$t('deleteFolder')}: {f.name}">×</button>
+          {/if}
+        </div>
+      {/each}
+      <form class="ml-1 flex gap-1" onsubmit={(e) => { e.preventDefault(); void createFolder(); }}>
+        <input
+          class="h-7 w-32 rounded-md border border-line bg-surface-2 px-2 text-xs outline-none focus:border-accent"
+          placeholder={$t("folderName")}
+          aria-label={$t("folderName")}
+          bind:value={folderName}
+        />
+        <Button type="submit" variant="default" size="sm" disabled={busy || !folderName.trim()}>{$t("newFolder")}</Button>
+      </form>
+    </section>
+    <section class="flex flex-wrap items-center gap-1.5 px-5 pt-3" aria-label="kanban">
+      {#each [["all", allPages(current).length], ["todo", kanbanGroups.todo.length], ["doing", kanbanGroups.doing.length], ["done", kanbanGroups.done.length], ["failed", kanbanGroups.failed.length]] as [key, n]}
+        <button
+          class="tnum rounded-full border px-3 py-1 text-xs {kanban === key ? 'border-accent bg-accent/10 font-semibold' : 'border-line hover:border-accent/60'}"
+          onclick={() => (kanban = key as typeof kanban)}
+        >
+          {key === "all" ? $t("allFolders") : $t(key === "todo" ? "kanbanTodo" : key === "doing" ? "kanbanDoing" : key === "done" ? "kanbanDone" : "kanbanFailed")} · {n}
+        </button>
+      {/each}
+    </section>
     <section
       class="grid grid-cols-2 gap-3 p-5 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-6 xl:grid-cols-8"
       class:outline-2={dragging}
       class:outline-accent={dragging}
     >
-      {#each sortPagesByName(current.pages) as pg (pg.id)}
+      {#each sortPagesByName(visiblePages) as pg (pg.id)}
         <button
           class="group overflow-hidden rounded-lg border border-line bg-surface text-left transition-colors
                  hover:border-accent/60 focus-visible:border-accent
@@ -467,10 +613,12 @@
         </button>
       {/each}
     </section>
-    {#if current.pages.length === 0}
+    {#if scopedPages.length === 0}
       <p class="mt-16 px-8 text-center text-sm text-ink-3">
         {#if dragging}Lepaskan file untuk import…{:else if isMobile}{$t("emptyHintMobile")}{:else}{$t("emptyHint")}{/if}
       </p>
+    {:else if visiblePages.length === 0}
+      <p class="mt-8 px-8 text-center text-sm text-ink-3">— 0 —</p>
     {/if}
   {/if}
 
@@ -495,7 +643,7 @@
   {#if showBatch && current && batchOpts}
     {@const cur = current}
     <BatchPanel
-      pages={cur.pages}
+      pages={scopedPages}
       opts={batchOpts}
       onDone={() => { void refreshProject(cur.id); showBatch = false; }}
       onClose={() => (showBatch = false)}

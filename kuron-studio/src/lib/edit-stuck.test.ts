@@ -183,7 +183,7 @@ describe("guard tidak memblokir niat (fix-geometry-revert D1)", () => {
   it("detect halaman ini tetap diterapkan walau dirty", () => {
     // Guard `dirty` menahan propagasi prop; Detect = penggantian yang
     // disengaja, jadi jalur detect-all menulis state lokal langsung.
-    expect(panelSrc).toContain("const mine = proj.pages.find((p) => p.id === page.id);");
+    expect(panelSrc).toContain("const mine = allPages(proj).find((p) => p.id === page.id);");
     expect(panelSrc).toContain("bubbles = $state.snapshot(mine.bubbles ?? []);");
   });
 });

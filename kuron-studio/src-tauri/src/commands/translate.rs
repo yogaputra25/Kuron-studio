@@ -93,13 +93,7 @@ pub fn load_snapshot(
     page_id: &str,
 ) -> Result<PageSnapshot, String> {
     let store = state.store.lock().map_err(|e| e.to_string())?;
-    let pg = store
-        .projects
-        .values()
-        .flat_map(|p| p.pages.iter())
-        .find(|pg| pg.id == page_id)
-        .ok_or_else(|| format!("page not found: {page_id}"))?
-        .clone();
+    let pg = store.find_page(page_id).ok_or_else(|| format!("page not found: {page_id}"))?;
     Ok(PageSnapshot {
         page_id: pg.id,
         path: pg.path,
@@ -117,12 +111,7 @@ pub fn load_snapshot(
 pub fn claim_page(state: &AppState, page_id: &str) -> Result<(), String> {
     let prev = {
         let mut store = state.store.lock().map_err(|e| e.to_string())?;
-        let page = store
-            .projects
-            .values_mut()
-            .flat_map(|p| p.pages.iter_mut())
-            .find(|pg| pg.id == page_id)
-            .ok_or_else(|| format!("page not found: {page_id}"))?;
+        let page = store.find_page_mut(page_id).ok_or_else(|| format!("page not found: {page_id}"))?;
         match page.status {
             crate::commands::project::PageStatus::Translating => {
                 return Err(format!("page busy (already translating): {page_id}"));
@@ -153,11 +142,7 @@ pub fn restore_cancelled(state: &AppState, page_id: &str) -> Result<(), String> 
     state.clear_cancel(page_id);
     if let Some(st) = prev {
         let mut store = state.store.lock().map_err(|e| e.to_string())?;
-        if let Some(page) = store
-            .projects
-            .values_mut()
-            .flat_map(|p| p.pages.iter_mut())
-            .find(|pg| pg.id == page_id)
+        if let Some(page) = store.find_page_mut(page_id)
         {
             page.status = st;
             store.save_public()?;
@@ -498,12 +483,7 @@ pub fn save_translation(
     bubbles: Vec<BubbleTranslation>,
 ) -> Result<PageTranslation, String> {
     let mut store = state.store.lock().map_err(|e| e.to_string())?;
-    let page = store
-        .projects
-        .values_mut()
-        .flat_map(|p| p.pages.iter_mut())
-        .find(|pg| pg.id == page_id)
-        .ok_or_else(|| format!("page not found: {page_id}"))?;
+    let page = store.find_page_mut(&page_id).ok_or_else(|| format!("page not found: {page_id}"))?;
     let mut page_t = page.translation.clone().unwrap_or(PageTranslation {
         page_id: page_id.clone(),
         target_lang: "Indonesian".to_string(),
@@ -527,12 +507,7 @@ pub fn clear_cache(state: State<'_, AppState>) -> Result<u64, String> {
 
 fn persist(state: &AppState, page_id: &str, t: &PageTranslation, status: &str) -> Result<(), String> {
     let mut store = state.store.lock().map_err(|e| e.to_string())?;
-    let page = store
-        .projects
-        .values_mut()
-        .flat_map(|p| p.pages.iter_mut())
-        .find(|pg| pg.id == page_id)
-        .ok_or_else(|| format!("page not found: {page_id}"))?;
+    let page = store.find_page_mut(page_id).ok_or_else(|| format!("page not found: {page_id}"))?;
     page.translation = Some(t.clone());
     page.status = match status {
         "translating" => crate::commands::project::PageStatus::Translating,
@@ -557,12 +532,7 @@ pub fn persist_translation(
 
 fn persist_status_only(state: &AppState, page_id: &str, status: &str) -> Result<(), String> {
     let mut store = state.store.lock().map_err(|e| e.to_string())?;
-    let page = store
-        .projects
-        .values_mut()
-        .flat_map(|p| p.pages.iter_mut())
-        .find(|pg| pg.id == page_id)
-        .ok_or_else(|| format!("page not found: {page_id}"))?;
+    let page = store.find_page_mut(page_id).ok_or_else(|| format!("page not found: {page_id}"))?;
     page.status = match status {
         "translating" => crate::commands::project::PageStatus::Translating,
         "translated" => crate::commands::project::PageStatus::Translated,
@@ -594,22 +564,18 @@ mod tests {
                 .as_nanos()
         ));
         let mut store = ProjectStore::load(dir.clone()).unwrap();
-        store.projects.insert(
-            "p".into(),
-            Project {
-                id: "p".into(),
-                name: "ch".into(),
-                pages: vec![Page {
-                    id: id.into(),
-                    path: "ch/001.png".into(),
-                    width: 800,
-                    height: 1200,
-                    status,
-                    bubbles: vec![],
-                    translation: None,
-                }],
-            },
-        );
+        let mut proj = Project::new("ch".into());
+        proj.id = "p".into();
+        proj.folders[0].pages = vec![Page {
+            id: id.into(),
+            path: "ch/001.png".into(),
+            width: 800,
+            height: 1200,
+            status,
+            bubbles: vec![],
+            translation: None,
+        }];
+        store.projects.insert("p".into(), proj);
         AppState {
             store: std::sync::Mutex::new(store),
             detect: DetectState::default(),
@@ -626,10 +592,7 @@ mod tests {
             .store
             .lock()
             .unwrap()
-            .projects
-            .values()
-            .flat_map(|p| p.pages.iter())
-            .find(|pg| pg.id == id)
+            .find_page(id)
             .unwrap()
             .status
             .clone()

@@ -63,10 +63,12 @@ Import folder/files/zip → Detect bubble (ONNX, per halaman)
   - `extras`: `tm_search` lintas project, `qa_check`,
     `share_project` (zip slice projects.json + gambar), diagnostics/log.
   - `glossary`: CRUD + CSV import/export, dipakai otomatis + manual.
-- `projects.json`: `Project { id, name, pages[] }`,
+- `projects.json`: `Project { id, name, folders[], updatedAt }`,
+  `ChapterFolder { id, name, pages[], createdAt }`,
   `Page { id, path, w/h, status, bubbles[], translation? }`.
-  Flat hari ini — hierarki chapter = issue #7 (migrasi: flat = folder
-  `default`).
+  1 project = 1 judul; Mode A = 1 folder `default`, Mode B = folder
+  per chapter/volume/batch. File lama flat `{ pages[] }` dimigrasi
+  otomatis ke 1 folder `default` saat load (#7).
 
 ## 5. iOS (sebagian, bukan target penuh)
 
@@ -102,5 +104,5 @@ Kuron-studio/
 └── .github/         # template issue + CI
 ```
 
-Backlog aktif: #7 (struktur folder chapter + dashboard),
-#8 (panel resize + mode tablet).
+Backlog aktif: #8 (panel resize + mode tablet). #7 selesai: folder
+chapter + dashboard ringkasan + kanban + export per folder.
