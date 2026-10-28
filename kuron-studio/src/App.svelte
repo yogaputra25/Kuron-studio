@@ -20,6 +20,8 @@
   import StatusBadge from "./lib/ui/StatusBadge.svelte";
   import DiagnosticsPanel from "./lib/DiagnosticsPanel.svelte";
   import { onInvoke } from "./lib/log";
+  import { PREFETCH_MARGIN, PREVIEW_CONCURRENCY, pickNext } from "./lib/previewQueue";
+  import { summarizePreviews, type PreviewSample } from "./lib/previewMetrics";
 
   let projects = $state<Project[]>([]);
   let currentId = $state<string | null>(null);
@@ -38,6 +40,20 @@
   let info = $state("");
   /** pageId → alasan preview gagal (file hilang / tidak bisa di-decode). */
   let broken = $state<Record<string, string>>({});
+  // grid-preview-perf D1-D3: antrean thumbnail berprioritas viewport.
+  // `loadGen` guard generasi — ganti project membuang hasil basi.
+  let loadGen = 0;
+  let thumbPending: string[] = [];
+  let thumbInflight = new Set<string>();
+  let thumbActive = 0;
+  let thumbByPath = new Map<string, string>();
+  let visibleIds = new Set<string>();
+  let thumbTotal = $state(0);
+  let thumbDone = $state(0);
+  let thumbFailed = $state(0);
+  let thumbT0 = 0;
+  let thumbFirstAt = 0;
+  let thumbSamples: PreviewSample[] = [];
   let openError = $state("");
   let dragging = $state(false);
   let busy = $state(false);
@@ -98,32 +114,101 @@
     lang.update((v: Lang) => (v === "id" ? "en" : v === "en" ? "zh" : "id"));
   };
 
-  // fix-preview-decode: `Promise.all` dulu — satu halaman gagal decode
-  // bikin seluruh batch thumbnail ditolak dan tak ada yang tampil. Pakai
-  // allSettled + skor per halaman supaya satu file rusak cuma jadi satu card
-  // broken, dan sisanya tetap bisa dilihat.
-  async function loadThumbs(projectId: string) {
+  // grid-preview-perf D1-D3: antrean konkurensi-4 + prioritas viewport +
+  // guard generasi. Ganti `Promise.allSettled` semua-halaman (isu #11: N
+  // decode paralel + N payload IPC satu gelombang).
+  function loadThumbs(projectId: string) {
     const proj = projects.find((p) => p.id === projectId);
     if (!proj) return;
-    // Skip yang sudah broken: retry 179 file sidecar tiap ganti project
-    // mahal. `cleanPages` yang membersihkan peta ini sebagai jalur recovery.
-    const missing = sortPagesByName(allPages(proj)).filter((pg) => !thumbs[pg.id] && !broken[pg.id]);
-    const settled = await Promise.allSettled(
-      missing.map((pg) => api.getImagePreview(pg.path)),
+    const myGen = ++loadGen;
+    visibleIds = new Set<string>();
+    thumbInflight = new Set<string>();
+    thumbActive = 0;
+    thumbByPath = new Map(allPages(proj).map((pg) => [pg.id, pg.path]));
+    // Skip yang sudah broken: retry file sidecar tiap ganti project mahal.
+    // `cleanPages`/retry yang membersihkan peta ini sebagai jalur recovery.
+    thumbPending = sortPagesByName(allPages(proj))
+      .filter((pg) => !thumbs[pg.id] && !broken[pg.id])
+      .map((pg) => pg.id);
+    thumbTotal = thumbPending.length;
+    thumbDone = 0;
+    thumbFailed = 0;
+    thumbT0 = performance.now();
+    thumbFirstAt = 0;
+    thumbSamples = [];
+    pumpThumbs(myGen);
+  }
+
+  /** Ambil id berikutnya: terlihat dulu, lalu prefetch awal antrean. */
+  function nextThumbId(): string | null {
+    const done = (id: string) => !!thumbs[id] || !!broken[id];
+    return pickNext(thumbPending, visibleIds, thumbInflight, done, PREFETCH_MARGIN);
+  }
+
+  /** Pompa worker sampai batas konkurensi; hasil basi (gen beda) dibuang. */
+  function pumpThumbs(myGen: number) {
+    while (thumbActive < PREVIEW_CONCURRENCY && myGen === loadGen) {
+      const id = nextThumbId();
+      if (!id) return; // tunggu intersection berikutnya
+      thumbInflight.add(id);
+      thumbActive++;
+      const path = thumbByPath.get(id) ?? "";
+      const t = performance.now();
+      void api
+        .getImagePreview(path)
+        .then((url) => {
+          if (myGen !== loadGen) return;
+          thumbSamples.push({ ms: performance.now() - t, bytes: url.length });
+          thumbs = { ...thumbs, [id]: url };
+          if (!thumbFirstAt) thumbFirstAt = performance.now();
+          thumbDone++;
+        })
+        .catch((e) => {
+          if (myGen !== loadGen) return;
+          broken = { ...broken, [id]: String(e) };
+          thumbFailed++;
+          thumbDone++;
+        })
+        .finally(() => {
+          thumbInflight.delete(id);
+          thumbActive--;
+          if (myGen !== loadGen) return;
+          if (thumbTotal > 0 && thumbDone >= thumbTotal) {
+            console.info(`[preview] ${JSON.stringify(summarizePreviews(thumbSamples, thumbFirstAt - thumbT0))}`);
+          }
+          pumpThumbs(myGen);
+        });
+    }
+  }
+
+  /** Coba lagi thumbnail yang gagal di project aktif. */
+  function retryThumbs() {
+    if (!currentId || !current) return;
+    const live = new Set(allPages(current).map((pg) => pg.id));
+    for (const id of Object.keys(broken)) if (live.has(id)) delete broken[id];
+    broken = { ...broken };
+    void loadThumbs(currentId);
+  }
+
+  /** Action kartu grid: laporkan keterlihatan ke antrean (D2). */
+  function observeCard(node: HTMLElement, id: string) {
+    const io = new IntersectionObserver(
+      (es) => {
+        for (const e of es) {
+          if (e.isIntersecting) {
+            visibleIds.add(id);
+            pumpThumbs(loadGen);
+          }
+        }
+      },
+      { rootMargin: "400px 0px" },
     );
-    const nextThumbs = { ...thumbs };
-    const nextBroken = { ...broken };
-    settled.forEach((r, i) => {
-      const id = missing[i].id;
-      if (r.status === "fulfilled") {
-        nextThumbs[id] = r.value;
-        delete nextBroken[id];
-      } else {
-        nextBroken[id] = String(r.reason);
-      }
-    });
-    thumbs = nextThumbs;
-    broken = nextBroken;
+    io.observe(node);
+    return {
+      destroy() {
+        io.disconnect();
+      },
+    };
   }
 
   async function cleanPages() {
@@ -644,6 +729,16 @@
         </button>
       {/each}
     </section>
+    {#if thumbTotal > 0 && thumbDone < thumbTotal}
+      <p role="status" class="tnum border-b border-line bg-surface-2 px-5 py-1.5 text-xs text-ink-2">
+        {$t("loadingPreviews").replace("{done}", String(thumbDone)).replace("{total}", String(thumbTotal))}
+      </p>
+    {:else if thumbFailed > 0}
+      <p role="status" class="flex items-center gap-2 border-b border-line bg-surface-2 px-5 py-1.5 text-xs text-ink-2">
+        <span class="tnum">{$t("loadingPreviews").replace("{done}", String(thumbDone)).replace("{total}", String(thumbTotal))} · {$t("previewsFailed").replace("{n}", String(thumbFailed))}</span>
+        <Button variant="ghost" size="sm" onclick={retryThumbs}>{$t("retryThumbs")}</Button>
+      </p>
+    {/if}
     <section
       class="grid grid-cols-2 gap-3 p-5 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-6 xl:grid-cols-8"
       class:outline-2={dragging}
@@ -651,6 +746,7 @@
     >
       {#each sortPagesByName(visiblePages) as pg (pg.id)}
         <button
+          use:observeCard={pg.id}
           class="group overflow-hidden rounded-lg border border-line bg-surface text-left transition-colors
                  hover:border-accent/60 focus-visible:border-accent
                  disabled:cursor-not-allowed disabled:opacity-60"

@@ -9,6 +9,7 @@ pub mod detector;
 pub mod glossary;
 pub mod image_ops;
 pub mod logging;
+pub mod preview_cache;
 pub mod parser;
 pub mod prompt;
 pub mod provider;
@@ -44,6 +45,8 @@ pub struct AppState {
     pub detect: DetectState,
     pub http: reqwest::Client,
     pub db: Mutex<rusqlite::Connection>,
+    /// Cache preview gambar sesi (grid-preview-perf D4): tier thumb + full.
+    pub previews: Mutex<preview_cache::PreviewCaches>,
     /// Halaman yang diminta batal (opsi B cancel): diisi `cancel_translate`,
     /// dibaca `backoff_translate` tiap iterasi + saat sleep via `select!`.
     pub cancel: Mutex<HashSet<String>>,
@@ -134,6 +137,7 @@ pub fn run() {
                 detect: DetectState::new(app.path().resource_dir().ok(), app.path().app_data_dir().map_err(|e| io_err(e.to_string()))?),
                 http,
                 db: Mutex::new(db),
+                previews: Mutex::new(preview_cache::PreviewCaches::new()),
                 cancel: Mutex::new(HashSet::new()),
                 prev_status: Mutex::new(HashMap::new()),
                 data_dir: dir,
