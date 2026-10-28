@@ -1,9 +1,10 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import type { HTMLAttributes } from "svelte/elements";
+  import type { HTMLButtonAttributes } from "svelte/elements";
+  import { fade, fly } from "svelte/transition";
   import Button from "./Button.svelte";
 
-  interface Props extends Omit<HTMLAttributes<HTMLDivElement>, "class" | "title"> {
+  interface Props extends Omit<HTMLButtonAttributes, "class"> {
     title: string;
     /** Slot aksi di kanan header (biasanya tombol close). Default: tombol ×. */
     onClose?: () => void;
@@ -25,7 +26,7 @@
 
 <!-- role=dialog + aria-modal supaya screen reader tahu ini modal, bukan
      sekadar overlay. Backdrop gelap + blur biar fokus mata naik ke panel. -->
-<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm">
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm" transition:fade={{ duration: 150 }}>
   <div
     role="dialog"
     aria-modal="true"
@@ -35,6 +36,7 @@
       "rounded-card border border-line bg-surface shadow-2xl shadow-black/50",
       cls,
     ]}
+    transition:fly={{ y: 12, duration: 200 }}
   >
     <header class="flex shrink-0 items-center gap-3 border-b border-line px-5 py-3.5">
       <h2 class="font-display text-sm font-semibold tracking-tight text-ink">{title}</h2>

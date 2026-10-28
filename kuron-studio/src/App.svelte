@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { fly, scale } from "svelte/transition";
   import { open } from "@tauri-apps/plugin-dialog";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { isMobile } from "./lib/device";
@@ -583,6 +584,8 @@
         {#if showProjMenu}
           <div
             class="absolute left-0 top-full z-50 mt-1 w-72 overflow-hidden rounded-md border border-line-strong bg-surface-2 py-1"
+            transition:scale={{ duration: 140, start: 0.96 }}
+            style="transform-origin: top left;"
             role="listbox"
             aria-label={$t("projectList")}
           >
@@ -871,7 +874,7 @@
       {/if}
     </section>
     {#if selectedIds.length > 0}
-      <div class="tnum mx-5 mt-3 flex items-center gap-2 rounded-md border border-line bg-surface-2 px-3 py-1.5 text-xs" role="status">
+      <div class="tnum mx-5 mt-3 flex items-center gap-2 rounded-md border border-line bg-surface-2 px-3 py-1.5 text-xs" role="status" transition:fly={{ y: -8, duration: 180 }}>
         <span class="font-semibold">{$t("selectedCount").replace("{n}", String(selectedIds.length))}</span>
         <Button variant="default" size="sm" onclick={() => (showMove = true)} disabled={busy}>{$t("moveTo")}</Button>
         <Button variant="ghost" size="sm" onclick={() => { selectedIds = []; selAnchor = null; selectMode = false; }}>{$t("clearSelection")}</Button>
@@ -892,14 +895,15 @@
       class:outline-2={dragging}
       class:outline-accent={dragging}
     >
-      {#each sortPagesByName(visiblePages) as pg (pg.id)}
+      {#each sortPagesByName(visiblePages) as pg, idx (pg.id)}
         {@const sel = selectedIds.includes(pg.id)}
         <div class="relative">
         <button
           use:observeCard={pg.id}
-          class="group block w-full overflow-hidden rounded-lg border bg-surface text-left transition-colors
-                 hover:border-accent/60 focus-visible:border-accent
+          class="group block w-full overflow-hidden rounded-lg border bg-surface text-left transition-all duration-150
+                 hover:-translate-y-0.5 hover:border-accent/60 hover:shadow-lg focus-visible:border-accent
                  disabled:cursor-not-allowed disabled:opacity-60 {sel ? 'border-accent' : 'border-line'}"
+          in:fly={{ y: 14, duration: 220, delay: Math.min(idx * 15, 300) }}
           onclick={(e) => onCardClick(e, pg)}
           onpointerdown={() => onCardPress(pg)}
           onpointerup={cancelHold}

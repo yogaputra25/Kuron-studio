@@ -1,6 +1,7 @@
 <script lang="ts">
   import Button from "./ui/Button.svelte";
   import { t } from "./i18n";
+  import { fly } from "svelte/transition";
 
   interface Props {
     busy: boolean;
@@ -25,10 +26,11 @@
     if (!name.trim()) return;
     onCreate(name.trim());
   }
+
 </script>
 
 {#if view === "choice"}
-  <section class="mx-auto mt-10 w-full max-w-xl px-5 sm:mt-16" aria-label={$t("onboardChoiceT")}>
+  <section class="mx-auto mt-10 w-full max-w-xl px-5 sm:mt-16" aria-label={$t("onboardChoiceT")} in:fly={{ y: 16, duration: 250 }}>
     <div class="rounded-card border border-line bg-surface p-6 text-center sm:p-7">
       <p class="text-[11px] font-semibold tracking-wide text-accent uppercase">Kuron Studio</p>
       <h2 class="font-display mt-1 text-xl font-semibold tracking-tight">{$t("onboardChoiceT")}</h2>
@@ -43,14 +45,14 @@
         <text x="212" y="56" font-size="11" fill="#fffdf9">Anu…</text>
       </svg>
       <div class="mt-5 grid gap-3 text-left sm:grid-cols-2">
-        <div class="flex flex-col gap-2 rounded-xl border border-line bg-surface p-4">
+        <div class="flex flex-col gap-2 rounded-xl border border-line bg-surface p-4 transition-all duration-150 hover:-translate-y-0.5 hover:border-line-strong hover:shadow-lg">
           <b class="text-sm font-semibold">{$t("onboardOptEmptyT")}</b>
           <small class="flex-1 text-xs leading-relaxed text-ink-2">{$t("onboardOptEmptyD")}</small>
           <Button variant="default" size="sm" onclick={() => { view = "wizard"; wstep = 0; }} disabled={busy}>
             {$t("onboardOptEmptyT")} →
           </Button>
         </div>
-        <div class="flex flex-col gap-2 rounded-xl border border-accent bg-surface p-4 shadow-[0_0_0_1px_var(--ks-accent)]">
+        <div class="flex flex-col gap-2 rounded-xl border border-accent bg-surface p-4 shadow-[0_0_0_1px_var(--ks-accent)] transition-all duration-150 hover:-translate-y-0.5 hover:shadow-xl">
           <span class="self-start rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold text-accent-fg">
             {$t("onboardRecommended")}
           </span>
@@ -64,12 +66,13 @@
     </div>
   </section>
 {:else}
-  <section class="mx-auto mt-10 w-full max-w-md px-5 sm:mt-16" aria-label={$t("onboardTitle")}>
+  <section class="mx-auto mt-10 w-full max-w-md px-5 sm:mt-16" aria-label={$t("onboardTitle")} in:fly={{ y: 16, duration: 250 }}>
     <div class="rounded-card border border-line bg-surface p-6">
       <p class="text-[11px] font-semibold tracking-wide text-accent uppercase">Kuron Studio · {$t("onboardWizardTag")}</p>
+      {#key wstep}
       <h2 class="font-display mt-1 text-lg font-semibold tracking-tight">{$t(`onboardStep${wstep + 1}t`)}</h2>
       <p class="mt-1 text-xs leading-relaxed text-ink-2">{$t(`onboardStep${wstep + 1}d`)}</p>
-      <div class="mt-4 flex h-36 items-center justify-center rounded-xl border border-line bg-surface-2" aria-hidden="true">
+      <div class="mt-4 flex h-36 items-center justify-center rounded-xl border border-line bg-surface-2" aria-hidden="true" in:fly={{ x: 14, duration: 180 }}>
         {#if wstep === 0}
           <svg width="190" height="112" viewBox="0 0 190 112">
             <rect x="50" y="6" width="90" height="100" rx="6" fill="#fffdf9" stroke="#c9bfae" />
@@ -104,6 +107,7 @@
           </svg>
         {/if}
       </div>
+      {/key}
       <div class="mt-4 flex gap-1.5" role="tablist" aria-label="Langkah">
         {#each slides as s, i (s)}
           <button

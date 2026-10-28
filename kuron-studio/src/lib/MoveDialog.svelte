@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
+  import { scale } from "svelte/transition";
   import { api } from "./api";
   import { t } from "./i18n";
   import { childrenOf, folderById, folderPath, singleOwnerFolderId, subtreeStats } from "./library";
@@ -228,7 +229,7 @@
     </div>
   {:else}
     <div class="flex flex-col items-center px-2 py-8 text-center">
-      <span class="flex size-12 items-center justify-center rounded-full bg-accent text-xl text-accent-fg" aria-hidden="true">✓</span>
+      <span class="flex size-12 items-center justify-center rounded-full bg-accent text-xl text-accent-fg" aria-hidden="true" in:scale={{ start: 0.5, duration: 250 }}>✓</span>
       <p class="mt-4 text-sm font-semibold">{$t("moveDone").replace("{n}", String(movedCount)).replace("{d}", destName)}</p>
     </div>
   {/if}
