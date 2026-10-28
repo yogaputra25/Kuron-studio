@@ -288,7 +288,7 @@
 
   async function createProject(explicit?: string) {
     const n = (explicit ?? name).trim();
-    if (!n) return;
+    if (busy || !n) return;
     busy = true;
     error = "";
     try {
@@ -308,6 +308,7 @@
 
   /** Onboarding V4: project contoh siap-oprek (3 halaman + bubble seed). */
   async function createSample() {
+    if (busy) return;
     busy = true;
     error = "";
     try {
