@@ -1,0 +1,1164 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kuron Studio — Referensi Desain</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   Token — identik dengan kuron-studio/src/app.css
+   ============================================================ */
+:root {
+  --ks-bg: #0d0d10;
+  --ks-surface: #141418;
+  --ks-surface-2: #1a1a20;
+  --ks-raised: #22222a;
+  --ks-hover: #2a2a33;
+
+  --ks-line: #26262e;
+  --ks-line-strong: #35353f;
+
+  --ks-text: #ececf1;
+  --ks-text-2: #a5a6b0;
+  --ks-text-3: #71727d;
+
+  --ks-accent: #ff6b5a;
+  --ks-accent-hover: #ff8272;
+  --ks-accent-fg: #1a0a08;
+  --ks-accent-soft: #2e1614;
+
+  --ks-cyan: #35e7f5;
+  --ks-cyan-soft: #0e2a2e;
+  --ks-success: #5fd99a;
+  --ks-success-soft: #10281d;
+  --ks-warn: #ffc15e;
+  --ks-warn-soft: #2b2110;
+  --ks-danger: #ff5c5c;
+  --ks-danger-soft: #2e1416;
+  --ks-info: #6ba6ff;
+  --ks-info-soft: #111e33;
+
+  --sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --display: "Space Grotesk", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --r: 6px;
+  --r-card: 0.75rem;
+  --h: 28px;   /* satu tinggi kontrol per grup */
+}
+
+* { box-sizing: border-box; }
+html { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+body {
+  margin: 0;
+  background: var(--ks-bg);
+  color: var(--ks-text);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.55;
+}
+a { color: var(--ks-cyan); text-decoration: none; }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--ks-accent); outline-offset: 2px; }
+
+.wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px 96px; }
+.tnum { font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--mono); }
+
+/* ---------- chrome dokumen ---------- */
+.topbar {
+  position: sticky; top: 0; z-index: 40;
+  background: color-mix(in srgb, var(--ks-bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--ks-line);
+}
+.topbar-in {
+  max-width: 1240px; margin: 0 auto; padding: 10px 24px;
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+}
+.topbar h1 {
+  font-family: var(--display); font-size: 14px; font-weight: 600;
+  letter-spacing: -0.01em; margin: 0;
+}
+.topbar .meta { font-size: 11px; color: var(--ks-text-3); }
+.nav { display: flex; gap: 2px; margin-left: auto; flex-wrap: wrap; }
+.nav a {
+  font-size: 11px; color: var(--ks-text-2); padding: 4px 8px;
+  border-radius: var(--r); text-decoration: none;
+}
+.nav a:hover { background: var(--ks-hover); color: var(--ks-text); text-decoration: none; }
+
+.lede {
+  padding: 28px 0 8px; max-width: 74ch;
+}
+.lede h2 {
+  font-family: var(--display); font-size: 22px; font-weight: 600;
+  letter-spacing: -0.02em; margin: 0 0 6px;
+}
+.lede p { margin: 0; color: var(--ks-text-2); font-size: 13.5px; }
+
+/* ---------- section ---------- */
+section { padding-top: 40px; }
+.sec-head {
+  display: flex; align-items: baseline; gap: 12px;
+  border-bottom: 1px solid var(--ks-line); padding-bottom: 8px; margin-bottom: 16px;
+}
+.sec-head .num {
+  font-family: var(--mono); font-size: 11px; color: var(--ks-accent);
+  font-weight: 500;
+}
+.sec-head h3 {
+  font-family: var(--display); font-size: 15px; font-weight: 600;
+  letter-spacing: -0.01em; margin: 0;
+}
+.sec-head .hint { font-size: 11.5px; color: var(--ks-text-3); margin-left: auto; }
+
+p.note { color: var(--ks-text-2); max-width: 78ch; margin: 0 0 14px; }
+ul.tight { margin: 0 0 14px; padding-left: 18px; color: var(--ks-text-2); max-width: 82ch; }
+ul.tight li { margin: 3px 0; }
+ul.tight li strong { color: var(--ks-text); font-weight: 600; }
+
+/* ============================================================
+   Primitif — dipakai di seluruh mockup
+   ============================================================ */
+.btn {
+  height: var(--h); display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 10px; border-radius: var(--r); font-size: 12px; font-weight: 500;
+  border: 1px solid transparent; white-space: nowrap; cursor: default;
+  font-family: inherit; color: var(--ks-text-2); background: transparent;
+}
+.btn.def { background: var(--ks-surface-2); border-color: var(--ks-line); color: var(--ks-text); }
+.btn.pri { background: var(--ks-accent); color: var(--ks-accent-fg); font-weight: 600; }
+.btn.gho { color: var(--ks-text-2); }
+.btn.gho:hover { background: var(--ks-hover); }
+.btn.dgr { background: var(--ks-danger-soft); color: var(--ks-danger); border-color: color-mix(in srgb, var(--ks-danger) 28%, transparent); }
+.btn.sm { height: 24px; padding: 0 8px; font-size: 11px; }
+.btn.on { background: var(--ks-raised); color: var(--ks-text); border-color: var(--ks-line-strong); }
+
+.field {
+  height: var(--h); display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 8px; background: var(--ks-surface-2); border: 1px solid var(--ks-line);
+  border-radius: var(--r); font-size: 12px; color: var(--ks-text);
+}
+.field .caret { color: var(--ks-text-3); font-size: 9px; }
+.field.grow { flex: 1; min-width: 0; }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 6px; border-radius: 4px;
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; white-space: nowrap;
+}
+.badge.ok   { background: var(--ks-success-soft); color: var(--ks-success); }
+.badge.run  { background: var(--ks-info-soft);    color: var(--ks-info); }
+.badge.warn { background: var(--ks-warn-soft);    color: var(--ks-warn); }
+.badge.err  { background: var(--ks-danger-soft);  color: var(--ks-danger); }
+.badge.cy   { background: var(--ks-cyan-soft);    color: var(--ks-cyan); }
+.badge.mute { background: var(--ks-surface-2);    color: var(--ks-text-3); }
+
+.dot { width: 6px; height: 6px; border-radius: 50%; flex: none; display: inline-block; }
+.dot.ok { background: var(--ks-success); }
+.dot.run { background: var(--ks-info); }
+.dot.idle { background: var(--ks-line-strong); }
+.dot.err { background: var(--ks-danger); }
+.dot.cy { background: var(--ks-cyan); }
+
+.rule { height: 1px; background: var(--ks-line); border: 0; margin: 0; }
+
+/* ============================================================
+   Halaman manga palsu — CSS saja, tanpa gambar
+   ============================================================ */
+.mg {
+  position: relative; aspect-ratio: 3 / 4; background: #dcdbd7;
+  overflow: hidden; flex: none; border-radius: 2px;
+}
+.mg > * { position: absolute; display: block; }
+.mg > *:nth-child(1) { left: 5%;  top: 4%;  width: 90%; height: 28%; }
+.mg > *:nth-child(2) { left: 5%;  top: 35%; width: 43%; height: 28%; }
+.mg > *:nth-child(3) { left: 52%; top: 35%; width: 43%; height: 28%; }
+.mg > *:nth-child(4) { left: 5%;  top: 66%; width: 90%; height: 30%; }
+.mg > *:nth-child(5) { left: 58%; top: 9%;  width: 26%; height: 15%; }
+.mg > *:nth-child(6) { left: 9%;  top: 41%; width: 31%; height: 14%; }
+.mg > *:nth-child(7) { left: 57%; top: 41%; width: 31%; height: 14%; }
+.mg > *:nth-child(8) { left: 13%; top: 72%; width: 31%; height: 15%; }
+.mg .p { background: #c6c5c1; border: 1.5px solid #75756f; }
+.mg .d { background: #b3b2ae; border: 1.5px solid #75756f; }
+.mg .b { background: #fff; border: 1.5px solid #3a3a38; border-radius: 50%; }
+.mg .k { background: #9e9d99; border: 1.5px solid #6a6a66; }
+
+/* ============================================================
+   §1 — Masalah sekarang
+   ============================================================ */
+.appbar {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  background: var(--ks-surface); border-bottom: 1px solid var(--ks-line);
+  padding: 7px 12px;
+}
+.appbar .brand {
+  font-family: var(--display); font-size: 13px; font-weight: 600;
+  letter-spacing: -0.01em; margin-right: 4px;
+}
+.appbar .sep { width: 1px; height: 16px; background: var(--ks-line); margin: 0 3px; }
+.appbar .spacer { flex: 1; }
+
+.frame {
+  border: 1px solid var(--ks-line); border-radius: var(--r-card);
+  overflow: hidden; background: var(--ks-bg);
+}
+.frame-cap {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 12px; background: var(--ks-surface-2);
+  border-bottom: 1px solid var(--ks-line);
+  font-size: 11px; color: var(--ks-text-2);
+}
+.frame-cap .tag {
+  font-family: var(--mono); font-size: 10px; color: var(--ks-text-3);
+  margin-left: auto;
+}
+.frame-cap strong { color: var(--ks-text); font-weight: 600; }
+
+.callouts { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1px; background: var(--ks-line); border: 1px solid var(--ks-line); border-radius: var(--r); overflow: hidden; margin-top: 14px; }
+.callout { background: var(--ks-surface); padding: 11px 13px; }
+.callout h4 { margin: 0 0 4px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em; }
+.callout p { margin: 0; font-size: 12px; color: var(--ks-text-2); line-height: 1.5; }
+.callout .k { font-family: var(--mono); font-size: 10.5px; color: var(--ks-accent); }
+
+/* ============================================================
+   §2 — Referensi
+   ============================================================ */
+table.ref { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+table.ref th {
+  text-align: left; font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ks-text-3);
+  padding: 0 10px 7px; border-bottom: 1px solid var(--ks-line);
+}
+table.ref td {
+  padding: 10px; border-bottom: 1px solid var(--ks-line);
+  vertical-align: top; color: var(--ks-text-2);
+}
+table.ref tr:hover td { background: var(--ks-surface); }
+table.ref td.name { color: var(--ks-text); font-weight: 600; white-space: nowrap; }
+table.ref td.name .kind { display: block; font-weight: 400; font-size: 11px; color: var(--ks-text-3); margin-top: 2px; }
+table.ref td.pola { line-height: 1.55; }
+table.ref td.pola b { color: var(--ks-text); font-weight: 600; }
+table.ref td.lnk { white-space: nowrap; font-size: 11.5px; }
+
+.steal { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; margin-top: 16px; }
+.steal .card {
+  background: var(--ks-surface); border: 1px solid var(--ks-line);
+  border-radius: var(--r); padding: 12px 13px;
+}
+.steal .card h4 {
+  margin: 0 0 3px; font-size: 12px; font-weight: 600;
+  display: flex; align-items: center; gap: 7px;
+}
+.steal .card .src { font-family: var(--mono); font-size: 10px; color: var(--ks-text-3); margin-bottom: 7px; display: block; }
+.steal .card p { margin: 0; font-size: 12px; color: var(--ks-text-2); line-height: 1.5; }
+
+/* ============================================================
+   §3 — Tiga arah
+   ============================================================ */
+.dir { margin-bottom: 44px; }
+.dir-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+.dir-head .letter {
+  font-family: var(--display); font-size: 13px; font-weight: 700;
+  width: 22px; height: 22px; display: grid; place-items: center;
+  background: var(--ks-accent); color: var(--ks-accent-fg); border-radius: 4px;
+  flex: none;
+}
+.dir-head h4 { font-family: var(--display); font-size: 16px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+.dir-head .fit { font-size: 11.5px; color: var(--ks-text-3); }
+.dir-prem { color: var(--ks-text-2); margin: 0 0 14px; max-width: 84ch; }
+
+.split { display: grid; grid-template-columns: 1fr 300px; gap: 14px; align-items: start; }
+@media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+
+.changes { background: var(--ks-surface); border: 1px solid var(--ks-line); border-radius: var(--r); padding: 12px 14px; }
+.changes h5 {
+  margin: 0 0 8px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ks-text-3);
+}
+.changes ol { margin: 0; padding-left: 17px; color: var(--ks-text-2); font-size: 12px; }
+.changes ol li { margin: 6px 0; line-height: 1.5; }
+.changes ol li strong { color: var(--ks-text); font-weight: 600; }
+.changes .cost {
+  margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--ks-line);
+  font-size: 11.5px; color: var(--ks-text-3);
+}
+.changes .cost b { color: var(--ks-text-2); font-weight: 600; }
+
+/* ---- layar mockup ---- */
+.screen { background: var(--ks-bg); min-height: 300px; display: flex; flex-direction: column; }
+.scr-head {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: var(--ks-surface); border-bottom: 1px solid var(--ks-line);
+  padding: 6px 12px;
+}
+.scr-head .brand { font-family: var(--display); font-size: 12.5px; font-weight: 600; letter-spacing: -0.01em; }
+.scr-head .count { font-family: var(--mono); font-size: 11px; color: var(--ks-text-3); }
+.scr-head .sp { flex: 1; }
+
+/* A — pipeline bar */
+.pipe {
+  display: flex; align-items: center; gap: 0;
+  background: var(--ks-surface-2); border-bottom: 1px solid var(--ks-line);
+  padding: 0 12px; overflow-x: auto;
+}
+.pipe .stage {
+  display: flex; align-items: center; gap: 7px; padding: 9px 0;
+  font-size: 11.5px; color: var(--ks-text-3); white-space: nowrap;
+}
+.pipe .stage + .stage { margin-left: 0; }
+.pipe .stage .lbl { font-weight: 500; }
+.pipe .stage.done { color: var(--ks-text-2); }
+.pipe .stage.done .lbl { color: var(--ks-text-2); }
+.pipe .stage.act { color: var(--ks-text); }
+.pipe .stage.act .lbl { color: var(--ks-text); font-weight: 600; }
+.pipe .stage .n { font-family: var(--mono); font-size: 10px; color: var(--ks-text-3); }
+.pipe .link { width: 26px; height: 1px; background: var(--ks-line-strong); margin: 0 9px; flex: none; }
+.pipe .link.on { background: color-mix(in srgb, var(--ks-success) 55%, var(--ks-line-strong)); }
+.pipe .tail { margin-left: auto; display: flex; align-items: center; gap: 9px; padding-left: 16px; }
+
+.grid-pages {
+  display: grid; gap: 10px; padding: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+}
+.pcard {
+  background: var(--ks-surface); border: 1px solid var(--ks-line);
+  border-radius: var(--r); overflow: hidden; position: relative;
+}
+.pcard.sel { border-color: var(--ks-accent); box-shadow: 0 0 0 1px var(--ks-accent); }
+.pcard .ov {
+  position: absolute; top: 5px; right: 5px; z-index: 2;
+  display: flex; gap: 3px;
+}
+.pcard .ov .chip {
+  font-family: var(--mono); font-size: 9px; font-weight: 600;
+  background: color-mix(in srgb, var(--ks-bg) 82%, transparent);
+  color: var(--ks-cyan); padding: 1px 4px; border-radius: 3px;
+  backdrop-filter: blur(3px);
+}
+.pcard .foot {
+  display: flex; align-items: center; gap: 5px;
+  padding: 5px 6px; border-top: 1px solid var(--ks-line);
+}
+.pcard .foot .nm {
+  font-family: var(--mono); font-size: 9.5px; color: var(--ks-text-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+}
+
+/* B — workspace */
+.ws { display: grid; grid-template-columns: 196px 1fr 268px; flex: 1; min-height: 340px; }
+@media (max-width: 860px) { .ws { grid-template-columns: 1fr; } }
+.ws > * { min-width: 0; }
+.ws .col-l { background: var(--ks-surface); border-right: 1px solid var(--ks-line); display: flex; flex-direction: column; }
+.ws .col-c { background: var(--ks-bg); display: flex; flex-direction: column; }
+.ws .col-r { background: var(--ks-surface); border-left: 1px solid var(--ks-line); display: flex; flex-direction: column; }
+.col-h {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 9px; border-bottom: 1px solid var(--ks-line);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--ks-text-3);
+}
+.col-h .sp { flex: 1; }
+.plist { overflow: auto; flex: 1; }
+.prow {
+  display: flex; align-items: center; gap: 7px; padding: 5px 8px;
+  border-bottom: 1px solid var(--ks-line); cursor: default;
+}
+.prow:hover { background: var(--ks-hover); }
+.prow.on { background: var(--ks-accent-soft); box-shadow: inset 2px 0 0 var(--ks-accent); }
+.prow .th { width: 26px; height: 34px; flex: none; border-radius: 2px; overflow: hidden; }
+.prow .th .mg { width: 100%; height: 100%; aspect-ratio: auto; }
+.prow .tx { min-width: 0; flex: 1; }
+.prow .tx .f { font-family: var(--mono); font-size: 10px; color: var(--ks-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prow.on .tx .f { color: var(--ks-text); }
+.prow .tx .s { display: flex; align-items: center; gap: 5px; margin-top: 2px; font-size: 9.5px; color: var(--ks-text-3); }
+
+.canvas { flex: 1; display: grid; place-items: center; padding: 16px; background: #0a0a0c; position: relative; }
+.canvas .stage { width: min(260px, 60%); position: relative; }
+.canvas .stage .mg { border-radius: 3px; }
+.bubhit {
+  position: absolute; border: 1.5px solid var(--ks-accent);
+  background: color-mix(in srgb, var(--ks-accent) 14%, transparent);
+  border-radius: 50%;
+}
+.bubhit::after {
+  content: attr(data-n); position: absolute; top: -7px; left: -7px;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--ks-accent); color: var(--ks-accent-fg);
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  display: grid; place-items: center;
+}
+.zoombar {
+  display: flex; align-items: center; gap: 6px;
+  border-top: 1px solid var(--ks-line); background: var(--ks-surface);
+  padding: 5px 10px; font-size: 10.5px; color: var(--ks-text-3);
+}
+.zoombar .sp { flex: 1; }
+
+.insp { padding: 10px; display: flex; flex-direction: column; gap: 10px; overflow: auto; flex: 1; }
+.bub-block { border: 1px solid var(--ks-line); border-radius: var(--r); overflow: hidden; }
+.bub-block.on { border-color: color-mix(in srgb, var(--ks-accent) 55%, var(--ks-line)); }
+.bub-block .bh {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--ks-surface-2); border-bottom: 1px solid var(--ks-line);
+  padding: 5px 8px; font-size: 10px; color: var(--ks-text-3);
+}
+.bub-block .bh .id { font-family: var(--mono); color: var(--ks-text-2); font-weight: 500; }
+.bub-block .bh .sp { flex: 1; }
+.bub-block .bd { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.kv { display: grid; grid-template-columns: 44px 1fr; gap: 7px; align-items: start; }
+.kv .k { font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ks-text-3); padding-top: 2px; }
+.kv .v { font-size: 12px; color: var(--ks-text); line-height: 1.45; }
+.kv .v.src { color: var(--ks-text-2); }
+.kv .v textarea-like {
+  background: var(--ks-surface-2); border: 1px solid var(--ks-line);
+  border-radius: 4px; padding: 5px 7px; display: block;
+}
+.fitbar { display: flex; align-items: center; gap: 6px; font-size: 10.5px; padding-top: 2px; }
+.fitbar .track { flex: 1; height: 4px; background: var(--ks-raised); border-radius: 2px; overflow: hidden; }
+.fitbar .track i { display: block; height: 100%; }
+.fitbar .track i.ok { background: var(--ks-success); width: 74%; }
+.fitbar .track i.over { background: var(--ks-warn); width: 116%; }
+
+/* C — bubble ledger */
+.ledger-bar {
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  background: var(--ks-surface-2); border-bottom: 1px solid var(--ks-line);
+  padding: 7px 12px;
+}
+.seg { display: flex; border: 1px solid var(--ks-line); border-radius: var(--r); overflow: hidden; }
+.seg span {
+  padding: 0 9px; height: 24px; display: inline-flex; align-items: center;
+  font-size: 11px; color: var(--ks-text-3); background: var(--ks-surface);
+  border-right: 1px solid var(--ks-line); white-space: nowrap;
+}
+.seg span:last-child { border-right: 0; }
+.seg span.on { background: var(--ks-raised); color: var(--ks-text); font-weight: 600; }
+.seg span .c { font-family: var(--mono); font-size: 10px; margin-left: 5px; opacity: 0.75; }
+
+table.ledger { width: 100%; border-collapse: collapse; font-size: 12px; }
+table.ledger th {
+  position: sticky; top: 0; z-index: 2;
+  text-align: left; font-size: 9.5px; font-weight: 700; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--ks-text-3);
+  background: var(--ks-surface); border-bottom: 1px solid var(--ks-line);
+  padding: 7px 9px; white-space: nowrap;
+}
+table.ledger td {
+  padding: 7px 9px; border-bottom: 1px solid var(--ks-line);
+  vertical-align: middle; color: var(--ks-text-2);
+}
+table.ledger tbody tr:hover td { background: var(--ks-hover); }
+table.ledger tr.on td { background: var(--ks-accent-soft); }
+table.ledger tr.on td:first-child { box-shadow: inset 2px 0 0 var(--ks-accent); }
+table.ledger td.idx { font-family: var(--mono); font-size: 10.5px; color: var(--ks-text-3); width: 34px; }
+table.ledger td.pg { font-family: var(--mono); font-size: 10.5px; color: var(--ks-text-3); width: 52px; }
+table.ledger td.src { color: var(--ks-text-2); font-size: 12.5px; }
+table.ledger td.out { color: var(--ks-text); font-size: 12.5px; }
+table.ledger td.out.mut { color: var(--ks-text-3); font-style: italic; }
+table.ledger .fit { width: 76px; }
+table.ledger .chk { width: 64px; }
+
+.ledger-foot {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--ks-surface); border-top: 1px solid var(--ks-line);
+  padding: 6px 12px; font-size: 11px; color: var(--ks-text-3);
+}
+.ledger-foot .sp { flex: 1; }
+
+/* ============================================================
+   §4 — Token
+   ============================================================ */
+.sw { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 8px; }
+.swatch { border: 1px solid var(--ks-line); border-radius: var(--r); overflow: hidden; background: var(--ks-surface); }
+.swatch .chip { height: 40px; }
+.swatch .lb { padding: 6px 8px; font-family: var(--mono); font-size: 10px; color: var(--ks-text-2); }
+.swatch .lb span { display: block; color: var(--ks-text-3); font-size: 9.5px; margin-top: 1px; }
+
+.glossary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin-top: 14px; }
+.gl { background: var(--ks-surface); border: 1px solid var(--ks-line); border-radius: var(--r); padding: 12px 13px; }
+.gl h5 { margin: 0 0 7px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ks-text-3); }
+.gl ul { margin: 0; padding-left: 16px; font-size: 12px; color: var(--ks-text-2); }
+.gl li { margin: 4px 0; line-height: 1.5; }
+.gl li b { color: var(--ks-text); font-weight: 600; }
+
+footer {
+  margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--ks-line);
+  font-size: 12px; color: var(--ks-text-3); max-width: 84ch;
+}
+footer strong { color: var(--ks-text-2); }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <h1>Kuron Studio · Referensi Desain</h1>
+    <span class="meta mono">design/referensi-desain.html</span>
+    <nav class="nav">
+      <a href="#masalah">Masalah</a>
+      <a href="#referensi">Referensi</a>
+      <a href="#arah">3 Arah</a>
+      <a href="#token">Token</a>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="lede">
+    <h2>Bikin Kuron terasa seperti app khusus translate manga</h2>
+    <p>
+      Tujuan dokumen ini: satu halaman berisi referensi nyata dari app sejenis, audit singkat
+      layar sekarang, lalu tiga arah tampilan baru yang bisa dibandingkan berdampingan.
+      Semua mockup memakai token <span class="mono" style="color:var(--ks-text-2)">--ks-*</span>
+      yang sudah ada di <span class="mono" style="color:var(--ks-text-2)">src/app.css</span> —
+      tidak ada warna, radius, atau tinggi kontrol yang dikarang baru.
+    </p>
+  </div>
+
+  <!-- ==================================================== §1 -->
+  <section id="masalah">
+    <div class="sec-head">
+      <span class="num">01</span>
+      <h3>Kenapa sekarang terasa seperti utility, bukan app translator</h3>
+      <span class="hint">baca dari App.svelte baris 286–376</span>
+    </div>
+
+    <p class="note">
+      Header sekarang memuat <b>15 kontrol</b> dalam satu baris, tanpa hierarki dan tanpa
+      pemisahan risiko. Hasilnya: tidak ada yang menonjol, dan tombol destruktif
+      (<span class="mono">Hapus project</span>) berdiri sejajar dengan tombol harian
+      (<span class="mono">Import file</span>).
+    </p>
+
+    <div class="frame">
+      <div class="frame-cap">
+        <strong>Sekarang</strong> — seluruh kontrol di header
+        <span class="tag">App.svelte:286</span>
+      </div>
+      <div class="appbar">
+        <span class="brand">Kuron Studio</span>
+        <span class="field tnum">Chapter 12 · 182 <span class="caret">▾</span></span>
+        <span class="mono" style="font-size:11px;color:var(--ks-text-3)">182 halaman</span>
+        <span class="spacer"></span>
+        <span class="btn gho mono sm">RTL→</span>
+        <span class="btn gho sm">◐</span>
+        <span class="btn gho mono sm">ID</span>
+        <span class="sep"></span>
+        <span class="btn gho sm">Providers</span>
+        <span class="btn gho sm">Update</span>
+        <span class="btn gho sm">Batch</span>
+        <span class="btn gho sm">Glossary</span>
+        <span class="btn gho sm">Review</span>
+        <span class="sep"></span>
+        <span class="btn pri sm">Detect semua</span>
+        <span class="btn def sm">Import folder</span>
+        <span class="btn def sm">Import files</span>
+        <span class="sep"></span>
+        <span class="btn def sm">Bersihkan</span>
+        <span class="btn dgr sm">Hapus project</span>
+        <span class="sep"></span>
+        <span class="btn gho sm">⚙</span>
+      </div>
+    </div>
+
+    <div class="callouts">
+      <div class="callout">
+        <h4><span class="k">15</span> kontrol, satu bobot</h4>
+        <p>Semua tombol tinggi dan gayanya sama. Mata tidak punya titik masuk, jadi setiap kali harus memindai dari kiri.</p>
+      </div>
+      <div class="callout">
+        <h4><span class="k">5</span> panel modal menutupi kerja</h4>
+        <p>Batch, Glossary, Review, Provider, Diagnostics semuanya modal. Setiap kali buka, halaman yang sedang dikerjakan hilang.</p>
+      </div>
+      <div class="callout">
+        <h4><span class="k">0</span> indikasi posisi dalam alur</h4>
+        <p>Tidak terlihat apakah halaman ini sudah terdeteksi, diterjemahkan, atau masih mentah — status ada, tapi tidak terbaca sebagai progres.</p>
+      </div>
+      <div class="callout">
+        <h4>Grid = satu-satunya navigasi</h4>
+        <p>Mencari bubble tertentu berarti mengingat halaman berapa. Tidak ada daftar bubble yang bisa dipindai.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================================================== §2 -->
+  <section id="referensi">
+    <div class="sec-head">
+      <span class="num">02</span>
+      <h3>Referensi nyata yang layak dipinjam</h3>
+      <span class="hint">5 app · dipilih karena paling se-domain</span>
+    </div>
+
+    <p class="note">
+      Bukan moodboard estetika — ini app yang memecahkan masalah yang persis sama dengan Kuron.
+      Kolom terakhir menyebut <b>pola spesifik</b> yang bisa diangkat, bukan sekadar "tampilannya bagus".
+    </p>
+
+    <table class="ref">
+      <thead>
+        <tr>
+          <th style="width:190px">App</th>
+          <th>Pola yang layak dipinjam</th>
+          <th style="width:130px">Tautan</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="name">BallonsTranslator
+            <span class="kind">Desktop · Python · open source</span>
+          </td>
+          <td class="pola">
+            <b>Sidebar kiri berisi daftar halaman + tombol aksi berikon berlabel</b>
+            (<span class="mono">Gloss</span>, <span class="mono">Ri</span>, <span class="mono">x2</span>) —
+            menggantikan deretan tombol teks di header.
+            <b>Counter zero-padded</b> <span class="mono">007/182</span> di judul window supaya posisi terbaca sekilas.
+            <b>Progress bar bertingkat</b>: project-count di atas, progress per-tahap di bawah, jadi pipeline terbaca sebagai satu proses.
+            <b>Label provenance per teks</b> — draft mesin, review LLM, dan hasil akhir disimpan dan ditampilkan terpisah,
+            sehingga translator tahu mana yang belum dicek manusia.
+            <b>Bubble-bound auto layout</b>: teks dipaksa muat pada geometri balloon asli.
+          </td>
+          <td class="lnk"><a href="https://github.com/CoSciBlog/BallonsTranslator-vibe" target="_blank" rel="noopener">github.com/…</a></td>
+        </tr>
+        <tr>
+          <td class="name">Aegisub
+            <span class="kind">Desktop · subtitle translation</span>
+          </td>
+          <td class="pola">
+            <b>Translation Assistant: dua kolom sumber ↔ terjemahan</b> berdampingan, bukan form bertumpuk.
+            <b>Keyboard-first</b> — navigasi baris, terima, dan lanjut tanpa lewat mouse.
+            <b>Fokus pada satu baris aktif</b> dengan konteks di sekitarnya tetap terlihat.
+            Pola ini paling langsung bisa dipakai untuk daftar bubble Kuron.
+          </td>
+          <td class="lnk"><a href="https://aegisub.org/docs/latest/translation_assistant/" target="_blank" rel="noopener">aegisub.org</a></td>
+        </tr>
+        <tr>
+          <td class="name">youcomic · PixLate
+            <span class="kind">Web · comic translation</span>
+          </td>
+          <td class="pola">
+            <b>Bubble fit preview</b> — menampilkan apakah teks terjemahan muat di balloon asli
+            <i>sebelum</i> diekspor. Ini fitur yang paling membedakan app "translate manga" dari
+            app terjemahan biasa: batasnya bukan karakter, tapi geometri.
+            <b>Cleanup, layout, dan review dalam satu alur editor</b> — tidak dipisah jadi aplikasi berbeda.
+          </td>
+          <td class="lnk"><a href="https://pixlate.app/manga-translator/" target="_blank" rel="noopener">pixlate.app</a></td>
+        </tr>
+        <tr>
+          <td class="name">Crowdin · Lokalise
+            <span class="kind">Web · translation management</span>
+          </td>
+          <td class="pola">
+            <b>Daftar string sebagai layar utama</b>, bukan galeri. Satu baris = satu unit kerja,
+            dengan kolom sumber, terjemahan, dan status di baris yang sama.
+            <b>Filter status</b> (<i>untranslated</i>, <i>needs review</i>) sebagai cara utama menemukan pekerjaan,
+            bukan menggulir galeri.
+          </td>
+          <td class="lnk"><a href="https://crowdin.com/" target="_blank" rel="noopener">crowdin.com</a></td>
+        </tr>
+        <tr>
+          <td class="name">Figma · Blender
+            <span class="kind">Desktop · creative workbench</span>
+          </td>
+          <td class="pola">
+            <b>Panel permanen, bukan modal</b> — objek yang sedang dikerjakan selalu terlihat di samping kanvas.
+            <b>Status bar tipis di bawah</b> membawa info posisi, zoom, dan selection tanpa memakan ruang atas.
+            <b>Rasio kanvas besar</b>: alat menyingkir ke pinggir, bidang kerja dapat sebagian besar layar.
+          </td>
+          <td class="lnk"><a href="https://www.figma.com/" target="_blank" rel="noopener">figma.com</a></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="steal">
+      <div class="card">
+        <h4><span class="dot cy"></span> Jumlah jadi hierarki</h4>
+        <span class="src">BallonsTranslator</span>
+        <p><span class="mono" style="color:var(--ks-text-2)">007/182</span> lebih berguna daripada "182 halaman" karena menjawab dua pertanyaan sekaligus: total dan posisi sekarang.</p>
+      </div>
+      <div class="card">
+        <h4><span class="dot cy"></span> Tahap, bukan tombol</h4>
+        <span class="src">BallonsTranslator · Crowdin</span>
+        <p>Import → Deteksi → Terjemah → Review → Ekspor sebagai baris status yang bisa diklik. Tahap menggantikan 6 tombol toolbar sekaligus.</p>
+      </div>
+      <div class="card">
+        <h4><span class="dot cy"></span> Muat atau tidak muat</h4>
+        <span class="src">youcomic · PixLate</span>
+        <p>Kurun sudah mengukur <span class="mono" style="color:var(--ks-text-2)">textLayout</span>. Tinggal menampilkannya: bar hijau = muat, bar kelebihan = harus dipendekkan.</p>
+      </div>
+      <div class="card">
+        <h4><span class="dot cy"></span> Panel menemani kanvas</h4>
+        <span class="src">Figma · Blender</span>
+        <p>Glossary dan Provider pindah dari modal jadi tab panel. Modal menutupi pekerjaan; panel tidak.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================================================== §3 -->
+  <section id="arah">
+    <div class="sec-head">
+      <span class="num">03</span>
+      <h3>Tiga arah, dibandingkan berdampingan</h3>
+      <span class="hint">tiap arah menampilkan layar berbeda</span>
+    </div>
+    <p class="note">
+      Ketiganya memakai token yang sama, jadi bedanya murni struktur — bukan palet.
+      Bisa diambil terpisah: A dan C tidak saling menuntut, B adalah yang paling mahal.
+    </p>
+
+    <!-- ------------------------------------------------ A -->
+    <div class="dir">
+      <div class="dir-head">
+        <span class="letter">A</span>
+        <h4>Pipeline sebagai tulang punggung</h4>
+        <span class="fit">layar: daftar halaman · perubahan paling murah</span>
+      </div>
+      <p class="dir-prem">
+        Header turun dari 15 kontrol jadi 6. Sebagai gantinya, satu baris pipeline lima tahap
+        mengambil alih peran toolbar: dari <span class="mono">PageStatus</span> yang sudah ada
+        (<span class="mono">idle → detecting → detected → translating → translated</span>),
+        tiap halaman otomatis tahu berada di tahap mana.
+      </p>
+
+      <div class="split">
+        <div class="frame">
+          <div class="frame-cap"><strong>A · daftar halaman</strong><span class="tag">hero screen</span></div>
+          <div class="screen">
+            <div class="scr-head">
+              <span class="brand">Kuron Studio</span>
+              <span class="field" style="height:24px">Chapter 12 <span class="caret">▾</span></span>
+              <span class="count tnum">007/182</span>
+              <span class="sp"></span>
+              <span class="btn gho sm">◐</span>
+              <span class="btn gho mono sm">ID</span>
+              <span class="btn gho sm">⌘K</span>
+            </div>
+
+            <div class="pipe">
+              <span class="stage done"><span class="dot ok"></span><span class="lbl">Import</span><span class="n tnum">182</span></span>
+              <span class="link on"></span>
+              <span class="stage done"><span class="dot ok"></span><span class="lbl">Deteksi</span><span class="n tnum">164</span></span>
+              <span class="link on"></span>
+              <span class="stage act"><span class="dot run"></span><span class="lbl">Terjemah</span><span class="n tnum">064</span></span>
+              <span class="link"></span>
+              <span class="stage"><span class="dot idle"></span><span class="lbl">Review</span><span class="n tnum">012</span></span>
+              <span class="link"></span>
+              <span class="stage"><span class="dot idle"></span><span class="lbl">Ekspor</span></span>
+              <span class="tail">
+                <span class="badge cy tnum">64/182</span>
+                <span class="btn pri sm">Terjemahkan sisa 118</span>
+              </span>
+            </div>
+
+            <div class="grid-pages">
+              <div class="pcard sel">
+                <div class="ov"><span class="chip">5</span></div>
+                <div class="mg"><i class="p"></i><i class="p"></i><i class="p"></i><i class="d"></i><i class="b"></i><i class="b"></i></div>
+                <div class="foot"><span class="nm">p007.jpg</span><span class="badge ok">Done</span></div>
+              </div>
+              <div class="pcard">
+                <div class="ov"><span class="chip">3</span></div>
+                <div class="mg"><i class="p"></i><i class="p"></i><i class="p"></i><i class="d"></i><i class="b"></i><i class="b"></i></div>
+                <div class="foot"><span class="nm">p008.jpg</span><span class="badge ok">Done</span></div>
+              </div>
+              <div class="pcard">
+                <div class="ov"><span class="chip">6</span></div>
+                <div class="mg"><i class="p"></i><i class="p"></i><i class="p"></i><i class="d"></i><i class="b"></i><i class="b"></i></div>
+                <div class="foot"><span class="nm">p009.jpg</span><span class="badge run">Translating</span></div>
+              </div>
+              <div class="pcard">
+                <div class="ov"><span class="chip">4</span></div>
+                <div class="mg"><i class="p"></i><i class="p"></i><i class="p"></i><i class="d"></i><i class="b"></i><i class="b"></i></div>
+                <div class="foot"><span class="nm">p010.jpg</span><span class="badge run">Translating</span></div>
+              </div>
+              <div class="pcard">
+                <div class="ov"><span class="chip">2</span></div>
+                <div class="mg"><i class="p"></i><i class="p"></i><i class="p"></i><i class="d"></i><i class="b"></i><i class="b"></i></div>
+                <div class="foot"><span class="nm">p011.jpg</span><span class="badge mute">Detected</span></div>
+              </div>
+              <div class="pcard">
+                <div class="ov"></div>
+                <div class="mg"><i class="p"></i><i class="p"></i><i class="p"></i><i class="d"></i><i class="b"></i><i class="b"></i></div>
+                <div class="foot"><span class="nm">p012.jpg</span><span class="badge mute">Idle</span></div>
+              </div>
+              <div class="pcard">
+                <div class="ov"><span class="chip">0</span></div>
+                <div class="mg"><i class="p"></i><i class="p"></i><i class="d"></i><i class="d"></i></div>
+                <div class="foot"><span class="nm">p013.jpg</span><span class="badge warn">No bubbles</span></div>
+              </div>
+              <div class="pcard">
+                <div class="ov"><span class="chip">4</span></div>
+                <div class="mg"><i class="p"></i><i class="p"></i><i class="p"></i><i class="d"></i><i class="b"></i><i class="b"></i></div>
+                <div class="foot"><span class="nm">p014.jpg</span><span class="badge err">Failed</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="changes">
+          <h5>Yang berubah</h5>
+          <ol>
+            <li><strong>15 kontrol → 6.</strong> Yang tersisa: judul, pemilih project, counter, tema, bahasa, dan pemicu ⌘K.</li>
+            <li><strong>6 tombol pindah ke ⌘K.</strong> Batch, Glossary, Review, Import, Bersihkan, Diagnostics tetap ada — hanya tidak lagi menempel di header.</li>
+            <li><strong>Pipeline bar jadi navigasi.</strong> Klik satu tahap untuk menyaring grid ke halaman di tahap itu.</li>
+            <li><strong>Status terbaca sebagai progres.</strong> Badge per kartu memakai <span class="mono">PageStatus</span> yang sudah ada, tanpa field baru.</li>
+            <li><strong>Hapus project keluar dari toolbar.</strong> Pindah ke menu project — destruktif tidak boleh sejajar dengan Import.</li>
+          </ol>
+          <div class="cost"><b>Biaya:</b> rendah. Struktur data dan komponen tidak berubah; hanya perataan ulang header + satu bar baru.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ------------------------------------------------ B -->
+    <div class="dir">
+      <div class="dir-head">
+        <span class="letter">B</span>
+        <h4>Workspace tiga kolom</h4>
+        <span class="fit">layar: editor bubble · perubahan paling mahal</span>
+      </div>
+      <p class="dir-prem">
+        Editor berhenti jadi overlay fullscreen dan menjadi tengah workspace yang selalu ada.
+        Daftar halaman turun jadi sidebar padat di kiri, dan teks sumber → terjemahan pindah ke
+        inspector permanen di kanan. Pola BallonsTranslator dan Figma.
+      </p>
+
+      <div class="split">
+        <div class="frame">
+          <div class="frame-cap"><strong>B · editor bubble</strong><span class="tag">sidebar + kanvas + inspector</span></div>
+          <div class="screen">
+            <div class="scr-head">
+              <span class="brand">Kuron Studio</span>
+              <span class="field" style="height:24px">Chapter 12 <span class="caret">▾</span></span>
+              <span class="count tnum">007/182</span>
+              <span class="sp"></span>
+              <span class="btn def sm">Ekspor CBZ</span>
+              <span class="btn gho sm">◐</span>
+              <span class="btn gho mono sm">ID</span>
+            </div>
+
+            <div class="ws">
+              <!-- kolom kiri -->
+              <div class="col-l">
+                <div class="col-h">Halaman <span class="sp"></span><span class="mono" style="text-transform:none;letter-spacing:0">182</span></div>
+                <div class="plist">
+                  <div class="prow"><span class="th"><span class="mg"><i class="p"></i><i class="p"></i><i class="d"></i></span></span><span class="tx"><span class="f">p005.jpg</span><span class="s"><span class="dot ok"></span>5 bubble</span></span></div>
+                  <div class="prow"><span class="th"><span class="mg"><i class="p"></i><i class="p"></i><i class="d"></i></span></span><span class="tx"><span class="f">p006.jpg</span><span class="s"><span class="dot ok"></span>3 bubble</span></span></div>
+                  <div class="prow on"><span class="th"><span class="mg"><i class="p"></i><i class="p"></i><i class="d"></i></span></span><span class="tx"><span class="f">p007.jpg</span><span class="s"><span class="dot cy"></span>5 bubble · aktif</span></span></div>
+                  <div class="prow"><span class="th"><span class="mg"><i class="p"></i><i class="p"></i><i class="d"></i></span></span><span class="tx"><span class="f">p008.jpg</span><span class="s"><span class="dot run"></span>3 bubble</span></span></div>
+                  <div class="prow"><span class="th"><span class="mg"><i class="p"></i><i class="p"></i><i class="d"></i></span></span><span class="tx"><span class="f">p009.jpg</span><span class="s"><span class="dot idle"></span>belum deteksi</span></span></div>
+                  <div class="prow"><span class="th"><span class="mg"><i class="p"></i><i class="p"></i><i class="d"></i></span></span><span class="tx"><span class="f">p010.jpg</span><span class="s"><span class="dot idle"></span>belum deteksi</span></span></div>
+                  <div class="prow"><span class="th"><span class="mg"><i class="p"></i><i class="p"></i><i class="d"></i></span></span><span class="tx"><span class="f">p011.jpg</span><span class="s"><span class="dot err"></span>gagal deteksi</span></span></div>
+                  <div class="prow"><span class="th"><span class="mg"><i class="p"></i><i class="p"></i><i class="d"></i></span></span><span class="tx"><span class="f">p012.jpg</span><span class="s"><span class="dot idle"></span>belum deteksi</span></span></div>
+                </div>
+                <div class="col-h" style="border-bottom:0;border-top:1px solid var(--ks-line)">Panel <span class="sp"></span></div>
+                <div style="padding:7px 9px;display:flex;flex-direction:column;gap:4px">
+                  <span class="btn def sm" style="justify-content:flex-start">Glossary</span>
+                  <span class="btn def sm" style="justify-content:flex-start">Provider</span>
+                  <span class="btn def sm" style="justify-content:flex-start">Diagnostics</span>
+                </div>
+              </div>
+
+              <!-- kolom tengah -->
+              <div class="col-c">
+                <div class="col-h">Kanvas <span class="sp"></span><span class="mono" style="text-transform:none;letter-spacing:0">p007.jpg</span></div>
+                <div class="canvas">
+                  <div class="stage">
+                    <div class="mg" style="aspect-ratio:3/4">
+                      <i class="p"></i><i class="p"></i><i class="p"></i><i class="d"></i>
+                      <i class="b"></i><i class="b"></i><i class="b"></i>
+                    </div>
+                    <span class="bubhit" data-n="1" style="left:57%;top:8%;width:28%;height:17%"></span>
+                    <span class="bubhit" data-n="2" style="left:8%;top:40%;width:33%;height:16%"></span>
+                  </div>
+                </div>
+                <div class="zoombar">
+                  <span class="btn gho sm">−</span>
+                  <span class="mono tnum">100%</span>
+                  <span class="btn gho sm">+</span>
+                  <span class="sp"></span>
+                  <span>RTL→</span>
+                  <span class="sep" style="width:1px;height:12px;background:var(--ks-line);margin:0 4px"></span>
+                  <span class="tnum">5 bubble</span>
+                </div>
+              </div>
+
+              <!-- kolom kanan -->
+              <div class="col-r">
+                <div class="col-h">Bubble terpilih <span class="sp"></span><span class="mono" style="text-transform:none;letter-spacing:0">2/5</span></div>
+                <div class="insp">
+                  <div class="bub-block on">
+                    <div class="bh"><span class="id">#2</span><span>hlm 007</span><span class="sp"></span><span class="badge cy">Aktif</span></div>
+                    <div class="bd">
+                      <div class="kv"><span class="k">Asli</span><span class="v src">なんだって…</span></div>
+                      <div class="kv"><span class="k">Baca</span><span class="v src">nandatte…</span></div>
+                      <div class="kv"><span class="k">Hasil</span><span class="v" style="background:var(--ks-surface-2);border:1px solid var(--ks-line);border-radius:4px;padding:5px 7px;display:block">Apa-apaan…</span></div>
+                      <div class="fitbar">
+                        <span style="color:var(--ks-success);font-weight:600">Muat</span>
+                        <span class="track"><i class="ok"></i></span>
+                        <span class="mono tnum" style="color:var(--ks-text-3)">9/12</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="bub-block">
+                    <div class="bh"><span class="id">#3</span><span>hlm 007</span><span class="sp"></span><span class="badge warn">Perlu review</span></div>
+                    <div class="bd">
+                      <div class="kv"><span class="k">Asli</span><span class="v src">これは嘘だ</span></div>
+                      <div class="kv"><span class="k">Hasil</span><span class="v" style="color:var(--ks-text-2)">— belum diterjemahkan</span></div>
+                    </div>
+                  </div>
+
+                  <div class="bub-block">
+                    <div class="bh"><span class="id">#4</span><span>hlm 007</span><span class="sp"></span><span class="badge err">Kelebihan</span></div>
+                    <div class="bd">
+                      <div class="kv"><span class="k">Asli</span><span class="v src">もう遅い</span></div>
+                      <div class="kv"><span class="k">Hasil</span><span class="v">Sudah terlambat sekali</span></div>
+                      <div class="fitbar">
+                        <span style="color:var(--ks-warn);font-weight:600">Sesak</span>
+                        <span class="track"><i class="over"></i></span>
+                        <span class="mono tnum" style="color:var(--ks-text-3)">18/11</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div style="border-top:1px solid var(--ks-line);padding:8px 10px;display:flex;gap:6px">
+                  <span class="btn pri sm" style="flex:1;justify-content:center">Terjemahkan #3</span>
+                  <span class="btn def sm">Simpan</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="changes">
+          <h5>Yang berubah</h5>
+          <ol>
+            <li><strong>Grid jadi sidebar daftar.</strong> Baris padat: thumbnail 26px, nama file, jumlah bubble, status. Muat 10× lebih banyak halaman per layar.</li>
+            <li><strong>Editor bukan overlay lagi.</strong> Kanvas selalu di tengah; pindah halaman tidak menutup-tutup layar.</li>
+            <li><strong>Inspector permanen.</strong> Asli → baca → hasil → indikator muat, tanpa membuka panel tambahan.</li>
+            <li><strong>Panel jadi tab di sidebar.</strong> Glossary, Provider, Diagnostics tidak lagi menutupi kanvas.</li>
+            <li><strong>Zoom dan posisi pindah ke bar bawah.</strong> Atas hanya membawa identitas dan aksi ekspor.</li>
+          </ol>
+          <div class="cost"><b>Biaya:</b> tinggi. EditorPanel dan App.svelte harus dipecah jadi region permanen; paling banyak menyentuh komponen.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ------------------------------------------------ C -->
+    <div class="dir">
+      <div class="dir-head">
+        <span class="letter">C</span>
+        <h4>Bubble ledger</h4>
+        <span class="fit">layar: daftar bubble seluruh project · paling dekat app terjemahan</span>
+      </div>
+      <p class="dir-prem">
+        Unit kerja berpindah dari halaman ke bubble. Seluruh bubble project jadi satu tabel padat —
+        sumber, terjemahan, status muat, dan status dicek dalam satu baris. Ini pola Crowdin dan
+        Aegisub, dan satu-satunya arah yang menjawab "di mana bubble yang belum beres?" dalam satu detik.
+      </p>
+
+      <div class="frame">
+        <div class="frame-cap"><strong>C · bubble ledger</strong><span class="tag">filter → klik baris → lompat ke halaman</span></div>
+        <div class="screen">
+          <div class="scr-head">
+            <span class="brand">Kuron Studio</span>
+            <span class="field" style="height:24px">Chapter 12 <span class="caret">▾</span></span>
+            <span class="count tnum">007/182</span>
+            <span class="sp"></span>
+            <span class="btn def sm">Terjemahkan tersaring</span>
+            <span class="btn gho sm">Ekspor</span>
+          </div>
+
+          <div class="ledger-bar">
+            <div class="seg">
+              <span class="on">Semua <b class="c tnum">87</b></span>
+              <span>Belum terjemah <b class="c tnum">23</b></span>
+              <span>Belum dicek <b class="c tnum">64</b></span>
+              <span>Muat gagal <b class="c tnum">4</b></span>
+            </div>
+            <span class="field grow" style="height:24px;max-width:200px"><span style="color:var(--ks-text-3)">Cari teks sumber…</span></span>
+            <span class="sp" style="flex:1"></span>
+            <span class="mono" style="font-size:10.5px;color:var(--ks-text-3)">↑↓ pindah · ⏎ buka halaman</span>
+          </div>
+
+          <div style="overflow:auto;max-height:330px">
+            <table class="ledger">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Hlm</th>
+                  <th>Asli</th>
+                  <th>Terjemahan</th>
+                  <th class="fit">Muat</th>
+                  <th class="chk">Dicek</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="idx">01</td><td class="pg">007</td>
+                  <td class="src">なんだって…</td>
+                  <td class="out">Apa-apaan…</td>
+                  <td class="fit"><span class="badge ok">Muat</span></td>
+                  <td class="chk"><span class="badge ok">Sudah</span></td>
+                </tr>
+                <tr class="on">
+                  <td class="idx">02</td><td class="pg">007</td>
+                  <td class="src">これは嘘だ</td>
+                  <td class="out mut">belum diterjemahkan</td>
+                  <td class="fit"><span class="badge mute">—</span></td>
+                  <td class="chk"><span class="badge mute">—</span></td>
+                </tr>
+                <tr>
+                  <td class="idx">03</td><td class="pg">007</td>
+                  <td class="src">もう遅い</td>
+                  <td class="out">Sudah terlambat sekali</td>
+                  <td class="fit"><span class="badge warn">Sesak</span></td>
+                  <td class="chk"><span class="badge mute">Belum</span></td>
+                </tr>
+                <tr>
+                  <td class="idx">04</td><td class="pg">008</td>
+                  <td class="src">行くぞ</td>
+                  <td class="out">Ayo pergi</td>
+                  <td class="fit"><span class="badge ok">Muat</span></td>
+                  <td class="chk"><span class="badge ok">Sudah</span></td>
+                </tr>
+                <tr>
+                  <td class="idx">05</td><td class="pg">008</td>
+                  <td class="src">何をしている</td>
+                  <td class="out">Apa yang kamu lakukan</td>
+                  <td class="fit"><span class="badge err">Kelebihan</span></td>
+                  <td class="chk"><span class="badge mute">Belum</span></td>
+                </tr>
+                <tr>
+                  <td class="idx">06</td><td class="pg">009</td>
+                  <td class="src">先に行け</td>
+                  <td class="out">Pergi duluan</td>
+                  <td class="fit"><span class="badge ok">Muat</span></td>
+                  <td class="chk"><span class="badge ok">Sudah</span></td>
+                </tr>
+                <tr>
+                  <td class="idx">07</td><td class="pg">009</td>
+                  <td class="src">信じていたのに</td>
+                  <td class="out mut">belum diterjemahkan</td>
+                  <td class="fit"><span class="badge mute">—</span></td>
+                  <td class="chk"><span class="badge mute">—</span></td>
+                </tr>
+                <tr>
+                  <td class="idx">08</td><td class="pg">010</td>
+                  <td class="src">分かっている</td>
+                  <td class="out">Ku tahu</td>
+                  <td class="fit"><span class="badge ok">Muat</span></td>
+                  <td class="chk"><span class="badge warn">Belum</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="ledger-foot">
+            <span class="tnum">87 bubble · 23 belum terjemah · 4 gagal muat</span>
+            <span class="sp"></span>
+            <span class="btn def sm">Tandai 64 dicek</span>
+            <span class="btn pri sm">Terjemahkan 23</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="split" style="margin-top:14px">
+        <div class="changes">
+          <h5>Yang berubah</h5>
+          <ol>
+            <li><strong>Halaman bukan lagi satu-satunya navigasi.</strong> Bubble jadi baris; halaman jadi kolom.</li>
+            <li><strong>Filter menggantikan menggulir.</strong> "Belum terjemah" dan "Muat gagal" langsung menemukan pekerjaan tersisa.</li>
+            <li><strong>Status muat tampil sebagai kolom.</strong> Memakai <span class="mono">textLayout</span> yang sudah ada, tidak perlu pengukuran baru.</li>
+            <li><strong>Aksi massal di baris bawah.</strong> Tandai sudah dicek, terjemahkan yang tersaring, ekspor — untuk pekerjaan berulang.</li>
+            <li><strong>Klik baris → lompat ke halaman</strong> dengan bubble tersorot. Tabel dan kanvas saling menunjuk.</li>
+          </ol>
+        </div>
+        <div class="changes">
+          <h5>Kapan arah ini menang</h5>
+          <p style="margin:0;font-size:12px;color:var(--ks-text-2);line-height:1.55">
+            Kalau keluhan sehari-hari adalah <b style="color:var(--ks-text)">"saya tidak tahu mana yang
+            masih bolong"</b>, arah ini jawabannya. Kalau keluhannya justru "menggambar bubble merepotkan",
+            arah ini tidak membantu — B lebih relevan.
+          </p>
+          <div class="cost"><b>Biaya:</b> sedang. Butuh query bubble lintas halaman dan tampilan baru, tapi komponen editor tidak disentuh.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ==================================================== §4 -->
+  <section id="token">
+    <div class="sec-head">
+      <span class="num">04</span>
+      <h3>Token yang dipakai mockup di atas</h3>
+      <span class="hint">identik dengan src/app.css</span>
+    </div>
+
+    <p class="note">
+      Semua warna, radius, dan tinggi kontrol di dokumen ini diambil dari token yang sudah ada.
+      Tidak ada nilai baru yang perlu ditambahkan ke <span class="mono">app.css</span>.
+    </p>
+
+    <div class="sw">
+      <div class="swatch"><div class="chip" style="background:var(--ks-bg);border-bottom:1px solid var(--ks-line)"></div><div class="lb">--ks-bg<span>#0d0d10</span></div></div>
+      <div class="swatch"><div class="chip" style="background:var(--ks-surface)"></div><div class="lb">--ks-surface<span>#141418</span></div></div>
+      <div class="swatch"><div class="chip" style="background:var(--ks-surface-2)"></div><div class="lb">--ks-surface-2<span>#1a1a20</span></div></div>
+      <div class="swatch"><div class="chip" style="background:var(--ks-raised)"></div><div class="lb">--ks-raised<span>#22222a</span></div></div>
+      <div class="swatch"><div class="chip" style="background:var(--ks-line-strong)"></div><div class="lb">--ks-line-strong<span>#35353f</span></div></div>
+      <div class="swatch"><div class="chip" style="background:var(--ks-accent)"></div><div class="lb">--ks-accent<span>#ff6b5a · aksi</span></div></div>
+      <div class="swatch"><div class="chip" style="background:var(--ks-cyan)"></div><div class="lb">--ks-cyan<span>#35e7f5 · teknis</span></div></div>
+      <div class="swatch"><div class="chip" style="background:var(--ks-success)"></div><div class="lb">--ks-success<span>#5fd99a · muat/selesai</span></div></div>
+      <div class="swatch"><div class="chip" style="background:var(--ks-warn)"></div><div class="lb">--ks-warn<span>#ffc15e · perlu attention</span></div></div>
+      <div class="swatch"><div class="chip" style="background:var(--ks-danger)"></div><div class="lb">--ks-danger<span>#ff5c5c · gagal</span></div></div>
+    </div>
+
+    <div class="glossary-grid">
+      <div class="gl">
+        <h5>Aturan bentuk yang dipakai</h5>
+        <ul>
+          <li><b>Satu tinggi kontrol: 28px</b> (24px untuk yang padat). Tidak ada empat ukuran silih berganti.</li>
+          <li><b>Radius 6px</b> untuk kontrol dan kartu, mengikuti <span class="mono">--radius-card</span> yang sudah ada.</li>
+          <li><b>Tanpa bayangan.</b> Pemisahan lewat garis <span class="mono">--ks-line</span>, bukan shadow.</li>
+          <li><b>Tanpa gradien, tanpa emoji sebagai ikon.</b></li>
+        </ul>
+      </div>
+      <div class="gl">
+        <h5>Aturan warna</h5>
+        <ul>
+          <li><b>Koral</b> hanya untuk aksi utama dan fokus keyboard.</li>
+          <li><b>Hijau</b> = muat / selesai. <b>Amber</b> = perlu dicek. <b>Merah</b> = gagal.</li>
+          <li><b>Cyan</b> untuk hal teknis: jumlah bubble, koordinat, ID.</li>
+          <li>Warna tidak dipakai untuk membedakan kotak satu sama lain.</li>
+        </ul>
+      </div>
+      <div class="gl">
+        <h5>Aturan teks</h5>
+        <ul>
+          <li><b>Nama tombol = aksi + objek:</b> "Terjemahkan 118 halaman", bukan "Submit".</li>
+          <li><b>Kosong menawarkan aksi:</b> satu kalimat penjelasan + tombol, bukan ilustrasi.</li>
+          <li><b>Error menyebut sebab dan jalan keluar.</b></li>
+          <li>Semua lewat <span class="mono">i18n.ts</span> (id, en, zh) — tidak ada string inline.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <strong>Langkah berikutnya.</strong> Arah A bisa langsung dikerjakan tanpa mengubah struktur data —
+    hanya perataan ulang header plus satu bar pipeline. Arah C butuh query bubble lintas halaman.
+    Arah B paling mahal dan paling mengubah rasa app.
+    <br><br>
+    Dibuka lewat: <span class="mono">open design/referensi-desain.html</span>
+    — memakai font dari CDN; di dalam app aslinya font dibundel lewat <span class="mono">@fontsource</span>.
+  </footer>
+
+</div>
+</body>
+</html>
