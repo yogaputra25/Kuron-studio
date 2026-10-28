@@ -1,0 +1,38 @@
+# DESIGN.md — Kuron Studio
+
+Aturan visual + layout. Pasangan: `ARCHITECTURE.md` (sistem), `AGENTS.md` (kerja).
+Sumber nilai: `kuron-studio/src/app.css` — jangan karang warna di luar token `--ks-*`.
+
+## Arah
+
+Dense desktop workbench untuk translator, bukan landing page. Quiet, tight rows, grup jelas.
+
+## Token
+
+- Single source: `--ks-*` di `app.css` (`@theme inline` → utility Tailwind `bg-surface`, `text-ink`, dst). Dark default + light. Pasangan teks/latar WCAG AA.
+- Peran warna: **coral = aksi utama saja**; **cyan = info teknis** (koordinat, ID, jumlah bubble); success/warn/danger/info = status. Tanpa gradient, shadow, emoji sebagai ikon.
+- Font (bundel offline via fontsource, bukan CDN): Inter = UI, Space Grotesk = brand/heading, JetBrains Mono = angka + nama file. Angka di badge/koordinat pakai `.tnum` (tabular-nums).
+- Kontrol: tinggi 28px, radius 6px, separator garis 1px. Touch target min 44pt di tablet/mobile.
+
+## Primitif
+
+Ikuti `design/prototype/tokens.css` (identik dengan `app.css`): `.btn` (pri/def/gho/dgr/sm/on/disabled), `.field`, `.badge` (ok/run/warn/err/cy/mute), `.dot`. Button menamai aksi + objek ("Terjemahkan 12 halaman"). Error menyebut sebab + jalan keluar. Empty state menawarkan aksi, bukan ilustrasi.
+
+## Layout
+
+| Layar | Pola |
+|---|---|
+| Dashboard | Kartu project 300px: cover, judul, counter mono, progress bar tipis, stat, badge mode |
+| Daftar halaman | Pipeline bar 5 tahap (Import→Deteksi→Terjemah→Review→Ekspor) + grid kartu (thumb, chip jumlah bubble cyan, nama file mono, badge status; selected = outline coral) |
+| Editor | 3 kolom 196px / 1fr / 268px: list halaman, canvas gelap + outline bubble coral + badge nomor, inspector kartu bubble (Asli/Baca/Hasil + fit bar) |
+| Ledger | Tabel dense: # \| Hlm \| Asli \| Terjemahan \| Muat \| Dicek; filter segmented + search; footer ringkasan |
+| Tablet 834 | Rail ikon 64pt + kartu 3 kolom + bottom sheet 40% (grab handle, aksen cyan) |
+| Mobile 390 | Grid 2 kolom + tab bar 56pt |
+
+String UI Indonesia default; tambah key baru = 3 bahasa di `i18n.ts` satu commit. Fokus keyboard selalu terlihat; hormati `prefers-reduced-motion`.
+
+## Rujukan
+
+- `design/prototype/*.html` — mockup per layar; `tokens.css` = primitif.
+- `design/references-v1/` — screenshot v1 순서 klik + temuan (Escape tak tutup panel, detect tanpa progres, dst).
+- `design/*.figcraft` — sumber desain; `stitch-prompts.md` — generator mockup (System Style = ringkasan arah ini).

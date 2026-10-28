@@ -1,0 +1,3 @@
+# Merge driver per file (built-in git, tanpa setup di mesin mana pun).
+# memory/log.md append-only: append paralel dari branch berbeda gabung otomatis.
+memory/log.md merge=union
