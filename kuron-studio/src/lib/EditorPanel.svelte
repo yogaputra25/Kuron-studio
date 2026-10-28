@@ -13,6 +13,8 @@
   import { t } from "./i18n";
   import Button from "./ui/Button.svelte";
   import StatusBadge from "./ui/StatusBadge.svelte";
+  import { isNarrow, isTablet, loadSidebarW, saveSidebarW, watchViewport } from "./device";
+  import { SIDEBAR_DEFAULT, SIDEBAR_MIN, SNAP_DEFAULT, COLLAPSE_THRESHOLD, clampWidth, nearestSnap, sheetHeightPct, sidebarMax } from "./panel";
 
   /** Toolbar tool. Label Bahasa Indonesia, nilai = Tool di types.ts. */
   const TOOLS: [Tool, string][] = [
@@ -110,6 +112,95 @@
   let saveTimer = $state<ReturnType<typeof setTimeout> | null>(null);
   // §4 last-write-wins: naik tiap kirim; respons hanya menang bila gen-nya kini.
   let saveGen = 0;
+  // Panel geser + mode tablet (panel-resize-tablet D1-D6): lebar sidebar px,
+  // collapse boolean (tak dipersist), drag-lokal-commit agar Konva redraw
+  // sekali saat lepas. narrow (<768px) → kolom; tablet (+coarse) → sheet.
+  let sidebarW = $state(SIDEBAR_DEFAULT);
+  let collapsed = $state(false);
+  let dragW = $state<number | null>(null);
+  let dragH = $state<number | null>(null);
+  let narrow = $state(false);
+  let tablet = $state(false);
+  let snap = $state(SNAP_DEFAULT);
+  let bodyEl: HTMLDivElement | null = $state(null);
+  let unwatchViewport: (() => void) | null = null;
+  const columnMode = $derived(narrow);
+  /** Lebar tampil = drag saat geser, commit setelah lepas. */
+  const displayW = $derived(dragW ?? sidebarW);
+  /** Tinggi panel bawah (% kontainer) saat kolom: drag atau snap terkunci. */
+  const panelHPct = $derived(sheetHeightPct(dragH ?? snap));
+  /** Lebar kontainer body (px) untuk clamp dinamis MAX = bodyW - lantai canvas. */
+  function bodyW(): number {
+    const r = bodyEl?.getBoundingClientRect();
+    if (r && r.width > 0) return r.width;
+    if (typeof window !== "undefined" && window.innerWidth > 0) return window.innerWidth;
+    return 0;
+  }
+  function syncViewport() {
+    narrow = isNarrow();
+    tablet = isTablet();
+  }
+  /** Redraw kedua stage setelah layout settle (pola setMode yang sudah ada). */
+  function redrawAfterLayout() {
+    requestAnimationFrame(() => {
+      editorRef?.redraw();
+      afterRef?.redraw();
+    });
+  }
+  function onDividerDown(e: PointerEvent) {
+    if (collapsed || !bodyEl) return;
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    const r = bodyEl.getBoundingClientRect();
+    if (columnMode) {
+      dragH = ((r.bottom - e.clientY) / r.height) * 100;
+    } else {
+      dragW = r.right - e.clientX;
+    }
+  }
+  function onDividerMove(e: PointerEvent) {
+    if (!bodyEl) return;
+    if (dragW !== null && !columnMode) {
+      const r = bodyEl.getBoundingClientRect();
+      dragW = r.right - e.clientX;
+    } else if (dragH !== null && columnMode) {
+      const r = bodyEl.getBoundingClientRect();
+      dragH = Math.min(100, Math.max(0, ((r.bottom - e.clientY) / r.height) * 100));
+    }
+  }
+  function onDividerUp() {
+    if (dragW !== null) {
+      if (dragW < COLLAPSE_THRESHOLD) {
+        collapsed = true;
+      } else {
+        sidebarW = clampWidth(dragW, bodyW() || undefined);
+        saveSidebarW(sidebarW);
+      }
+      dragW = null;
+      redrawAfterLayout();
+    }
+    if (dragH !== null) {
+      snap = nearestSnap(dragH);
+      dragH = null;
+      redrawAfterLayout();
+    }
+  }
+  /** Keyboard divider: row = ←/→ 8px langsung commit (mentok MIN/MAX, tak collapse); kolom = ↑/↓ pindah snap. */
+  function onDividerKey(e: KeyboardEvent) {
+    if (collapsed) return;
+    if (!columnMode && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+      e.preventDefault();
+      sidebarW = clampWidth(sidebarW + (e.key === "ArrowLeft" ? -8 : 8), bodyW() || undefined);
+      saveSidebarW(sidebarW);
+      redrawAfterLayout();
+    } else if (columnMode && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+      e.preventDefault();
+      const order = [40, 70, 100];
+      const i = order.indexOf(snap);
+      const ni = Math.min(order.length - 1, Math.max(0, i + (e.key === "ArrowUp" ? 1 : -1)));
+      snap = order[ni];
+      redrawAfterLayout();
+    }
+  }
 
   const originals = $derived(
     (translation?.bubbles ?? []).map((b) => b.original).filter((s) => s.trim()),
@@ -283,7 +374,7 @@
 
   // Flush best-effort: commit sinkron dulu (tanpa await) agar ketikan tak
   // dibuang diam-diam saat panel ditutup; save ikut antre fire-and-forget.
-  onDestroy(() => { if (draftBox.cur) commitDraft(); if (saveTimer) clearTimeout(saveTimer); if (draftTimer) clearTimeout(draftTimer); });
+  onDestroy(() => { if (draftBox.cur) commitDraft(); if (saveTimer) clearTimeout(saveTimer); if (draftTimer) clearTimeout(draftTimer); unwatchViewport?.(); });
 
   /** "Isi manual": translation null → bangun kosong lokal → save_translation. */
   async function createEmptyTranslation() {
@@ -502,6 +593,11 @@ function setBubbleFontSize(v: number | null) {
   }
 
   onMount(async () => {
+    const w0 = typeof window !== "undefined" ? window.innerWidth : 0;
+    sidebarW = loadSidebarW(SIDEBAR_MIN, sidebarMax(w0 || undefined), SIDEBAR_DEFAULT);
+    syncViewport();
+    unwatchViewport?.();
+    unwatchViewport = watchViewport(syncViewport);
     try {
       const st = await api.detectStatus();
       detectEngine = st.engine;
@@ -563,6 +659,14 @@ function setBubbleFontSize(v: number | null) {
         {/each}
       </div>
       <Button
+        variant="ghost"
+        size="sm"
+        onclick={() => (collapsed = !collapsed)}
+        title={collapsed ? $t("expandSidebar") : $t("collapseSidebar")}
+        aria-label={collapsed ? $t("expandSidebar") : $t("collapseSidebar")}
+        aria-pressed={collapsed}
+      >{collapsed ? "»" : "«"}</Button>
+      <Button
         variant="default"
         size="sm"
         onclick={runDetect}
@@ -600,10 +704,10 @@ function setBubbleFontSize(v: number | null) {
       </div>
     </div>
   {:else}
-  <div class="flex min-h-0 flex-1">
+  <div class="flex min-h-0 flex-1" class:flex-col={columnMode} bind:this={bodyEl}>
     {#if mode === "before" || mode === "split"}
       <div
-        class="min-w-0 flex-1 overflow-auto p-4"
+        class="min-h-0 min-w-0 flex-1 overflow-auto p-4"
         bind:this={beforeScroll}
         onscroll={() => syncScroll(beforeScroll, afterScroll)}
       >
@@ -634,8 +738,9 @@ function setBubbleFontSize(v: number | null) {
     {/if}
     {#if mode === "after" || mode === "split"}
       <div
-        class="min-w-0 flex-1 overflow-auto p-4"
-        class:border-l={mode === "split"}
+        class="min-h-0 min-w-0 flex-1 overflow-auto p-4"
+        class:border-l={mode === "split" && !columnMode}
+        class:border-t={mode === "split" && columnMode}
         class:border-line={mode === "split"}
         bind:this={afterScroll}
         onscroll={() => syncScroll(afterScroll, beforeScroll)}
@@ -661,10 +766,68 @@ function setBubbleFontSize(v: number | null) {
         />
       </div>
     {/if}
-    <!-- w-[19rem] bukan w-64: form translate butuh ruang agar select dan
-         label tidak saling-desak. Sidebar bisa di-narrow user nanti. -->
-    <aside class="flex w-[19rem] shrink-0 flex-col overflow-y-auto border-l border-line bg-surface">
+    {#if !collapsed}
+      {#if columnMode}
+        {#if tablet}
+          <!-- Drag-handle sheet ≥44px khusus sentuh (tablet portrait). -->
+          <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+          <!-- role=separator + tabindex = pola sash (VS Code). Svelte mengira div non-interaktif; abaikan dengan alasan. -->
+          <div
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label={$t("sheetHandle")}
+            tabindex="0"
+            class="flex h-11 shrink-0 cursor-row-resize touch-none items-center justify-center border-t border-line bg-surface-2"
+            onpointerdown={onDividerDown}
+            onpointermove={onDividerMove}
+            onpointerup={onDividerUp}
+            onpointercancel={onDividerUp}
+            onkeydown={onDividerKey}
+          ><span class="h-1 w-12 rounded-full bg-line"></span></div>
+        {:else}
+          <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+          <div
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label={$t("sheetHandle")}
+            tabindex="0"
+            class="h-2 shrink-0 cursor-row-resize touch-none border-t border-line bg-surface-2 hover:bg-hover"
+            onpointerdown={onDividerDown}
+            onpointermove={onDividerMove}
+            onpointerup={onDividerUp}
+            onpointercancel={onDividerUp}
+            onkeydown={onDividerKey}
+          ></div>
+        {/if}
+      {:else}
+        <!-- Divider vertikal 8px hit-area (cukup untuk sentuh) di batas canvas–sidebar. -->
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={$t("sheetHandle")}
+          tabindex="0"
+          class="w-2 shrink-0 cursor-col-resize touch-none border-l border-line bg-surface-2 hover:bg-hover"
+          onpointerdown={onDividerDown}
+          onpointermove={onDividerMove}
+          onpointerup={onDividerUp}
+          onpointercancel={onDividerUp}
+          onkeydown={onDividerKey}
+        ></div>
+      {/if}
+    <!-- Lebar via inline style (D2): row = px commit, kolom = full + tinggi sheet %. -->
+    <aside
+      class="flex shrink-0 flex-col overflow-y-auto border-line bg-surface"
+      class:w-full={columnMode}
+      class:border-t={columnMode}
+      class:border-l={!columnMode}
+      style:width={!columnMode ? `${displayW}px` : undefined}
+      style:height={columnMode ? `${panelHPct}%` : undefined}
+    >
       <div class="space-y-5 p-4">
+        {#if columnMode && snap === 100}
+          <Button variant="ghost" size="sm" onclick={() => { snap = 40; redrawAfterLayout(); }} title={$t("shrinkSheet")} aria-label={$t("shrinkSheet")}>∨ {$t("shrinkSheet")}</Button>
+        {/if}
         <section>
           <h3 class="font-display mb-2.5 flex items-baseline justify-between text-sm font-semibold text-ink">
             Bubble
@@ -882,6 +1045,7 @@ function setBubbleFontSize(v: number | null) {
         {/if}
       </div>
     </aside>
+    {/if}
   </div>
   {/if}
 </div>
