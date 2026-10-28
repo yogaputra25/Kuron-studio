@@ -110,8 +110,7 @@ pub fn check_project(state: &tauri::State<'_, AppState>, project_id: &str) -> Re
         .projects
         .get(project_id)
         .ok_or_else(|| format!("project not found: {project_id}"))?;
-    let mut pages = proj.pages.clone();
-    pages.sort_by(|a, b| a.path.cmp(&b.path));
+    let pages = proj.sorted_all_pages();
     let mut out = Vec::new();
     for pg in &pages {
         // skipSfx tak tersimpan per-page; default false = ketat.

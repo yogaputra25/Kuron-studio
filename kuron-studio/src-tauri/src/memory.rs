@@ -44,7 +44,7 @@ fn search_store(store: &crate::commands::project::ProjectStore, query: &str, lim
     let limit = (if limit <= 0 { 10 } else { limit.min(50) }) as usize;
     let mut hits: Vec<TmHit> = Vec::new();
     for proj in store.projects.values() {
-        for pg in &proj.pages {
+        for pg in proj.all_pages() {
             let Some(t) = pg.translation.as_ref() else {
                 continue;
             };
@@ -112,14 +112,16 @@ mod tests {
         };
         store.projects.insert(
             "p".into(),
-            Project {
-                id: "p".into(), name: "ch1".into(),
-                pages: vec![Page {
+            {
+                let mut p = Project::new("ch1".into());
+                p.id = "p".into();
+                p.folders[0].pages = vec![Page {
                     id: "p0".into(), path: "ch/001.png".into(),
                     width: 800, height: 1200,
                     status: PageStatus::Translated,
                     bubbles: vec![], translation: Some(t),
-                }],
+                }];
+                p
             },
         );
         store

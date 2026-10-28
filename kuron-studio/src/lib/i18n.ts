@@ -106,6 +106,21 @@ const STR: Record<string, Record<Lang, string>> = {
   loadingPreviews: { en: "Loading {done}/{total}", id: "Memuat {done}/{total}", zh: "正在加载 {done}/{total}" },
   previewsFailed: { en: "{n} failed", id: "{n} gagal", zh: "{n} 个失败" },
   retryThumbs: { en: "Retry failed", id: "Coba lagi yang gagal", zh: "重试失败项" },
+  dashboard: { en: "Dashboard", id: "Dashboard", zh: "总览" },
+  openProject: { en: "Open", id: "Buka", zh: "打开" },
+  backToLibrary: { en: "Library", id: "Library", zh: "文库" },
+  newFolder: { en: "New folder", id: "Folder baru", zh: "新建文件夹" },
+  folderName: { en: "Folder name…", id: "Nama folder…", zh: "文件夹名称…" },
+  allFolders: { en: "All", id: "Semua", zh: "全部" },
+  kanbanTodo: { en: "Todo", id: "Belum", zh: "待办" },
+  kanbanDoing: { en: "Doing", id: "Proses", zh: "进行中" },
+  kanbanDone: { en: "Done", id: "Sudah", zh: "已完成" },
+  kanbanFailed: { en: "Failed", id: "Gagal", zh: "失败" },
+  remainingTodo: { en: "todo left", id: "sisa todo", zh: "剩余待办" },
+  lastWorked: { en: "Last worked", id: "Terakhir", zh: "上次" },
+  deleteFolder: { en: "Delete folder", id: "Hapus folder", zh: "删除文件夹" },
+  confirmDeleteFolder: { en: "Delete this folder?", id: "Hapus folder ini?", zh: "删除此文件夹？" },
+  moveToFolder: { en: "Move", id: "Pindah", zh: "移动" },
 };
 
 export const t = derived(lang, ($l) => (k: string): string => STR[k]?.[$l] ?? k);

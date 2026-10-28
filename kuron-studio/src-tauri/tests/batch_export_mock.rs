@@ -157,6 +157,6 @@ async fn batch_10_progress_export() {
 /// di sini hanya memastikan signature terpanggil (compile-guard).
 #[test]
 fn export_fns_linked() {
-    let _ = export_json_bytes as fn(&tauri::State<'_, kuron_studio_lib::AppState>, &str) -> Result<Vec<u8>, String>;
-    let _ = export_cbz_bytes as fn(&tauri::State<'_, kuron_studio_lib::AppState>, &str) -> Result<Vec<u8>, String>;
+    let _ = export_json_bytes as fn(&tauri::State<'_, kuron_studio_lib::AppState>, &str, Option<&str>) -> Result<Vec<u8>, String>;
+    let _ = export_cbz_bytes as fn(&tauri::State<'_, kuron_studio_lib::AppState>, &str, Option<&str>) -> Result<Vec<u8>, String>;
 }

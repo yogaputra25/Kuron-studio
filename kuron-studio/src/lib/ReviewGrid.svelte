@@ -3,6 +3,7 @@
   import { api } from "./api";
   import { t } from "./i18n";
   import type { BatchOpts, ExportFormat, Project, QaIssue, TmHit } from "./types";
+  import { allPages } from "./library";
   import { isMobile } from "./device";
   import Button from "./ui/Button.svelte";
   import Panel from "./ui/Panel.svelte";
@@ -31,7 +32,7 @@
 
   /** Ringkasan progress: berapa halaman selesai vs belum, per status. */
   const stats = $derived.by(() => {
-    const pages = project.pages;
+    const pages = allPages(project);
     const done = pages.filter((p) => p.status === "translated").length;
     const failed = pages.filter((p) => p.status === "failed").length;
     const pending = pages.length - done - failed;
@@ -52,8 +53,8 @@
 
   const visiblePages = $derived(
     pageFilter === "todo"
-      ? project.pages.filter((p) => p.status !== "translated")
-      : project.pages,
+      ? allPages(project).filter((p) => p.status !== "translated")
+      : allPages(project),
   );
 
   async function exportAs(format: ExportFormat) {
@@ -174,7 +175,7 @@
 
 <Panel title={project.name} {onClose} class="max-w-5xl">
   <p class="-mt-1 mb-4 text-xs text-ink-3">
-    {$t("review")} · <span class="tnum">{project.pages.length}</span> {$t("pages")}
+    {$t("review")} · <span class="tnum">{allPages(project).length}</span> {$t("pages")}
   </p>
 
   <!-- Progress: satu blok visual, bukan tabel angka. Tongkolnya
@@ -277,7 +278,7 @@
     {:else if issues.length === 0}
       <div class="rounded-lg border border-success-soft bg-success-soft px-4 py-8 text-center">
         <p class="text-sm font-medium text-success">QA bersih</p>
-        <p class="mt-1 text-xs text-ink-3">Tidak ada masalah di {project.pages.length} halaman.</p>
+        <p class="mt-1 text-xs text-ink-3">Tidak ada masalah di {allPages(project).length} halaman.</p>
       </div>
     {:else}
       <table class="w-full text-xs">
@@ -363,10 +364,10 @@
     {#if visiblePages.length === 0}
       <div class="rounded-lg border border-success-soft bg-success-soft px-4 py-8 text-center">
         <p class="text-sm font-medium text-success">
-          {#if project.pages.length === 0}Belum ada halaman{:else}Semua halaman selesai{/if}
+          {#if allPages(project).length === 0}Belum ada halaman{:else}Semua halaman selesai{/if}
         </p>
         <p class="mt-1 text-xs text-ink-3">
-          {#if project.pages.length === 0}Import halaman dulu di grid utama.{:else}Coba tab QA untuk cek kualitas terjemahan.{/if}
+          {#if allPages(project).length === 0}Import halaman dulu di grid utama.{:else}Coba tab QA untuk cek kualitas terjemahan.{/if}
         </p>
       </div>
     {:else}
