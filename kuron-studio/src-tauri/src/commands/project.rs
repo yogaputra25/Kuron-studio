@@ -724,7 +724,19 @@ pub fn clean_pages_inner(store: &mut ProjectStore, project_id: &str) -> Result<C
 #[tauri::command(rename_all = "snake_case")]
 pub fn clean_pages(project_id: String, state: State<'_, AppState>) -> Result<CleanResult, String> {
     let mut store = state.store.lock().map_err(|e| e.to_string())?;
-    clean_pages_inner(&mut store, &project_id)
+    let out = clean_pages_inner(&mut store, &project_id)?;
+    // grid-preview-perf 3.3: buang cache preview halaman yang sudah tak ada.
+    let keep: Vec<String> = store
+        .projects
+        .get(&project_id)
+        .map(|p| p.pages.iter().map(|pg| pg.path.clone()).collect())
+        .unwrap_or_default();
+    drop(store);
+    if let Ok(db) = state.db.lock() {
+        // Cache turunan boleh gagal diam-diam — clean utama sudah sukses.
+        let _ = crate::preview_cache::preview_purge(&db, &keep);
+    }
+    Ok(out)
 }
 
 /// Hapus project + folder ekstraksi miliknya. File gambar asli user di luar

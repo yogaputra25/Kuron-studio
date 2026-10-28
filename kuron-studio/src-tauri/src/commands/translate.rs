@@ -615,6 +615,7 @@ mod tests {
             detect: DetectState::default(),
             http: reqwest::Client::new(),
             db: std::sync::Mutex::new(rusqlite::Connection::open_in_memory().unwrap()),
+            previews: std::sync::Mutex::new(crate::preview_cache::PreviewCaches::new()),
             cancel: std::sync::Mutex::new(std::collections::HashSet::new()),
             prev_status: std::sync::Mutex::new(std::collections::HashMap::new()),
             data_dir: dir,

@@ -47,6 +47,9 @@ const KEYS = [
   "expandSidebar",
   "sheetHandle",
   "shrinkSheet",
+  "loadingPreviews",
+  "previewsFailed",
+  "retryThumbs",
 ] as const;
 
 const LANGS: Lang[] = ["en", "id", "zh"];
