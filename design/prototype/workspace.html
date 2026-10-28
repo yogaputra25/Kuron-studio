@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>B · Workspace editor — Kuron Studio</title>
+<link rel="stylesheet" href="tokens.css">
+</head>
+<body>
+<div class="app">
+  <div class="appbar">
+    <span class="brand">Kuron Studio</span>
+    <span class="field" style="height:24px">Chapter 12 <span class="caret">▾</span></span>
+    <span class="count tnum">007/182</span>
+    <span class="sp"></span>
+    <span class="btn def sm">Ekspor CBZ</span>
+    <span class="btn gho sm">◐</span>
+    <span class="btn gho mono sm">ID</span>
+  </div>
+  <div class="ws">
+    <div class="col-l">
+      <div class="col-h">Halaman <span class="sp"></span><span class="mono tnum">182</span></div>
+      <div class="plist">
+        <div class="prow"><span class="th"><span class="mg"><i class="p"></i><i class="p"></i><i class="d"></i></span></span><span class="tx"><span class="f">p005.jpg</span><span class="s"><span class="dot ok"></span>5 bubble</span></span></div>
+        <div class="prow"><span class="th"><span class="mg"><i class="p"></i><i class="p"></i><i class="d"></i></span></span><span class="tx"><span class="f">p006.jpg</span><span class="s"><span class="dot ok"></span>3 bubble</span></span></div>
+        <div class="prow on"><span class="th"><span class="mg"><i class="p"></i><i class="p"></i><i class="d"></i></span></span><span class="tx"><span class="f">p007.jpg</span><span class="s"><span class="dot cy"></span>5 bubble · aktif</span></span></div>
+        <div class="prow"><span class="th"><span class="mg"><i class="p"></i><i class="p"></i><i class="d"></i></span></span><span class="tx"><span class="f">p008.jpg</span><span class="s"><span class="dot run"></span>3 bubble</span></span></div>
+        <div class="prow"><span class="th"><span class="mg"><i class="p"></i><i class="p"></i><i class="d"></i></span></span><span class="tx"><span class="f">p009.jpg</span><span class="s"><span class="dot idle"></span>belum deteksi</span></span></div>
+        <div class="prow"><span class="th"><span class="mg"><i class="p"></i><i class="p"></i><i class="d"></i></span></span><span class="tx"><span class="f">p010.jpg</span><span class="s"><span class="dot idle"></span>belum deteksi</span></span></div>
+        <div class="prow"><span class="th"><span class="mg"><i class="p"></i><i class="p"></i><i class="d"></i></span></span><span class="tx"><span class="f">p011.jpg</span><span class="s"><span class="dot err"></span>gagal deteksi</span></span></div>
+        <div class="prow"><span class="th"><span class="mg"><i class="p"></i><i class="p"></i><i class="d"></i></span></span><span class="tx"><span class="f">p012.jpg</span><span class="s"><span class="dot idle"></span>belum deteksi</span></span></div>
+      </div>
+      <div class="panelbtns">
+        <span class="btn def sm">Glossary</span>
+        <span class="btn def sm">Provider</span>
+        <span class="btn def sm">Diagnostics</span>
+      </div>
+    </div>
+    <div class="col-c">
+      <div class="col-h">Kanvas <span class="sp"></span><span class="mono tnum">p007.jpg</span></div>
+      <div class="canvas">
+        <div class="stage">
+          <div class="mg"><i class="p"></i><i class="p"></i><i class="p"></i><i class="d"></i><i class="b"></i><i class="b"></i><i class="b"></i></div>
+          <span class="bubhit" data-n="1" style="left:57%;top:8%;width:28%;height:17%"></span>
+          <span class="bubhit" data-n="2" style="left:8%;top:40%;width:33%;height:16%"></span>
+        </div>
+      </div>
+      <div class="zoombar">
+        <span class="btn gho sm">−</span>
+        <span class="mono tnum">100%</span>
+        <span class="btn gho sm">+</span>
+        <span class="sp"></span>
+        <span>RTL→</span>
+        <span class="tnum">5 bubble</span>
+      </div>
+    </div>
+    <div class="col-r">
+      <div class="col-h">Bubble terpilih <span class="sp"></span><span class="mono tnum">2/5</span></div>
+      <div class="insp">
+        <div class="bub-block on">
+          <div class="bh"><span class="id">#2</span><span>hlm 007</span><span class="sp"></span><span class="badge cy">Aktif</span></div>
+          <div class="bd">
+            <div class="kv"><span class="k">Asli</span><span class="v src">なんだって…</span></div>
+            <div class="kv"><span class="k">Baca</span><span class="v src">nandatte…</span></div>
+            <div class="kv"><span class="k">Hasil</span><span class="v box">Apa-apaan…</span></div>
+            <div class="fitbar"><span style="color:var(--ks-success);font-weight:600">Muat</span><span class="track"><i class="ok" style="width:74%"></i></span><span class="mono tnum" style="color:var(--ks-text-3)">9/12</span></div>
+          </div>
+        </div>
+        <div class="bub-block">
+          <div class="bh"><span class="id">#3</span><span>hlm 007</span><span class="sp"></span><span class="badge warn">Perlu review</span></div>
+          <div class="bd">
+            <div class="kv"><span class="k">Asli</span><span class="v src">これは嘘だ</span></div>
+            <div class="kv"><span class="k">Hasil</span><span class="v" style="color:var(--ks-text-2)">— belum diterjemahkan</span></div>
+          </div>
+        </div>
+        <div class="bub-block">
+          <div class="bh"><span class="id">#4</span><span>hlm 007</span><span class="sp"></span><span class="badge err">Kelebihan</span></div>
+          <div class="bd">
+            <div class="kv"><span class="k">Asli</span><span class="v src">もう遅い</span></div>
+            <div class="kv"><span class="k">Hasil</span><span class="v">Sudah terlambat sekali</span></div>
+            <div class="fitbar"><span style="color:var(--ks-warn);font-weight:600">Sesak</span><span class="track"><i class="over" style="width:116%"></i></span><span class="mono tnum" style="color:var(--ks-text-3)">18/11</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="insp-foot">
+        <span class="btn pri sm grow">Terjemahkan #3</span>
+        <span class="btn def sm">Simpan</span>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
