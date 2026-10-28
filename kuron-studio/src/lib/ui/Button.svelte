@@ -50,7 +50,7 @@
   {...rest}
   class={[
     "inline-flex shrink-0 items-center justify-center rounded-md font-medium whitespace-nowrap",
-    "transition-colors duration-100 select-none",
+    "transition-all duration-100 select-none active:scale-[0.97]",
     "disabled:pointer-events-none disabled:opacity-40",
     VARIANT[variant],
     SIZE[size],
