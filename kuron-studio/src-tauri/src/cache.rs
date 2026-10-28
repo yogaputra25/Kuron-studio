@@ -9,7 +9,8 @@ pub fn init_db(conn: &Connection) -> Result<(), String> {
          CREATE TABLE IF NOT EXISTS providers (id TEXT PRIMARY KEY, provider_type TEXT NOT NULL, name TEXT NOT NULL, base_url TEXT NOT NULL DEFAULT '', api_key TEXT NOT NULL DEFAULT '', model TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL);
          CREATE TABLE IF NOT EXISTS glossary (id TEXT PRIMARY KEY, source TEXT NOT NULL, target TEXT NOT NULL, created_at INTEGER NOT NULL);",
     )
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+    crate::preview_cache::ensure_preview_table(conn)
 }
 
 /// Satu struct arg agar lolos clippy too_many_arguments.
