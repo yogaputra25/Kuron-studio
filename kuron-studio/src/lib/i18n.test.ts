@@ -43,6 +43,10 @@ const KEYS = [
   "export",
   "share",
   "search",
+  "collapseSidebar",
+  "expandSidebar",
+  "sheetHandle",
+  "shrinkSheet",
 ] as const;
 
 const LANGS: Lang[] = ["en", "id", "zh"];

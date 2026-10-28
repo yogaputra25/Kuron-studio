@@ -99,11 +99,10 @@ const STR: Record<string, Record<Lang, string>> = {
     id: "{removed} halaman rusak dibuang, {kept} halaman tersisa.",
     zh: "已移除 {removed} 个损坏页面，保留 {kept} 个。",
   },
-  nothingToClean: {
-    en: "No broken pages found.",
-    id: "Tidak ada halaman rusak.",
-    zh: "没有损坏的页面。",
-  },
+  collapseSidebar: { en: "Collapse sidebar", id: "Ciutkan sidebar", zh: "收起侧边栏" },
+  expandSidebar: { en: "Expand sidebar", id: "Bentangkan sidebar", zh: "展开侧边栏" },
+  sheetHandle: { en: "Drag to resize panel", id: "Geser untuk ubah ukuran panel", zh: "拖动调整面板大小" },
+  shrinkSheet: { en: "Shrink panel", id: "Kecilkan panel", zh: "缩小面板" },
 };
 
 export const t = derived(lang, ($l) => (k: string): string => STR[k]?.[$l] ?? k);

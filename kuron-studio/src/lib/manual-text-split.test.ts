@@ -74,7 +74,9 @@ describe("before|split|after (3.1–3.4)", () => {
   });
 
   it("split = dua pane flex-1 + satu data-URL dishare (get_image_preview sekali)", () => {
-    const splits = panelSrc.match(/class="min-w-0 flex-1 overflow-auto p-4"/g) ?? [];
+    // Sejak panel-resize-tablet pane punya min-h-0 (kolom tablet). Intent
+    // tetap: tepat dua pane flex-1 berbagi satu data-URL.
+    const splits = panelSrc.match(/class="(?:min-h-0 )?min-w-0 flex-1 overflow-auto p-4"/g) ?? [];
     expect(splits.length).toBe(2);
     // Kedua pane pakai referensi imageUrl yang sama — tak ada fetch kedua.
     const usages = panelSrc.match(/imageUrl=\{fullImageUrl\}/g) ?? [];

@@ -418,7 +418,7 @@
     </section>
   {:else if current}
     <section
-      class="grid grid-cols-2 gap-3 p-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8"
+      class="grid grid-cols-2 gap-3 p-5 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-6 xl:grid-cols-8"
       class:outline-2={dragging}
       class:outline-accent={dragging}
     >
