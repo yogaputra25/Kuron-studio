@@ -1,30 +1,43 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum AiProviderType {
-    Zen,
-    OpenCodeGo,
     Gemini,
     OpenAi,
-    OpenRouter,
     MetaAi,
-    ClinePass,
     Cohere,
     Custom,
+}
+
+impl<'de> Deserialize<'de> for AiProviderType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.as_str() {
+            "gemini" => Ok(Self::Gemini),
+            "openAi" => Ok(Self::OpenAi),
+            "metaAi" => Ok(Self::MetaAi),
+            "cohere" => Ok(Self::Cohere),
+            "custom" => Ok(Self::Custom),
+            // Preset hapus (#26/#27): simpanan lama tetap terbaca, jadi Custom.
+            "zen" | "openCodeGo" | "openRouter" | "clinePass" => Ok(Self::Custom),
+            other => Err(serde::de::Error::unknown_variant(
+                other,
+                &["gemini", "openAi", "metaAi", "cohere", "custom"],
+            )),
+        }
+    }
 }
 
 impl AiProviderType {
     #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
-            "zen" => Some(Self::Zen),
-            "openCodeGo" => Some(Self::OpenCodeGo),
             "gemini" => Some(Self::Gemini),
             "openAi" => Some(Self::OpenAi),
-            "openRouter" => Some(Self::OpenRouter),
             "metaAi" => Some(Self::MetaAi),
-            "clinePass" => Some(Self::ClinePass),
             "cohere" => Some(Self::Cohere),
             "custom" => Some(Self::Custom),
             _ => None,
@@ -33,13 +46,9 @@ impl AiProviderType {
 
     pub fn default_base_url(&self) -> &'static str {
         match self {
-            Self::Zen => "https://opencode.ai/zen/v1",
-            Self::OpenCodeGo => "https://opencode.ai/zen/go/v1",
             Self::Gemini => "https://generativelanguage.googleapis.com",
             Self::OpenAi => "https://api.openai.com/v1",
-            Self::OpenRouter => "https://openrouter.ai/api/v1",
-            Self::MetaAi => "https://api.llama.com/v1",
-            Self::ClinePass => "https://api.cline.bot/v1",
+            Self::MetaAi => "https://api.meta.ai/v1",
             Self::Cohere => "https://api.cohere.ai",
             Self::Custom => "",
         }
@@ -103,12 +112,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn removed_preset_names_still_deserialize_to_custom() {
+        // Preset hapus (#26/#27): simpanan lama tetap terbaca sebagai Custom.
+        for legacy in ["zen", "openCodeGo", "openRouter", "clinePass"] {
+            let t: AiProviderType = serde_json::from_str(&format!("\"{legacy}\"")).unwrap();
+            assert_eq!(t, AiProviderType::Custom, "legacy {legacy}");
+            assert_eq!(AiProviderType::from_str(legacy), None, "from_str {legacy}");
+        }
+        // Penyintas tidak berubah.
+        let t: AiProviderType = serde_json::from_str("\"metaAi\"").unwrap();
+        assert_eq!(t, AiProviderType::MetaAi);
+    }
+
+    #[test]
     fn urls() {
-        assert_eq!(AiProviderType::Zen.default_base_url(), "https://opencode.ai/zen/v1");
+        assert_eq!(AiProviderType::MetaAi.default_base_url(), "https://api.meta.ai/v1");
         assert!(AiProviderType::OpenAi.models_url("https://api.openai.com/v1").ends_with("/models"));
         assert!(AiProviderType::Gemini.models_url("https://x").ends_with("/v1beta/models"));
         assert!(!AiProviderType::Custom.needs_key_for_listing());
-        assert!(AiProviderType::OpenRouter.needs_key_for_listing());
+        assert!(AiProviderType::MetaAi.needs_key_for_listing());
     }
 
     #[test]

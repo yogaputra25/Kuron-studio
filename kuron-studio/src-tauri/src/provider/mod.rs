@@ -8,7 +8,7 @@ pub use config::{is_vision_capable, AiModelOption, AiProviderType, ProviderRecor
 // ponytail: keyring milik M4 (tanpa keyring dep di sini).
 // ponytail: factory = match satu produk; trait object bila provider ke-4 butuh dispatch dinamis.
 
-// OpenAI-compatible dispatch: Zen/OpenCodeGo/OpenAi/OpenRouter/MetaAi/ClinePass/Custom.
+// OpenAI-compatible dispatch: OpenAi/MetaAi/Custom (Gemini + Cohere punya modul sendiri).
 pub async fn translate_image(
     client: &reqwest::Client,
     rec: &ProviderRecord,

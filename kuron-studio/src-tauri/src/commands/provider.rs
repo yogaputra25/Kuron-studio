@@ -9,17 +9,7 @@ use crate::AppState;
 
 /// Semua nilai string yang diterima `AiProviderType::from_str`. Dipakai untuk
 /// pesan error yang bisa ditindaklanjuti user (lihat `parse_input`).
-pub const ALL_PROVIDER_TYPES: [&str; 9] = [
-    "zen",
-    "openCodeGo",
-    "gemini",
-    "openAi",
-    "openRouter",
-    "metaAi",
-    "clinePass",
-    "cohere",
-    "custom",
-];
+pub const ALL_PROVIDER_TYPES: [&str; 5] = ["gemini", "openAi", "metaAi", "cohere", "custom"];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
