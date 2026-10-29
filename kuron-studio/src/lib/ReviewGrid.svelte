@@ -99,6 +99,7 @@
         mosaicQuality: opts.mosaicQuality,
         readingDirection: opts.readingDirection,
         ...(opts.customPrompt ? { customPrompt: opts.customPrompt } : {}),
+        ...(opts.model ? { model: opts.model } : {}),
       });
       onRefresh();
     } catch (e) {
@@ -165,6 +166,7 @@
         mosaicQuality: opts.mosaicQuality,
         readingDirection: opts.readingDirection,
         ...(opts.customPrompt ? { customPrompt: opts.customPrompt } : {}),
+        ...(opts.model ? { model: opts.model } : {}),
       });
       onRefresh();
     } catch (e) {

@@ -256,6 +256,7 @@ export interface BatchOpts {
   mosaicQuality: MosaicQuality;
   readingDirection: ReadingDirection;
   customPrompt: string;
+  model: string;
 }
 
 export interface TranslateBatchInput {
@@ -268,6 +269,7 @@ export interface TranslateBatchInput {
   readingDirection: ReadingDirection;
   glossary?: string;
   customPrompt?: string;
+  model?: string;
 }
 
 export interface RetryBubbleInput {
@@ -281,6 +283,7 @@ export interface RetryBubbleInput {
   readingDirection: ReadingDirection;
   glossary?: string;
   customPrompt?: string;
+  model?: string;
 }
 
 export interface TranslateProgress {

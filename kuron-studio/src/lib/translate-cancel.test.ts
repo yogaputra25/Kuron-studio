@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import batchSrc from "./BatchPanel.svelte?raw";
 import panelSrc from "./TranslatePanel.svelte?raw";
+import reviewSrc from "./ReviewGrid.svelte?raw";
 
 // Kontrak change reset-translation §4 cancel (opsi B), diverifikasi statis
 // dari sumber (pola sama seperti reset-translation.test.ts): assert pola kode.
@@ -43,5 +45,13 @@ describe("translate model per-run (LOV sesi-saja)", () => {
 
   it("pilihan model tak menulis DB (tanpa saveProvider)", () => {
     expect(panelSrc).not.toContain("saveProvider");
+  });
+});
+
+describe("translate model per-run (forwarding batch/retry)", () => {
+  it("batch + retry teruskan model dari opts", () => {
+    for (const [name, src] of [["BatchPanel", batchSrc], ["ReviewGrid", reviewSrc]] as const) {
+      expect(src, name).toContain("...(opts.model");
+    }
   });
 });
