@@ -111,3 +111,11 @@ describe("in-bubble edit (§2 panel)", () => {
     expect(panelSrc).toMatch(/TARGET_LANGS/);
   });
 });
+
+describe("sidebar footer identitas", () => {
+  it("tampilkan Kuron Studio + versi tauri, pin bawah", () => {
+    expect(panelSrc).toContain("getVersion");
+    expect(panelSrc).toContain("Kuron Studio {appVersion ?");
+    expect(panelSrc).toContain("mt-auto");
+  });
+});
