@@ -66,8 +66,13 @@ Import folder/files/zip → Detect bubble (ONNX, per halaman)
     Guard siklus di `set_parent`; agregat/export selalu subtree.
   - `detect`: satu/Batch, status `detecting → detected/noBubbles`.
     `bubble.rs::sanitize_bubbles`: buang nol-area, cap 500/page.
-  - `translate`: 9 provider BYOK, validate, `<15s`, status
+  - `translate`: 5 provider BYOK (Gemini, OpenAI, Meta AI, Cohere,
+    Custom), validate, `<15s`, status
     `translating/translated/failed`, retry per page/bubble.
+    Preset hapus (OpenRouter/Zen/OpenCodeGo/ClinePass) terbaca sebagai
+    Custom; label vision dari allowlist per provider (#26/#27).
+    Model per-run: override opsional di tiap request translate
+    (default = simpanan provider), tercatat di `translation.model`.
   - `export`: JSON / PNG (overlay, typeset TTF sistem + fallback
     bitmap) / CBZ / PSD (folder = dir, file = path).
   - `extras`: `tm_search` lintas project, `qa_check`,

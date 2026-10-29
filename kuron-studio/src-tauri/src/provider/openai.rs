@@ -1,6 +1,6 @@
 use base64::Engine;
 
-use super::config::is_vision_capable;
+use super::config::{vision_capable, AiProviderType};
 
 fn data_url(jpeg: &[u8]) -> String {
     let b64 = base64::engine::general_purpose::STANDARD.encode(jpeg);
@@ -141,6 +141,7 @@ pub async fn list_models(
     client: &reqwest::Client,
     base_url: &str,
     api_key: &str,
+    provider: AiProviderType,
 ) -> Result<Vec<super::config::AiModelOption>, String> {
     let base = base_url.trim_end_matches('/');
     let url = format!("{base}/models");
@@ -168,7 +169,7 @@ pub async fn list_models(
         .and_then(|d| d.as_array())
         .map(|a| a.iter().filter_map(|m| m.get("id").and_then(|i| i.as_str()).map(String::from)).collect())
         .unwrap_or_default();
-    Ok(ids.into_iter().map(|id| super::config::AiModelOption { label: id.clone(), vision: is_vision_capable(&id), id }).collect())
+    Ok(ids.into_iter().map(|id| super::config::AiModelOption { label: id.clone(), vision: vision_capable(provider, &id), id }).collect())
 }
 
 pub async fn validate_minimal(

@@ -61,6 +61,7 @@ async fn mock_openai_chat_parse_map_cache() {
         skip_sfx: true,
         reading_dir: "rtl",
         glossary: None,
+        custom_prompt: None,
     });
     cache::cache_set(&conn, &key, "{\"a\":1}").unwrap();
     assert_eq!(cache::cache_get(&conn, &key).unwrap().as_deref(), Some("{\"a\":1}"));

@@ -6,6 +6,8 @@ const KEYS = [
   "batch",
   "glossary",
   "resultsExport",
+  "customPrompt",
+  "customPromptPh",
   "detectAll",
   "importFolder",
   "importFiles",

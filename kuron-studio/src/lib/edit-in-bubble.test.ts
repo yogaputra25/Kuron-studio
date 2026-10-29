@@ -103,11 +103,25 @@ describe("in-bubble edit (§2 panel)", () => {
     expect(panelSrc).toContain("pressStart(b.original, b.translated)");
   });
 
-  it("header translated + Save edits + hint tetap", () => {
-    // Pasca restyle design-system: header "Terjemahan" + tombol save lewat
-    // i18n ($t("save")), bukan literal "Save edits".
-    expect(panelSrc).toContain("$t(\"save\")");
-    expect(panelSrc).toContain(">Terjemahan (ID)<");
-    expect(panelSrc).toContain("Double-klik bubble di After untuk edit langsung.");
+  it("label bahasa ikut target, bukan hardcoded JP/ID", () => {
+    // Regresi: user ID→EN melihat "Original (JP)" + "Terjemahan (ID)".
+    expect(panelSrc).not.toContain("Original (JP)");
+    expect(panelSrc).not.toContain(">Terjemahan (ID)<");
+    expect(panelSrc).toMatch(/Terjemahan \(\s*\{trgLabel\}\s*\)/);
+    expect(panelSrc).toMatch(/TARGET_LANGS/);
+  });
+});
+
+describe("sidebar footer identitas", () => {
+  it("tampilkan Kuron Studio + versi tauri", () => {
+    expect(panelSrc).toContain("getVersion");
+    expect(panelSrc).toContain("Kuron Studio {appVersion ?");
+  });
+
+  it("footer full-width selebar header (di luar aside)", () => {
+    const asideClose = panelSrc.indexOf("</aside>");
+    const footerAt = panelSrc.indexOf("<footer");
+    expect(asideClose, "aside ada").toBeGreaterThan(-1);
+    expect(footerAt, "footer di luar aside").toBeGreaterThan(asideClose);
   });
 });

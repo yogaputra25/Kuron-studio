@@ -8,7 +8,7 @@ use crate::commands::translate::{
     PageWork, PrepOpts,
 };
 use crate::parser::preview_200;
-use crate::prompt::{append_glossary, build_mosaic_prompt, TranslateStyle};
+use crate::prompt::{append_custom, append_glossary, build_mosaic_prompt, TranslateStyle};
 use crate::translation::PageTranslation;
 use crate::AppState;
 
@@ -29,6 +29,11 @@ pub struct TranslateBatchInput {
     pub reading_direction: String,
     #[serde(default)]
     pub glossary: Option<String>,
+    #[serde(default)]
+    pub custom_prompt: Option<String>,
+    /// Override model per request; kosong/absen = pakai simpanan provider.
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 fn d_lang() -> String { "Indonesian".to_string() }
@@ -54,6 +59,11 @@ pub struct RetryBubbleInput {
     pub reading_direction: String,
     #[serde(default)]
     pub glossary: Option<String>,
+    #[serde(default)]
+    pub custom_prompt: Option<String>,
+    /// Override model per request; kosong/absen = pakai simpanan provider.
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -124,6 +134,8 @@ pub async fn translate_batch(
                 mosaic_quality: &input.mosaic_quality,
                 reading_direction: &input.reading_direction,
                 glossary: input.glossary.as_deref(),
+                custom_prompt: input.custom_prompt.as_deref(),
+                model: input.model.as_deref(),
             },
         )
         .await
@@ -249,11 +261,15 @@ pub async fn retry_bubble(
     .map_err(|e| fail_page(state.inner(), &input.page_id, e))?;
 
     let gloss = effective_glossary(state.inner(), input.glossary.as_deref(), snap.prev.as_ref());
-    let prompt = append_glossary(
-        build_mosaic_prompt(&input.target_lang, style, input.skip_sfx, 1),
-        gloss.as_deref(),
+    let prompt = append_custom(
+        append_glossary(
+            build_mosaic_prompt(&input.target_lang, style, input.skip_sfx, 1),
+            gloss.as_deref(),
+        ),
+        input.custom_prompt.as_deref(),
     );
-    let (client, rec) = load_provider(state.inner(), &input.provider_id)?;
+    let (client, mut rec) = load_provider(state.inner(), &input.provider_id)?;
+    rec.model = crate::provider::effective_model(&rec, input.model.as_deref());
     let text = backoff_translate(state.inner(), &input.page_id, &client, &rec, &prompt, &jpeg)
         .await
         .map_err(|e| cancel_or_fail(state.inner(), &input.page_id, e))?;

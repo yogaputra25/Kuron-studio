@@ -89,6 +89,30 @@ pub fn append_glossary(mut prompt: String, glossary: Option<&str>) -> String {
     }
 }
 
+/// Instruksi bebas user (mis. nuansa bahasa output) — ditempel SETELAH
+/// glossary supaya paling dekat dengan ekspektasi akhir, tapi larangan
+/// format (strict JSON) tetap dipertahankan agar parser tidak jebol.
+/// Batas 2000 char: pelindung biaya/token + JSON raksasa sulit diparse.
+/// Potong di batas char (bukan byte) supaya tidak membelah UTF-8.
+pub const MAX_CUSTOM_PROMPT_CHARS: usize = 2000;
+
+pub fn append_custom(mut prompt: String, custom: Option<&str>) -> String {
+    match custom {
+        Some(c) if !c.trim().is_empty() => {
+            let trimmed = c.trim();
+            let cut: String = trimmed.chars().take(MAX_CUSTOM_PROMPT_CHARS).collect();
+            prompt.push_str(
+                "\n\nAdditional user instructions for wording/tone \
+                 (output must still be strict JSON, no extra text):\n",
+            );
+            prompt.push_str(&cut);
+            prompt
+        }
+        _ => prompt,
+    }
+}
+
+
 // ponytail: keyring milik M4; jangan simpan key di sini.
 // ponytail: swap expected strings dengan fixture Dart Kuron saat tersedia.
 
@@ -129,5 +153,24 @@ mod tests {
     fn style_from_str_fallback() {
         assert_eq!(TranslateStyle::from_str("formal"), TranslateStyle::Formal);
         assert_eq!(TranslateStyle::from_str("bogus"), TranslateStyle::Standard);
+    }
+
+    #[test]
+    fn custom_rules() {
+        let base = "P".to_string();
+        assert_eq!(append_custom(base.clone(), None), "P");
+        assert_eq!(append_custom(base.clone(), Some("  ")), "P");
+        let out = append_custom(base.clone(), Some("pakai bahasa santai"));
+        assert!(out.starts_with("P\n\nAdditional user instructions"));
+        assert!(out.contains("pakai bahasa santai"));
+        assert!(out.contains("strict JSON"));
+    }
+
+    #[test]
+    fn custom_capped_at_char_boundary() {
+        let long = "é".repeat(MAX_CUSTOM_PROMPT_CHARS + 10);
+        let out = append_custom(String::new(), Some(&long));
+        let tail = out.rsplit('\n').next().unwrap_or("");
+        assert_eq!(tail.chars().count(), MAX_CUSTOM_PROMPT_CHARS);
     }
 }

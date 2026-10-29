@@ -108,6 +108,8 @@
         skipSfx: opts.skipSfx,
         mosaicQuality: opts.mosaicQuality,
         readingDirection: opts.readingDirection,
+        ...(opts.customPrompt ? { customPrompt: opts.customPrompt } : {}),
+        ...(opts.model ? { model: opts.model } : {}),
       });
       onRefresh();
     } catch (e) {
@@ -148,6 +150,8 @@
         skipSfx: opts.skipSfx,
         mosaicQuality: opts.mosaicQuality,
         readingDirection: opts.readingDirection,
+        ...(opts.customPrompt ? { customPrompt: opts.customPrompt } : {}),
+        ...(opts.model ? { model: opts.model } : {}),
       });
       onRefresh();
     } catch (e) {

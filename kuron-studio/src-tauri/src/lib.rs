@@ -130,6 +130,7 @@ pub fn run() {
             cache::init_db(&db).map_err(io_err)?;
             let http = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(90))
+                .tls_built_in_root_certs(true)
                 .build()
                 .map_err(|e| io_err(e.to_string()))?;
             app.manage(AppState {

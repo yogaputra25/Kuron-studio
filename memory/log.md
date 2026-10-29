@@ -102,3 +102,56 @@ menyentuh baris lama).
 - Kerja: Filter folder menampilkan breadcrumb (`default / bleach`) untuk folder bersarang via `folderPath()`; berlaku juga di label scope ekspor. Tanpa sentuh data.
 - Akar: data user memang berisi 2 folder beda bernama "bleach" (1 root + 1 di dalam default, isi halaman berbeda) — bukan bug hitung. UI lama menampilkan nama datar sehingga terlihat duplikat.
 - Hasil: `pnpm test` 405/405, `pnpm check` 0 error.
+## 2026-10-29 — custom prompt / instruksi tambahan translate (fokus bahasa output)
+
+- Kerja: `append_custom` di `prompt.rs` (cap 2000 char, char-boundary, format JSON tetap wajib) + test; `custom_prompt` masuk `TranslatePageInput/BatchInput/RetryBubbleInput` → `PrepOpts` → prompt + `CacheKey`; frontend: textarea di `TranslatePanel`, `customPrompt` di `TranslateOpts/BatchOpts/TranslateBatchInput/RetryBubbleInput/TranslatePageArgs`, teruskan di translatePage/BatchPanel/ReviewGrid (retry page+bubble); i18n `customPrompt/customPromptPh` 3 bahasa + test list. Sampingan: hapus import tak terpakai di `panel-tablet.test.ts` (pre-existing, `pnpm check` merah).
+- Hasil: `cargo test` 118 lulus, clippy bersih, `pnpm test` 405/405, `pnpm check` 0 error.
+- Keputusan: custom prompt ditempel SETELAH glossary (paling dekat ekspektasi akhir) tapi tanpa wewenang melonggarkan format JSON; cache key ikut custom prompt supaya ganti instruksi = translate ulang, bukan cache basi.
+- Lanjut: smoke translate sekali pakai custom prompt di Tauri dev (verifikasi prompt terkirim); pertimbangkan preset instruksi bahasa bila user memintanya.
+
+## 2026-10-30 — provider-api-refresh 9/9 di worktree (isu #26 + #27)
+
+- Kerja: Worktree `Kuron-studio-provider-api-refresh` branch `feat/provider-api-refresh` (isolasi dari dirt custom-prompt di checkout utama). 1.1: hapus preset OpenRouter/Zen/OpenCodeGo/ClinePass (Rust+TS), deserializer toleran nama hapus → Custom (`cache.rs` sudah `unwrap_or(Custom)`). 1.2: preset Meta `api.meta.ai/v1` + normalisasi simpanan `api.llama.com` di `effective_base_url` + `provider-preset-contract.test.ts` (TS==Rust via `?raw`). 2.1: `vision_capable(provider,id)` allowlist (Meta muse-spark/wonder; Cohere command-a-vision/aya-vision; pola umum) + blacklist non-vision + fallback lama; `openai::list_models` tambah param provider. 2.2/2.3: mock TcpListener `provider_list_mock` + `provider_chat_mock` (path/auth/body per provider, tanpa dev-dep baru). 3.1: default = vision pertama. 3.2/3.3: checkbox Hanya vision + warning non-vision/tak dikenal (i18n id/en/zh) — smoke browser mock: default muse-spark-1.3, filter sisakan vision saja, warning tampil. 4.1: ARCHITECTURE "5 provider BYOK".
+- Hasil: `cargo test` 118+8 mock lulus, clippy bersih, `pnpm test` 410/410, `pnpm check` 0 error. `openspec validate provider-api-refresh` hijau, tasks 10/10.
+- Keputusan (Ruling): mock tanpa wiremock/mockito ikut preseden `translate_mock.rs` (TcpListener, tanpa dev-dep). Normalisasi base lama tanpa log (mapping murni). Test lama `models[0]` diganti (bukan di-pin) karena spek mengubah perilakunya. Fix `panel-tablet.test.ts` (import tak terpakai) diadopsi dari dirt checkout utama supaya gate hijau. Deserializer mengembalikan error untuk nama benar-benar asing (bukan silent Custom).
+- Lanjut: user review → `/opsx:archive`; merge branch worktree ke main (perhatikan dirt custom-prompt yang belum commit di checkout utama).
+
+## 2026-10-30 — fix TLS: webpki roots (semua HTTPS provider gagal UnknownIssuer)
+
+- Kerja: User lapor `error sending request for url (.../v1beta/models?key=...)` saat Load models Gemini. Host reachable via curl (403 wajar) → bukan jaringan. Akar: `reqwest` feature `rustls-tls-manual-roots` TANPA root cert → semua HTTPS gagal di handshake. Fix: tambah feature `rustls-tls-webpki-roots` + `.tls_built_in_root_certs(true)` di builder `AppState::http` (`lib.rs`). Verifikasi throwaway test HTTPS ke generativelanguage (respons HTTP, bukan transport error), lalu hapus.
+- Hasil: `cargo test` hijau, clippy 0 error. Commit di atas merge provider-api-refresh.
+- Catatan: key user (`AQ.Ab8...`) BUKAN format Gemini API key (`AIza...`, dari AI Studio) — setelah TLS pulih, key salah akan muncul sebagai error API 400, bukan transport. Sampaikan ke user.
+- Lanjut: restart dev server; bila user ganti key valid, Load models Gemini harus hijau.
+
+## 2026-10-30 — fix serde AiProviderType (dispatch Gemini nyasar ke /chat/completions → 404)
+
+- Kerja: Log user tunjukkan POST ke `generativelanguage.../chat/completions` (jalur OpenAI) untuk provider Gemini. Akar: saat hapus preset, `rename_all="camelCase"` ikut terbuang dari `Serialize` → DB tulis `"Gemini"` kapital → Deserialize (lowercase saja) gagal → `unwrap_or(Custom)` → dispatch `_ => openai`. Fix: kembalikan `rename_all`, Deserialize terima dua-duanya (`"gemini"|"Gemini"` dst.) supaya baris yang sempat tersimpan kapital tetap terbaca benar. Test RED (`serialize gemini` → `"Gemini"`) lalu GREEN.
+- Hasil: `cargo test` hijau, clippy 0, `pnpm test` 410/410, `pnpm check` 0.
+- Catatan: model `gemma-4-31b-it`/`gemini-3.8-flash` tidak ada di katalog — user harus pilih dari Load models. Key 401 sebelumnya urusan key user, bukan app.
+- Lanjut: restart dev server; provider Gemini tersimpan otomatis benar tanpa simpan ulang.
+
+## 2026-10-30 — fix label bahasa kartu bubble (ID→EN tampil JP/ID)
+
+- Kerja: User lapor kartu bubble #3 berlabel "Original (JP)"/"Terjemahan (ID)" padahal arah ID→EN. Akar: label hardcoded di `EditorPanel.svelte`. Fix: `trgLang` derived dari `translation.targetLang` (disimpan backend) → `lastOpts.targetLang` → default "id"; label `Original` (sumber tak diketahui app) + `Terjemahan ({trgLabel})` via `TARGET_LANGS`; `createEmptyTranslation` pakai target aktual bukan "id". Test RED (`not.toContain` hardcoded) → GREEN; `edit-in-bubble.test.ts` diperbarui.
+- Hasil: `pnpm test` 410/410, `pnpm check` 0 error.
+- Catatan: prompt backend kirim kode mentah ("into id") — LLM paham, tapi rapi-nya dipetakan ke nama bahasa; tunda (di luar keluhan).
+
+## 2026-10-29 — openspec mobile-home-drawer untuk isu #14
+
+- Kerja: Buat openspec `mobile-home-drawer` (proposal, design, tasks, specs `home/mobile-nav` + `home/header-split`) dari isi issue #14: drawer slide-over + pecah `HomeHeaderDesktop` vs `HomeHeaderMobile` dengan switch `isNarrow`/`watchViewport`; gating `isMobile` hanya untuk kemampuan desktop-only. `openspec validate mobile-home-drawer` hijau.
+- Hasil: 5 file baru di `openspec/changes/mobile-home-drawer/`; belum ada perubahan kode.
+- Keputusan: Breakpoint reuse `TABLET_MAX_W=768`; desktop = pindahan verbatim dulu baru bangun mobile (hindari drift); string baru 3 bahasa satu commit; badge error tetap di luar drawer.
+- Lanjut: review proposal → `/opsx:apply` (fondasi viewport + ekstrak desktop + drawer + gate penuh + smoke 360px vs ≥768px).
+
+## 2026-10-30 — translate-model-per-run 7/7 (model per-run + sidebar + footer)
+
+- Kerja: 1.1 `effective_model(rec, override)` + test. 1.2 field `model` opsional di TranslatePage/Batch/RetryBubbleInput + `PrepOpts.model`, resolusi tepat setelah load (cache key + `translation.model` ikut benar) + test serde kontrak. 2.1 LOV model sesi-saja di TranslatePanel (auto-load saat ganti provider, default = simpanan provider, suffix vision, tanpa tulis DB) + `TranslateOpts.model`. 2.2 teruskan ke batch/retry + `BatchOpts.model` + type `model?`. 2.3 regroup kartu (Opsi lanjutan details + tombol sticky bottom). 2.4 footer `Kuron Studio vX` (`getVersion`) pin-bottom, ukuran disamakan header (text-sm semibold) per koreksi user. Smoke mock: default model = simpanan, filter vision, warning, details+sticky tampil, footer render (versi kosong di mock= wajar, tanpa backend Tauri).
+- Hasil: `cargo test` hijau, clippy 0, `pnpm test` 416/416, `pnpm check` 0. `openspec validate` hijau, tasks 7/7.
+- Keputusan: override `None`/kosong = perilaku lama byte-for-byte; cache key pakai model hasil resolusi (hindari cache lintas-model basi); footer versi fallback kosong bila getVersion gagal (web preview).
+- Lanjut: user review → `/opsx:archive`.
+
+## 2026-10-29 — Merge main (24 commit) ke feat/grid-preview-perf, tanpa fitur hilang
+
+- Kerja: Merge `origin/main` (PR #23–#32: provider rework, translate regroup, editor footer, dsb). Konflik hanya 2 file i18n (key `resultsExport` milik kita + `customPrompt*` milik main — digabung, `review` lama dibuang).
+- Verifikasi tidak ada yang hilang: diff vs HEAD hanya penambahan main (customPrompt/model pass-through); seluruh fitur kita utuh (Grid/List, sortir toolbar, scope ekspor, cache preview).
+- Hasil: `pnpm test` 417/417, `pnpm check` 0, `cargo test` 125 lulus, clippy bersih.
