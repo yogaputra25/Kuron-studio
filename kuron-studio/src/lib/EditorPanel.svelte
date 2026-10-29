@@ -14,6 +14,7 @@
   import { TARGET_LANGS } from "../lib/types";
   import { allPages } from "./library";
   import { t } from "./i18n";
+  import { statusAfterBubbleSave, statusAfterTranslationSave, translationComplete } from "./status";
   import Button from "./ui/Button.svelte";
   import StatusBadge from "./ui/StatusBadge.svelte";
   import { isNarrow, isTablet, loadSidebarW, saveSidebarW, watchViewport } from "./device";
@@ -319,11 +320,28 @@
       const cleaned = await api.saveBubbles(page.id, bubbles);
       bubbles = cleaned;
       dirty = false;
-      onSaved({ ...page, bubbles: cleaned, status: cleaned.length > 0 ? "detected" : "noBubbles" });
+      onSaved({ ...page, bubbles: cleaned, status: statusAfterBubbleSave(page.status, !!(translation ?? page.translation), cleaned.length) });
     } catch (e) {
       error = String(e);
     } finally {
       saving = false;
+    }
+  }
+
+  /** Tandai-selesai manual: paksa Sudah walau sebagian bubble kosong (SFX). */
+  async function markDone() {
+    if (!translation || translation.manualDone) return;
+    if (draftBox.cur) commitDraft();
+    savingTr = true;
+    error = "";
+    try {
+      const out = await api.markPageCompleted(page.id, true);
+      translation = out;
+      onSaved({ ...page, bubbles: $state.snapshot(bubbles), status: "translated", translation: out });
+    } catch (e) {
+      error = String(e);
+    } finally {
+      savingTr = false;
     }
   }
 
@@ -366,7 +384,7 @@
       const out = await api.saveTranslation(page.id, translation.bubbles);
       if (my !== saveGen) return; // respons basi: save lebih baru sudah dikirim
       translation = out;
-      onSaved({ ...page, bubbles: $state.snapshot(bubbles), status: "translated", translation: out });
+      onSaved({ ...page, bubbles: $state.snapshot(bubbles), status: statusAfterTranslationSave(page.status, out.bubbles, out.manualDone), translation: out });
     } catch (e) {
       error = String(e);
     } finally {
@@ -405,7 +423,7 @@
     try {
       const out = await api.saveTranslation(page.id, empty.bubbles);
       translation = out;
-      onSaved({ ...page, bubbles: $state.snapshot(bubbles), status: "translated", translation: out });
+      onSaved({ ...page, bubbles: $state.snapshot(bubbles), status: statusAfterTranslationSave(page.status, out.bubbles, out.manualDone), translation: out });
     } catch (e) {
       error = String(e);
     } finally {
@@ -429,7 +447,7 @@
       ...t,
       bubbles: mergeUserEdits(translation?.bubbles, t.bubbles),
     };
-    onSaved({ ...page, bubbles: $state.snapshot(bubbles), status: "translated", translation });
+    onSaved({ ...page, bubbles: $state.snapshot(bubbles), status: statusAfterTranslationSave(page.status, translation.bubbles, translation.manualDone), translation });
     // P9 (export-text-parity): terjemahan datang dari backend yang tak punya
     // metrik font browser, jadi bubble-nya lahir tanpa `layout`. Kirim satu
     // save supaya export memakai jalur presisi, bukan hanya jalur fallback.
@@ -926,6 +944,9 @@ function setBubbleFontSize(v: number | null) {
 
             <div class="mb-3 flex gap-2">
               {#if dirtyDraft}<span class="rounded bg-warn-soft px-1.5 py-0.5 text-[10px] text-warn">belum tersimpan</span>{/if}
+              {#if translation && !translation.manualDone && !translationComplete(translation.bubbles)}
+                <Button variant="ghost" size="sm" onclick={() => void markDone()} disabled={savingTr} title={$t("markDone")}>{$t("markDone")}</Button>
+              {/if}
               <Button
                 variant="default"
                 size="sm"

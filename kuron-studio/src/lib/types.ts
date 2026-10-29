@@ -187,6 +187,8 @@ export interface PageTranslation {
   style: string;
   model: string;
   bubbles: BubbleTranslation[];
+  /** Tandai-selesai manual (backend `manualDone`): Sudah walau sebagian kosong. Absen = false (data lama). */
+  manualDone?: boolean;
 }
 
 // Struct fields follow Rust serde rename_all camelCase (TranslatePageInput);

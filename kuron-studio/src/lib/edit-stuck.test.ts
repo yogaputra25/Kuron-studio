@@ -167,8 +167,8 @@ describe("in-bubble bind:value (§2.1)", () => {
 describe("geometry persistence (fix-geometry-revert)", () => {
   it("D2: echo onSaved membawa bubbles lokal (bukan prop basi)", () => {
     const echoes = panelSrc.match(/onSaved\(\{ \.\.\.page, bubbles: \$state\.snapshot\(bubbles\)/g) ?? [];
-    // saveTranslationEdits + createEmptyTranslation + onTranslated + error.
-    expect(echoes.length).toBe(4);
+    // saveTranslationEdits + createEmptyTranslation + onTranslated + markDone + error.
+    expect(echoes.length).toBe(5);
     // Tak ada jalur echo yang masih mengirim page.bubbles basi.
     expect(panelSrc).not.toContain('onSaved({ ...page, status: "translated"');
     expect(panelSrc).not.toContain('onSaved({ ...page, status: "failed" })');

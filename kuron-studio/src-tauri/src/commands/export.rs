@@ -652,7 +652,7 @@ mod tests {
         let png = solid_png(400, 400);
         let t = PageTranslation {
             page_id: "p".into(), target_lang: "id".into(), style: "s".into(),
-            model: "m".into(), bubbles: vec![bt(0, 50, 50, 200, 100, "HELLO")],
+            model: "m".into(), manual_done: false, bubbles: vec![bt(0, 50, 50, 200, 100, "HELLO")],
         };
         let out = render_page_png(&png, &t, &[None]).unwrap();
         let img = image::load_from_memory(&out).unwrap().to_rgb8();
@@ -667,7 +667,7 @@ mod tests {
         let png = solid_png(400, 400);
         let t = PageTranslation {
             page_id: "p".into(), target_lang: "id".into(), style: "s".into(),
-            model: "m".into(), bubbles: vec![bt(0, 50, 50, 200, 100, "HI")],
+            model: "m".into(), manual_done: false, bubbles: vec![bt(0, 50, 50, 200, 100, "HI")],
         };
         // Segitiga: pojok kiri-atas rect tetap abu-abu, tengah putih.
         let tri = vec![[50, 50], [250, 50], [150, 150]];
@@ -684,7 +684,7 @@ mod tests {
         b.shape = Some(fresh.clone());
         let t = PageTranslation {
             page_id: "p".into(), target_lang: "id".into(), style: "s".into(),
-            model: "m".into(), bubbles: vec![b],
+            model: "m".into(), manual_done: false, bubbles: vec![b],
         };
         let stale = crate::bubble::BubbleBox {
             x: 50, y: 50, w: 200, h: 100, confidence: 1.0,
@@ -699,7 +699,7 @@ mod tests {
     fn shapes_falls_back_to_page_then_bbox() {
         let t = PageTranslation {
             page_id: "p".into(), target_lang: "id".into(), style: "s".into(),
-            model: "m".into(), bubbles: vec![bt(0, 50, 50, 200, 100, "HI")],
+            model: "m".into(), manual_done: false, bubbles: vec![bt(0, 50, 50, 200, 100, "HI")],
         };
         let with = crate::bubble::BubbleBox {
             x: 50, y: 50, w: 200, h: 100, confidence: 1.0,
@@ -729,7 +729,7 @@ mod tests {
         let png = solid_png(400, 400);
         let t = PageTranslation {
             page_id: "p".into(), target_lang: "id".into(), style: "s".into(),
-            model: "m".into(), bubbles: vec![bt(0, 50, 50, 200, 100, "HELLO WORLD")],
+            model: "m".into(), manual_done: false, bubbles: vec![bt(0, 50, 50, 200, 100, "HELLO WORLD")],
         };
         let out = render_page_png(&png, &t, &[None]).unwrap();
         let img = image::load_from_memory(&out).unwrap().to_rgb8();
@@ -742,7 +742,7 @@ mod tests {
         let png = solid_png(400, 400);
         let t = PageTranslation {
             page_id: "p".into(), target_lang: "id".into(), style: "s".into(),
-            model: "m".into(), bubbles: vec![bt(0, 50, 50, 200, 100, "日本語テスト")],
+            model: "m".into(), manual_done: false, bubbles: vec![bt(0, 50, 50, 200, 100, "日本語テスト")],
         };
         let out = render_page_png(&png, &t, &[None]).unwrap();
         let img = image::load_from_memory(&out).unwrap().to_rgb8();
@@ -797,7 +797,7 @@ mod text_position_tests {
         let png = solid_png(400, 400);
         let t = PageTranslation {
             page_id: "p".into(), target_lang: "id".into(), style: "s".into(),
-            model: "m".into(), bubbles: vec![bt(0, 50, 50, 200, 100, "HELLO")],
+            model: "m".into(), manual_done: false, bubbles: vec![bt(0, 50, 50, 200, 100, "HELLO")],
         };
         let out = render_page_png(&png, &t, &[None]).unwrap();
         let img = image::load_from_memory(&out).unwrap().to_rgb8();
@@ -812,7 +812,7 @@ mod text_position_tests {
         let png = solid_png(400, 400);
         let t = PageTranslation {
             page_id: "p".into(), target_lang: "id".into(), style: "s".into(),
-            model: "m".into(),
+            model: "m".into(), manual_done: false,
             bubbles: vec![bt(0, 50, 50, 220, 160, "HELLO WORLD FOO BAR BAZ")],
         };
         let out = render_page_png(&png, &t, &[None]).unwrap();
@@ -838,7 +838,7 @@ mod text_position_tests {
         });
         let t = PageTranslation {
             page_id: "p".into(), target_lang: "id".into(), style: "s".into(),
-            model: "m".into(), bubbles: vec![b],
+            model: "m".into(), manual_done: false, bubbles: vec![b],
         };
         let out = render_page_png(&png, &t, &[None]).unwrap();
         let img = image::load_from_memory(&out).unwrap().to_rgb8();
@@ -857,7 +857,7 @@ mod text_position_tests {
         let png = solid_png(400, 400);
         let t = PageTranslation {
             page_id: "p".into(), target_lang: "id".into(), style: "s".into(),
-            model: "m".into(), bubbles: vec![bt(0, 50, 50, 200, 100, "HI")],
+            model: "m".into(), manual_done: false, bubbles: vec![bt(0, 50, 50, 200, 100, "HI")],
         };
         let out = render_page_png(&png, &t, &[None]).unwrap();
         let img = image::load_from_memory(&out).unwrap().to_rgb8();

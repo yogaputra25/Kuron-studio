@@ -103,7 +103,7 @@ mod tests {
         let mut store = ProjectStore::load(dir).unwrap();
         let t = PageTranslation {
             page_id: "p0".into(), target_lang: "id".into(), style: "s".into(),
-            model: "m".into(),
+            model: "m".into(), manual_done: false,
             bubbles: vec![
                 bt(0, "naga api besar naga", "naga api besar dan naga lagi"),
                 bt(1, "naga kecil", "naga"),

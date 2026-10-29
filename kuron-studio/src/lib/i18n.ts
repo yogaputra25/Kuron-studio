@@ -91,6 +91,7 @@ const STR: Record<string, Record<Lang, string>> = {
   add: { en: "Add", id: "Tambah", zh: "添加" },
   edit: { en: "Edit", id: "Edit", zh: "编辑" },
   save: { en: "Save", id: "Simpan", zh: "保存" },
+  markDone: { en: "Mark done", id: "Tandai selesai", zh: "标记完成" },
   remove: { en: "Remove", id: "Hapus", zh: "删除" },
   export: { en: "Export", id: "Export", zh: "导出" },
   share: { en: "Share", id: "Bagikan", zh: "分享" },

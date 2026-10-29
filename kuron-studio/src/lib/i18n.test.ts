@@ -123,6 +123,7 @@ const KEYS = [
   "sortName",
   "sortStatus",
   "sortBubbles",
+  "markDone",
 ];
 
 const LANGS: Lang[] = ["en", "id", "zh"];

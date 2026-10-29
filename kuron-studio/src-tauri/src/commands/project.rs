@@ -72,6 +72,33 @@ pub enum PageStatus {
     Failed,
 }
 
+/// Normalisasi status simpanan saat load. Transient gantung
+/// (`Translating`/`Detecting`) → `Detected`/`Idle` ikut ada-tidaknya bubble;
+/// `Translated` yang terjemahannya sebagian tanpa flag manual turun mengikuti
+/// aturan yang sama. Mengembalikan true bila status berubah.
+fn normalize_page_status(pg: &mut Page) -> bool {
+    let base = if pg.bubbles.is_empty() { PageStatus::Idle } else { PageStatus::Detected };
+    match pg.status {
+        PageStatus::Translating | PageStatus::Detecting => {
+            pg.status = base;
+            true
+        }
+        PageStatus::Translated => {
+            let ok = pg
+                .translation
+                .as_ref()
+                .is_some_and(crate::translation::translation_complete);
+            if ok {
+                false
+            } else {
+                pg.status = base;
+                true
+            }
+        }
+        _ => false,
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChapterFolder {
@@ -313,6 +340,13 @@ impl ProjectStore {
         let mut migrated = false;
         for proj in store.projects.values_mut() {
             if proj.migrate_legacy() { migrated = true; }
+            // page-status-truth: normalisasi status simpanan (transient
+            // gantung + translated yang isinya sebagian tanpa flag manual).
+            for folder in proj.folders.iter_mut() {
+                for pg in folder.pages.iter_mut() {
+                    if normalize_page_status(pg) { migrated = true; }
+                }
+            }
         }
         if migrated { let _ = store.save(); }
         Ok(store)
@@ -1557,6 +1591,48 @@ mod tests {
         assert_eq!(pg.bubbles[0].shape.as_ref().unwrap().len(), 3);
         assert_eq!(pg.bubbles[0].tail.as_ref().unwrap().len(), 2);
         assert_eq!(pg.status, PageStatus::Detected);
+    }
+
+    #[test]
+    fn load_normalizes_stale_status() {
+        use crate::bubble::BubbleBox;
+        use crate::translation::{BubbleTranslation, PageTranslation};
+        let dir = std::env::temp_dir().join(format!(
+            "kuron-studio-normalize-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let bb = BubbleBox { x: 0, y: 0, w: 10, h: 10, confidence: 1.0, shape: None, kind: None, tail: None };
+        let tb = |t: &str| BubbleTranslation { index: 0, x: 0, y: 0, w: 10, h: 10, shape: None, layout: None, font_size: None, original: "o".into(), reading: "".into(), translated: t.into(), ai_original: "".into(), ai_reading: "".into(), ai_translated: "".into(), needs_white_patch: false, is_user_edited: false };
+        let tr = |bubbles: Vec<BubbleTranslation>, manual_done: bool| PageTranslation { page_id: "x".into(), target_lang: "id".into(), style: "s".into(), model: "m".into(), manual_done, bubbles };
+        let page = |id: &str, status: PageStatus, bubbles: Vec<BubbleBox>, translation: Option<PageTranslation>| Page {
+            id: id.into(), path: format!("{id}.png"), width: 800, height: 1200,
+            status, bubbles, translation,
+        };
+        let mut store = ProjectStore::load(dir.clone()).unwrap();
+        let mut proj = Project::new("t".to_string());
+        proj.id = "proj".to_string();
+        proj.folders[0].pages = vec![
+            page("gantung", PageStatus::Translating, vec![bb.clone()], None),
+            page("over", PageStatus::Translated, vec![bb.clone()], Some(tr(vec![tb("isi"), tb("")], false))),
+            page("manual", PageStatus::Translated, vec![bb.clone()], Some(tr(vec![tb("isi"), tb("")], true))),
+            page("utang", PageStatus::Translated, vec![bb.clone()], Some(tr(vec![tb("a"), tb("b")], false))),
+            page("kosong", PageStatus::Detecting, vec![], None),
+        ];
+        store.projects.insert("proj".to_string(), proj);
+        store.save().unwrap();
+        let reloaded = ProjectStore::load(dir).unwrap();
+        let st = |id: &str| {
+            reloaded.projects["proj"].folders[0]
+                .pages.iter().find(|p| p.id == id).unwrap().status.clone()
+        };
+        assert_eq!(st("gantung"), PageStatus::Detected);
+        assert_eq!(st("over"), PageStatus::Detected);
+        assert_eq!(st("manual"), PageStatus::Translated);
+        assert_eq!(st("utang"), PageStatus::Translated);
+        assert_eq!(st("kosong"), PageStatus::Idle);
     }
 
     fn tree_proj() -> Project {
