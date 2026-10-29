@@ -182,3 +182,9 @@ menyentuh baris lama).
 - Hasil: spec + tasks siap review; belum ada perubahan kode (§5 unchecked).
 - Keputusan: Bucket Proses dihapus dari kanban; progres operasi tetap di panel progres. Urutan sortir Belum–Terdeteksi–Sudah–Gagal.
 - Lanjut: user review §5 → apply 5.1–5.3 → gate → archive.
+
+## 2026-10-30 — providers: Validate aktif setelah simpan + model dipakai
+
+- Kerja: `save()` tidak lagi `startNew()` — tetap mode Edit pakai `saved.id` supaya tombol Validate langsung aktif; tooltip "Simpan provider dulu, baru Validate aktif." saat disabled.
+- Hasil: `pnpm test` 437/437, `pnpm check` 0; smoke mock: sebelum simpan DISABLED+tooltip, sesudah simpan ENABLED + header "Edit".
+- Keputusan: kolom Model BENAR dipakai — rantai `fModel -> save_provider.model -> ProviderView.model -> default TranslatePanel (loadModelsFor) -> translation.model + cache key`. Field manual + Lov "Model tersedia" komplementer (ketik vs pilih hasil Load models), bukan duplikat.

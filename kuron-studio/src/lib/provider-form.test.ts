@@ -137,6 +137,20 @@ describe("provider form: tombol Simpan tidak mati tanpa sebab", () => {
   });
 });
 
+describe("provider form: tetap mode edit setelah simpan", () => {
+  it("save() memakai id hasil save supaya Validate langsung aktif", () => {
+    const start = panel.indexOf("async function save");
+    const end = panel.indexOf("\n  async function remove");
+    const fn = panel.slice(start, end);
+    expect(fn).toContain("editId = saved.id");
+    expect(fn).not.toContain("startNew()");
+  });
+
+  it("tombol Validate menjelaskan kenapa mati saat belum tersimpan", () => {
+    expect(panel).toContain("Simpan provider dulu");
+  });
+});
+
 describe("provider form: base_url tidak ditimpa diam-diam", () => {
   it("pickType hanya menimpa base_url yang masih pristine", () => {
     const fn = panel.slice(panel.indexOf("function pickType"));
