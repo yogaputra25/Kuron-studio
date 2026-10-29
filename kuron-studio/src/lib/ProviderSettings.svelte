@@ -120,7 +120,7 @@
         ? await api.listModels(editId)
         : await api.listModelsDraft({ providerType: fType, baseUrl: fBaseUrl, apiKey: fKey.trim() });
       modelsMsg = models.length > 0 ? `${models.length} model.` : "Provider tidak mengembalikan model.";
-      if (models.length > 0 && !fModel) fModel = models[0].id;
+      if (models.length > 0 && !fModel) fModel = (models.find((m) => m.vision) ?? models[0]).id;
     } catch (e) {
       modelsMsg = String(e);
     } finally {
