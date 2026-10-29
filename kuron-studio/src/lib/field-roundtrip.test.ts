@@ -37,9 +37,11 @@ function type(input: HTMLInputElement, text: string) {
   flushSync();
 }
 
-function pick(sel: HTMLSelectElement, value: string) {
-  sel.value = value;
-  sel.dispatchEvent(new Event("change", { bubbles: true }));
+function pickLov(target: HTMLElement, value: string) {
+  // Meniru klik fisik: buka Lov lalu klik opsi (bukan set value diam-diam).
+  (target.querySelector("button[aria-haspopup='listbox']") as HTMLButtonElement).click();
+  flushSync();
+  (target.querySelector(`[role="option"][data-value="${value}"]`) as HTMLButtonElement).click();
   flushSync();
 }
 
@@ -114,14 +116,13 @@ describe("Field round-trip: ketikan sampai ke $state parent", () => {
   });
 });
 
-describe("Select round-trip: pilihan sampai ke $state parent", () => {
+describe("Lov round-trip: pilihan sampai ke $state parent", () => {
   it("memilih opsi mengubah state parent", () => {
     const h = mountHarness();
     const target = h.target;
-    const sel = target.querySelectorAll("select")[0] as HTMLSelectElement;
 
     type(target.querySelector('[data-testid="name"]') as HTMLInputElement, "a");
-    pick(sel, "openai");
+    pickLov(target, "openai");
     (target.querySelector('[data-testid="save"]') as HTMLButtonElement).click();
     flushSync();
 
@@ -145,16 +146,14 @@ describe("mekanisme: compiler harus menghasilkan bind_value", () => {
     ).toContain("bind_value");
   });
 
-  it("Select.svelte meng-compile menjadi $.bind_value", () => {
+  it("Lov.svelte meneruskan pilihan lewat onchange (bukan bind)", () => {
     const src = readFileSync(
-      join(process.cwd(), "src/lib/ui/Select.svelte"),
+      join(process.cwd(), "src/lib/ui/Lov.svelte"),
       "utf8",
     );
-    const { js } = compile(src, { generate: "client" });
-    expect(
-      js.code,
-      "<select> memakai bind_select_value — tanpa itu pilihan tidak balik ke parent",
-    ).toMatch(/bind_select_value|bind_value/);
+    expect(src).not.toMatch(/\$bindable/);
+    expect(src).toContain("onclick={() => pick(o.value)}");
+    expect(src).toContain("onchange?.(");
   });
 
   it("bukti: {value} TIDAK menghasilkan bind_value (mutasi harus merah)", () => {

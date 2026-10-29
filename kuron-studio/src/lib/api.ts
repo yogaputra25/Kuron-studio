@@ -83,6 +83,8 @@ export const api = {
     invoke<void>("cancel_translate", { page_id }),
   saveTranslation: (page_id: string, bubbles: BubbleTranslation[]) =>
     invoke<PageTranslation>("save_translation", { page_id, bubbles }),
+  markPageCompleted: (page_id: string, completed: boolean) =>
+    invoke<PageTranslation>("mark_page_completed", { page_id, completed }),
   clearCache: () => invoke<number>("clear_cache"),
 
   // --- M3: batch + retry ---

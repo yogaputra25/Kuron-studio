@@ -38,7 +38,7 @@ use commands::project::{
 use commands::provider::{
     delete_provider, get_providers, list_models, list_models_draft, save_provider, validate_provider,
 };
-use commands::translate::{cancel_translate, clear_cache, save_translation, translate_page};
+use commands::translate::{cancel_translate, clear_cache, mark_page_completed, save_translation, translate_page};
 
 pub struct AppState {
     pub store: Mutex<ProjectStore>,
@@ -186,6 +186,7 @@ pub fn run() {
             qa_check,
             share_project,
             save_translation,
+            mark_page_completed,
             cancel_translate,
             clear_cache,
             diagnostics,

@@ -132,7 +132,7 @@ mod tests {
     fn psd_header_and_layers() {
         let t = PageTranslation {
             page_id: "p".into(), target_lang: "id".into(), style: "s".into(),
-            model: "m".into(), bubbles: vec![bt(0, "HELLO"), bt(1, "WORLD")],
+            model: "m".into(), manual_done: false, bubbles: vec![bt(0, "HELLO"), bt(1, "WORLD")],
         };
         let psd = render_page_psd(&page(), &t, &[None, None]).unwrap();
         assert_eq!(&psd[0..4], b"8BPS");

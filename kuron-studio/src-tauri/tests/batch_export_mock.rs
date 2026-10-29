@@ -78,7 +78,7 @@ async fn run_batch_10() -> (Vec<PageTranslation>, Vec<(String, usize, bool)>) {
                     page_id: page_id.clone(),
                     target_lang: "Indonesian".into(),
                     style: "standard".into(),
-                    model: "m".into(),
+                    model: "m".into(), manual_done: false,
                     bubbles: mapped,
                 })
             });

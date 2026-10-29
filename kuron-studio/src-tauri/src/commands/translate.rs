@@ -77,6 +77,9 @@ pub fn translate_text_to_page(job: CoreJob<'_>) -> Result<PageTranslation, Strin
         style: job.style.to_string(),
         model: job.model.to_string(),
         bubbles: preserve_user_edits(mapped, job.prev),
+        // Flag manual menyatu di persist_result (nempel ke simpanan),
+        // bukan di hasil segar — re-translate tak mencabut override user.
+        manual_done: false,
     })
 }
 
@@ -396,7 +399,7 @@ pub fn apply_cached(
         serde_json::from_str(payload).map_err(|e| format!("cache corrupt: {e}"))?;
     page_t.bubbles = preserve_user_edits(page_t.bubbles, prev);
     page_t.page_id = page_id.to_string();
-    let r = persist(state, page_id, &page_t, "translated");
+    let r = persist_result(state, page_id, &page_t);
     state.clear_cancel(page_id);
     state.take_prev(page_id);
     r.map(|_| page_t)
@@ -427,7 +430,7 @@ pub fn store_result(
     let payload = serde_json::to_string(page_t).map_err(|e| e.to_string())?;
     let db = state.db.lock().map_err(|e| e.to_string())?;
     cache::cache_set(&db, &prep.cache_key, &payload)?;
-    let r = persist(state, &prep.page_id, page_t, "translated");
+    let r = persist_result(state, &prep.page_id, page_t);
     state.clear_cancel(&prep.page_id);
     state.take_prev(&prep.page_id);
     r
@@ -499,19 +502,74 @@ pub fn save_translation(
     page_id: String,
     bubbles: Vec<BubbleTranslation>,
 ) -> Result<PageTranslation, String> {
+    save_translation_inner(state.inner(), &page_id, bubbles)
+}
+
+/// Inti `save_translation` tanpa runtime Tauri (bisa di-unit-test).
+pub fn save_translation_inner(
+    state: &AppState,
+    page_id: &str,
+    bubbles: Vec<BubbleTranslation>,
+) -> Result<PageTranslation, String> {
+    use crate::commands::project::PageStatus as S;
+    let prev = state.take_prev(page_id);
     let mut store = state.store.lock().map_err(|e| e.to_string())?;
-    let page = store.find_page_mut(&page_id).ok_or_else(|| format!("page not found: {page_id}"))?;
+    let page = store.find_page_mut(page_id).ok_or_else(|| format!("page not found: {page_id}"))?;
     let mut page_t = page.translation.clone().unwrap_or(PageTranslation {
-        page_id: page_id.clone(),
+        page_id: page_id.to_string(),
         target_lang: "Indonesian".to_string(),
         style: "standard".to_string(),
         model: String::new(),
+        manual_done: false,
         bubbles: Vec::new(),
     });
-    page_t.page_id = page_id.clone();
+    page_t.page_id = page_id.to_string();
     page_t.bubbles = merge_ai_baseline(&page_t.bubbles, bubbles);
     page.translation = Some(page_t.clone());
-    page.status = crate::commands::project::PageStatus::Translated;
+    if crate::translation::translation_complete(&page_t) {
+        page.status = S::Translated;
+    } else if page.status == S::Translating {
+        page.status =
+            prev.unwrap_or(if page.bubbles.is_empty() { S::Idle } else { S::Detected });
+    }
+    store.save_public()?;
+    Ok(page_t)
+}
+
+/// Tandai-selesai manual per halaman: paksa `translated` walau sebagian
+/// bubble kosong (SFX yang memang sengaja dikosongkan). `completed=false`
+/// mencabut flag dan menghitung ulang status dari data.
+#[tauri::command(rename_all = "snake_case")]
+pub fn mark_page_completed(
+    state: State<'_, AppState>,
+    page_id: String,
+    completed: bool,
+) -> Result<PageTranslation, String> {
+    mark_page_completed_inner(state.inner(), &page_id, completed)
+}
+
+/// Inti `mark_page_completed` tanpa runtime Tauri (bisa di-unit-test).
+pub fn mark_page_completed_inner(
+    state: &AppState,
+    page_id: &str,
+    completed: bool,
+) -> Result<PageTranslation, String> {
+    use crate::commands::project::PageStatus as S;
+    let mut store = state.store.lock().map_err(|e| e.to_string())?;
+    let page = store.find_page_mut(page_id).ok_or_else(|| format!("page not found: {page_id}"))?;
+    let mut page_t = page
+        .translation
+        .clone()
+        .ok_or_else(|| format!("no translation: {page_id}"))?;
+    page_t.manual_done = completed;
+    page.translation = Some(page_t.clone());
+    page.status = if crate::translation::translation_complete(&page_t) {
+        S::Translated
+    } else if page.bubbles.is_empty() {
+        S::Idle
+    } else {
+        S::Detected
+    };
     store.save_public()?;
     Ok(page_t)
 }
@@ -522,26 +580,41 @@ pub fn clear_cache(state: State<'_, AppState>) -> Result<u64, String> {
     cache::clear_cache(&db)
 }
 
-fn persist(state: &AppState, page_id: &str, t: &PageTranslation, status: &str) -> Result<(), String> {
+
+/// Persist hasil terjemahan + status jujur: `Translated` hanya bila lengkap
+/// (semua terisi ATAU flag manual); selain itu status lama dipertahankan,
+/// transient `Translating` pulih ke pra-klaim (stash) atau Detected/Idle.
+pub fn persist_result(
+    state: &AppState,
+    page_id: &str,
+    t: &PageTranslation,
+) -> Result<(), String> {
+    use crate::commands::project::PageStatus as S;
+    let prev = state.take_prev(page_id);
     let mut store = state.store.lock().map_err(|e| e.to_string())?;
     let page = store.find_page_mut(page_id).ok_or_else(|| format!("page not found: {page_id}"))?;
-    page.translation = Some(t.clone());
-    page.status = match status {
-        "translating" => crate::commands::project::PageStatus::Translating,
-        "translated" => crate::commands::project::PageStatus::Translated,
-        "failed" => crate::commands::project::PageStatus::Failed,
-        _ => return Err(format!("unknown status: {status}")),
-    };
+    // Override manual nempel: re-translate tak mencabut tandai-selesai user.
+    let mut merged = t.clone();
+    if page.translation.as_ref().is_some_and(|p| p.manual_done) {
+        merged.manual_done = true;
+    }
+    page.translation = Some(merged.clone());
+    if crate::translation::translation_complete(&merged) {
+        page.status = S::Translated;
+    } else if page.status == S::Translating {
+        page.status =
+            prev.unwrap_or(if page.bubbles.is_empty() { S::Idle } else { S::Detected });
+    }
     store.save_public()
 }
 
-/// Persist PageTranslation penuh sebagai translated (dipakai retry/export flow).
+/// Persist PageTranslation penuh + status jujur (dipakai retry/export flow).
 pub fn persist_translation(
     state: &AppState,
     page_id: &str,
     t: &PageTranslation,
 ) -> Result<(), String> {
-    let r = persist(state, page_id, t, "translated");
+    let r = persist_result(state, page_id, t);
     state.clear_cancel(page_id);
     state.take_prev(page_id);
     r
@@ -721,4 +794,102 @@ mod tests {
             bubbles: &bb, ordered: &[0], page_w: 100, page_h: 100, text: "nope", prev: None });
         assert!(r.is_err());
     }
+    fn tr_bubble(i: usize, t: &str) -> BubbleTranslation {
+        BubbleTranslation {
+            index: i, x: 0, y: 0, w: 10, h: 10, shape: None, layout: None,
+            font_size: None, original: "o".into(), reading: "".into(),
+            translated: t.into(), ai_original: "".into(), ai_reading: "".into(),
+            ai_translated: "".into(), needs_white_patch: false, is_user_edited: false,
+        }
+    }
+
+    fn tr_full(tr: &[&str]) -> Vec<BubbleTranslation> {
+        tr.iter().enumerate().map(|(i, t)| tr_bubble(i, t)).collect()
+    }
+
+    /// Seed translation + geometri langsung di store test.
+    fn seed_tr(st: &AppState, status: PageStatus, tr: Vec<BubbleTranslation>) {
+        let mut store = st.store.lock().unwrap();
+        let page = store.find_page_mut("p0").unwrap();
+        page.status = status;
+        page.bubbles = tr
+            .iter()
+            .map(|b| BubbleBox {
+                x: b.x, y: b.y, w: b.w, h: b.h, confidence: 1.0,
+                shape: None, kind: None, tail: None,
+            })
+            .collect();
+        page.translation = Some(PageTranslation {
+            page_id: "p0".into(), target_lang: "id".into(), style: "s".into(),
+            model: "m".into(), manual_done: false, bubbles: tr,
+        });
+    }
+
+    #[test]
+    fn partial_save_keeps_previous_status() {
+        let st = test_state_with_page("p0", PageStatus::Detected);
+        seed_tr(&st, PageStatus::Detected, tr_full(&["isi", ""]));
+        save_translation_inner(&st, "p0", tr_full(&["isi", ""])).unwrap();
+        assert_eq!(page_status_of(&st, "p0"), PageStatus::Detected);
+    }
+
+    #[test]
+    fn complete_save_marks_translated() {
+        let st = test_state_with_page("p0", PageStatus::Detected);
+        seed_tr(&st, PageStatus::Detected, tr_full(&["isi", ""]));
+        save_translation_inner(&st, "p0", tr_full(&["isi", "lengkap"])).unwrap();
+        assert_eq!(page_status_of(&st, "p0"), PageStatus::Translated);
+    }
+
+    #[test]
+    fn empty_manual_save_is_not_translated() {
+        let st = test_state_with_page("p0", PageStatus::Idle);
+        save_translation_inner(&st, "p0", vec![]).unwrap();
+        assert_eq!(page_status_of(&st, "p0"), PageStatus::Idle);
+    }
+
+    #[test]
+    fn mark_done_forces_translated_even_partial() {
+        let st = test_state_with_page("p0", PageStatus::Detected);
+        seed_tr(&st, PageStatus::Detected, tr_full(&["isi", ""]));
+        let out = mark_page_completed_inner(&st, "p0", true).unwrap();
+        assert!(out.manual_done);
+        assert_eq!(page_status_of(&st, "p0"), PageStatus::Translated);
+    }
+
+    #[test]
+    fn unmark_recomputes_from_data() {
+        let st = test_state_with_page("p0", PageStatus::Detected);
+        seed_tr(&st, PageStatus::Detected, tr_full(&["isi", ""]));
+        mark_page_completed_inner(&st, "p0", true).unwrap();
+        mark_page_completed_inner(&st, "p0", false).unwrap();
+        assert_eq!(page_status_of(&st, "p0"), PageStatus::Detected);
+    }
+
+    #[test]
+    fn persist_partial_translating_restores_preclaim() {
+        let st = test_state_with_page("p0", PageStatus::Detected);
+        seed_tr(&st, PageStatus::Detected, tr_full(&["isi", ""]));
+        claim_page(&st, "p0").unwrap();
+        let t = st.store.lock().unwrap().find_page("p0").unwrap().translation.clone().unwrap();
+        persist_result(&st, "p0", &t).unwrap();
+        assert_eq!(page_status_of(&st, "p0"), PageStatus::Detected);
+    }
+
+    #[test]
+    fn persist_sticky_manual_survives_retranslate() {
+        let st = test_state_with_page("p0", PageStatus::Detected);
+        seed_tr(&st, PageStatus::Detected, tr_full(&["isi", ""]));
+        mark_page_completed_inner(&st, "p0", true).unwrap();
+        claim_page(&st, "p0").unwrap();
+        let fresh = PageTranslation {
+            page_id: "p0".into(), target_lang: "id".into(), style: "s".into(),
+            model: "m2".into(), manual_done: false, bubbles: tr_full(&["baru", ""]),
+        };
+        persist_result(&st, "p0", &fresh).unwrap();
+        let pg = st.store.lock().unwrap().find_page("p0").unwrap();
+        assert!(pg.translation.as_ref().unwrap().manual_done);
+        assert_eq!(pg.status, PageStatus::Translated);
+    }
+
 }

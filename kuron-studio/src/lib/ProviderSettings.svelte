@@ -7,7 +7,7 @@
   import Button from "./ui/Button.svelte";
   import Field from "./ui/Field.svelte";
   import Panel from "./ui/Panel.svelte";
-  import Select from "./ui/Select.svelte";
+  import Lov from "./ui/Lov.svelte";
 
   interface Props {
     onClose: () => void;
@@ -222,13 +222,12 @@
     </h3>
 
     <div class="grid grid-cols-2 gap-4">
-      <Select
+      <Lov
         label="Type"
-        bind:value={fType}
-        onchange={(e) => pickType((e.target as HTMLSelectElement).value as AiProviderType)}
-      >
-        {#each PROVIDER_TYPES as t (t.value)}<option value={t.value}>{t.label}</option>{/each}
-      </Select>
+        value={fType}
+        onchange={(v) => pickType(v as AiProviderType)}
+        options={PROVIDER_TYPES}
+      />
       <Field
         label="Nama"
         bind:value={fName}
@@ -268,16 +267,12 @@
         <input type="checkbox" bind:checked={visionOnly} class="accent-current" />
         {$t("visionOnlyFilter")}
       </label>
-      <Select
+      <Lov
         label="Model tersedia"
         value={fModel}
-        onchange={(e) => (fModel = (e.target as HTMLSelectElement).value)}
-      >
-        <option value="">— pilih dari daftar —</option>
-        {#each shownModels as m (m.id)}
-          <option value={m.id}>{m.label}{m.vision ? " · vision" : ""}</option>
-        {/each}
-      </Select>
+        onchange={(v) => (fModel = v)}
+        options={[{ value: "", label: "— pilih dari daftar —" }, ...shownModels.map((m) => ({ value: m.id, label: `${m.label}${m.vision ? " · vision" : ""}` }))]}
+      />
       {#if fModel}
         {@const hit = models.find((m) => m.id === fModel)}
         {#if !hit || !hit.vision}

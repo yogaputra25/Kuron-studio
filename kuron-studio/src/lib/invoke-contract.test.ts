@@ -42,6 +42,7 @@ const EXPECTED: Record<string, string[]> = {
   translate_page: ["input"],
   cancel_translate: ["page_id"],
   save_translation: ["page_id", "bubbles"],
+  mark_page_completed: ["page_id", "completed"],
   clear_cache: [],
   translate_batch: ["input"],
   retry_bubble: ["input"],

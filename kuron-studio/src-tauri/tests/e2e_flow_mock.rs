@@ -67,7 +67,7 @@ async fn translate_one(
         page_id: page_id.to_string(),
         target_lang: "Indonesian".into(),
         style: "standard".into(),
-        model: "m".into(),
+        model: "m".into(), manual_done: false,
         bubbles: mapped,
     }
 }

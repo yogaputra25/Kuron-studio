@@ -212,10 +212,84 @@ mod tests {
         assert_eq!(events[1].page_id, "p2");
         assert_eq!(events[1].message, "decode failed");
     }
+    use crate::commands::project::{Page, PageStatus, Project, ProjectStore};
+    use crate::translation::PageTranslation;
+
+    fn status_state(status: PageStatus, tr: Option<PageTranslation>) -> AppState {
+        let dir = std::env::temp_dir().join(format!(
+            "kuron-detect-status-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut store = ProjectStore::load(dir.clone()).unwrap();
+        let mut proj = Project::new("ch".into());
+        proj.id = "p".into();
+        proj.folders[0].pages = vec![Page {
+            id: "p0".into(),
+            path: "ch/001.png".into(),
+            width: 800,
+            height: 1200,
+            status,
+            bubbles: vec![],
+            translation: tr,
+        }];
+        store.projects.insert("p".into(), proj);
+        AppState {
+            store: std::sync::Mutex::new(store),
+            detect: DetectState::default(),
+            http: reqwest::Client::new(),
+            db: std::sync::Mutex::new(rusqlite::Connection::open_in_memory().unwrap()),
+            previews: std::sync::Mutex::new(crate::preview_cache::PreviewCaches::new()),
+            cancel: std::sync::Mutex::new(std::collections::HashSet::new()),
+            prev_status: std::sync::Mutex::new(std::collections::HashMap::new()),
+            data_dir: dir,
+        }
+    }
+
+    fn status_of(st: &AppState) -> PageStatus {
+        st.store.lock().unwrap().find_page("p0").unwrap().status.clone()
+    }
+
+    fn some_tr() -> PageTranslation {
+        PageTranslation {
+            page_id: "p0".into(),
+            target_lang: "id".into(),
+            style: "s".into(),
+            model: "m".into(),
+            manual_done: false,
+            bubbles: vec![],
+        }
+    }
+
+    #[test]
+    fn translated_survives_bubble_save() {
+        let st = status_state(PageStatus::Translated, Some(some_tr()));
+        persist_bubbles(&st, "p0", vec![box_at(1)]).unwrap();
+        assert_eq!(status_of(&st), PageStatus::Translated);
+    }
+
+    #[test]
+    fn untranslated_bubble_save_sets_detected() {
+        let st = status_state(PageStatus::Idle, None);
+        persist_bubbles(&st, "p0", vec![box_at(1)]).unwrap();
+        assert_eq!(status_of(&st), PageStatus::Detected);
+    }
+
+    #[test]
+    fn empty_bubble_save_sets_no_bubbles() {
+        let st = status_state(PageStatus::Idle, None);
+        persist_bubbles(&st, "p0", vec![]).unwrap();
+        assert_eq!(status_of(&st), PageStatus::NoBubbles);
+    }
+
 }
 
 /// Simpan bubble hasil edit canvas + update status page:
-/// >=1 bubble = detected, 0 = noBubbles.
+/// >=1 bubble = detected, 0 = noBubbles — kecuali halaman berterjemahan
+/// (status translated/translating dipertahankan, data terjemahan utuh).
 #[tauri::command(rename_all = "snake_case")]
 pub fn save_bubbles(
     state: State<'_, AppState>,
@@ -232,18 +306,23 @@ fn page_path_of(state: &State<'_, AppState>, page_id: &str) -> Result<String, St
 }
 
 fn persist_bubbles(
-    state: &State<'_, AppState>,
+    state: &AppState,
     page_id: &str,
     cleaned: Vec<BubbleBox>,
 ) -> Result<Vec<BubbleBox>, String> {
+    use crate::commands::project::PageStatus as S;
     let mut store = state.store.lock().map_err(|e| e.to_string())?;
     let page = store.find_page_mut(page_id).ok_or_else(|| format!("page not found: {page_id}"))?;
     page.bubbles = cleaned.clone();
-    page.status = if cleaned.is_empty() {
-        crate::commands::project::PageStatus::NoBubbles
-    } else {
-        crate::commands::project::PageStatus::Detected
-    };
+    // Status jujur: halaman berterjemahan tak didemosikan oleh edit geometri;
+    // in-flight Translating juga tak disentuh.
+    match page.status {
+        S::Translated if page.translation.is_some() => {}
+        S::Translating => {}
+        _ => {
+            page.status = if cleaned.is_empty() { S::NoBubbles } else { S::Detected };
+        }
+    }
     store.save_public()?;
     Ok(cleaned)
 }

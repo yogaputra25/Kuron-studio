@@ -42,7 +42,8 @@ Import folder/files/zip → Detect bubble (ONNX, per halaman)
   `ReviewGrid` (progres, QA, TM, ekspor), `BatchPanel`,
   `GlossaryPanel`, `ProviderSettings`, `DiagnosticsPanel`,
   `MoveDialog` (pindah halaman + LOV tujuan), `FolderChip`
-  (rename inline + hapus).
+  (rename inline + hapus), `ui/Lov` (satu-satunya dropdown —
+  tombol + search + listbox, dipakai semua form, ganti `Select`).
 - `i18n.ts`: id/en/zh, tombol header cycler, persist localStorage.
   `i18n.test.ts` gagal kalau ada key hilang di satu bahasa.
 - `app.css`: token `--ks-*` (netral warm, aksen coral, sekunder cyan),
@@ -65,10 +66,15 @@ Import folder/files/zip → Detect bubble (ONNX, per halaman)
     `move_pages` (`{moved, skipped}`, tolak no-op penuh).
     Guard siklus di `set_parent`; agregat/export selalu subtree.
   - `detect`: satu/Batch, status `detecting → detected/noBubbles`.
-    `bubble.rs::sanitize_bubbles`: buang nol-area, cap 500/page.
+    `save_bubbles` tak mendemosikan halaman berterjemahan
+    (page-status-truth). `bubble.rs::sanitize_bubbles`: buang nol-area,
+    cap 500/page.
   - `translate`: 5 provider BYOK (Gemini, OpenAI, Meta AI, Cohere,
     Custom), validate, `<15s`, status
     `translating/translated/failed`, retry per page/bubble.
+    `translated` hanya bila semua bubble terisi ATAU flag manual
+    (`mark_page_completed`, mis. SFX kosong); sebagian = status lama.
+    Load menormalisasi status gantung/overstated (page-status-truth).
     Preset hapus (OpenRouter/Zen/OpenCodeGo/ClinePass) terbaca sebagai
     Custom; label vision dari allowlist per provider (#26/#27).
     Model per-run: override opsional di tiap request translate

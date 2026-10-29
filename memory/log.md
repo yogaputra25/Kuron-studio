@@ -150,8 +150,35 @@ menyentuh baris lama).
 - Keputusan: override `None`/kosong = perilaku lama byte-for-byte; cache key pakai model hasil resolusi (hindari cache lintas-model basi); footer versi fallback kosong bila getVersion gagal (web preview).
 - Lanjut: user review → `/opsx:archive`.
 
+## 2026-10-30 — openspec page-status-truth untuk bug status Belum/Sudah
+
+- Kerja: Investigasi 3 pertanyaan status (Proses = transient detecting/translating saja; simpan detection timpa translated→detected di `detect.rs:242-245` + `EditorPanel.svelte:322`; klik bubble murni tak ubah status, yang memaksa translated = edit teks/auto-save/auto-push P9/isi-manual/retry 1 bubble). Buat openspec `page-status-truth` (proposal, tasks, specs `library/page-status`) — belum ada perubahan kode.
+- Hasil: 4 file baru di `openspec/changes/page-status-truth/`; verdict: dua-duanya bug (overwrite + coarse last-write-wins).
+- Keputusan: Done = semua bubble `translated` non-kosong; save_bubbles pertahankan translated bila translation ada; transient gantung dinormalisasi saat load; tanpa string i18n baru.
+- Lanjut: user review proposal → `/opsx:apply` (1.1→4.1) → gate penuh → archive.
+
+## 2026-10-30 — kunci keputusan mobile-home-drawer sebelum apply
+
+- Kerja: Tanya jawab 3 keputusan + cek `EditorPanel.svelte:630-699` (sudah viewport-aware via `columnMode`/`isNarrow`). Update openspec: drawer kiri, CTA Detect+Import berdampingan, scope termasuk audit header editor ≤360px (task §4 baru + skenario editor di `header-split`).
+- Hasil: `openspec validate mobile-home-drawer` hijau; Open Questions dikosongkan.
+- Keputusan: Drawer kiri (konsisten dropdown origin-kiri); 2 CTA tetap satu ketukan; editor tanpa drawer kedua (reuse pola, Save+Detect prioritas terlihat).
+- Lanjut: `/opsx:apply` task 1.1 (state `narrow` + test viewport).
+
+## 2026-10-30 — page-status-truth 4.1/4.1 (status jujur turunan data)
+
+- Kerja: Implement penuh openspec `page-status-truth`. Backend: `translation_complete` + `manual_done` di `PageTranslation`; `persist_result` dipakai apply_cached/store_result/persist_translation (sticky flag manual); `save_translation` + `persist_bubbles` guard; command `mark_page_completed`; normalisasi saat `ProjectStore::load`. Refactor `save_translation_inner`/`mark_page_completed_inner` (&AppState) agar unit-testable. Frontend: helper `statusAfterBubbleSave/statusAfterTranslationSave/translationComplete`, 4 mirror `onSaved`, tombol `markDone` + string 3 bahasa + `api.markPageCompleted` + kontrak. `ARCHITECTURE.md` §4 diperbarui.
+- Hasil: `cargo test` hijau (lib 136 + integrasi), clippy `-D warnings` bersih, `pnpm check` 0, `pnpm test` 435/435. 12 test Rust baru + `page-status.test.ts`. Test lama: `edit-stuck` D2 count 4→5 (jalur save baru), `markDone` dipindah sebelum `onKey` agar slice-2000-char test error-path tetap valid.
+- Keputusan: Done = semua terisi ATAU manual; sebagian tetap Belum (tak ada status baru); data lama dinormalisasi saat load; re-translate tak mencabut flag manual (sticky) — cabut hanya via unmark.
+- Lanjut: user review → smoke GUI skenario lapor (translate → simpan detection → tetap Sudah; mark done → Sudah lintas reload) → `/opsx:archive`.
 ## 2026-10-29 — Merge main (24 commit) ke feat/grid-preview-perf, tanpa fitur hilang
 
 - Kerja: Merge `origin/main` (PR #23–#32: provider rework, translate regroup, editor footer, dsb). Konflik hanya 2 file i18n (key `resultsExport` milik kita + `customPrompt*` milik main — digabung, `review` lama dibuang).
 - Verifikasi tidak ada yang hilang: diff vs HEAD hanya penambahan main (customPrompt/model pass-through); seluruh fitur kita utuh (Grid/List, sortir toolbar, scope ekspor, cache preview).
 - Hasil: `pnpm test` 417/417, `pnpm check` 0, `cargo test` 125 lulus, clippy bersih.
+
+## 2026-10-30 — amandemen page-status-truth §5 (kanban cermin status)
+
+- Kerja: User usul bucket kanban = status simpanan (idle/terdeteksi/translated/failed) ganti Belum/Proses/Sudah/Gagal. Amandemen ke change terbuka `page-status-truth` (bukan change baru, cegah bentrok): proposal What Changes + capability, spec requirement "Buckets mirror stored status" + 2 skenario, tasks §5 (5.1 bucket+rank, 5.2 key `kanbanDetected`, 5.3 gate ulang + screenshot). `translating` ikut data (lengkap/manual → Sudah, else Terdeteksi). `openspec validate` hijau.
+- Hasil: spec + tasks siap review; belum ada perubahan kode (§5 unchecked).
+- Keputusan: Bucket Proses dihapus dari kanban; progres operasi tetap di panel progres. Urutan sortir Belum–Terdeteksi–Sudah–Gagal.
+- Lanjut: user review §5 → apply 5.1–5.3 → gate → archive.

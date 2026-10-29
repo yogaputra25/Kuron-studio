@@ -68,6 +68,20 @@ pub struct PageTranslation {
     pub model: String,
     #[serde(default)]
     pub bubbles: Vec<BubbleTranslation>,
+    /// Tandai-selesai manual: Sudah walau sebagian bubble kosong (mis. SFX
+    /// yang memang sengaja dikosongkan). Dihormati completeness + load.
+    #[serde(default)]
+    pub manual_done: bool,
+}
+
+/// Lengkap = manual ATAU semua bubble ada isi terjemahan (non-blank).
+/// Bubble kosong = belum diterjemahkan; vec kosong tak pernah lengkap.
+pub fn translation_complete(t: &PageTranslation) -> bool {
+    if t.manual_done {
+        return true;
+    }
+    !t.bubbles.is_empty()
+        && t.bubbles.iter().all(|b| !b.translated.trim().is_empty())
 }
 
 /// Wide box or >25% page area needs white patch before typeset.
@@ -285,7 +299,7 @@ mod tests {
     #[test]
     fn edits_preserved() {
         let mk = |o: &str, r: &str, t: &str, e: bool| BubbleTranslation { index: 0, x: 0, y: 0, w: 10, h: 10, shape: None, layout: None, font_size: None, original: o.into(), reading: r.into(), translated: t.into(), ai_original: "ai-O".into(), ai_reading: "ai-R".into(), ai_translated: "ai".into(), needs_white_patch: false, is_user_edited: e };
-        let prev = PageTranslation { page_id: "p".into(), target_lang: "id".into(), style: "".into(), model: "".into(), bubbles: vec![mk("manual-O", "manual-R", "user", true)] };
+        let prev = PageTranslation { page_id: "p".into(), target_lang: "id".into(), style: "".into(), model: "".into(), manual_done: false, bubbles: vec![mk("manual-O", "manual-R", "user", true)] };
         let out = preserve_user_edits(vec![mk("ai-O", "ai-R", "ai", false)], Some(&prev));
         assert_eq!(out[0].original, "manual-O");
         assert_eq!(out[0].reading, "manual-R");
@@ -296,7 +310,7 @@ mod tests {
     #[test]
     fn unedited_bubbles_still_update() {
         let mk = |i: usize, t: &str, e: bool| BubbleTranslation { index: i, x: 0, y: 0, w: 10, h: 10, shape: None, layout: None, font_size: None, original: format!("o{i}"), reading: "".into(), translated: t.into(), ai_original: format!("o{i}"), ai_reading: "".into(), ai_translated: t.into(), needs_white_patch: false, is_user_edited: e };
-        let prev = PageTranslation { page_id: "p".into(), target_lang: "id".into(), style: "".into(), model: "".into(), bubbles: vec![mk(0, "keep", true), mk(1, "old", false)] };
+        let prev = PageTranslation { page_id: "p".into(), target_lang: "id".into(), style: "".into(), model: "".into(), manual_done: false, bubbles: vec![mk(0, "keep", true), mk(1, "old", false)] };
         let out = preserve_user_edits(vec![mk(0, "ai0", false), mk(1, "ai1", false)], Some(&prev));
         assert_eq!(out[0].translated, "keep");
         assert!(out[0].is_user_edited);
@@ -309,7 +323,7 @@ mod tests {
         // Edited bubble: ai* lama dipertahankan, bukan AI baru yg ditolak.
         let old = BubbleTranslation { index: 0, x: 0, y: 0, w: 10, h: 10, shape: None, layout: None, font_size: None, original: "manual".into(), reading: "mr".into(), translated: "user".into(), ai_original: "BASE-O".into(), ai_reading: "BASE-R".into(), ai_translated: "BASE".into(), needs_white_patch: false, is_user_edited: true };
         let fresh = BubbleTranslation { index: 0, x: 0, y: 0, w: 10, h: 10, shape: None, layout: None, font_size: None, original: "new-O".into(), reading: "new-R".into(), translated: "new".into(), ai_original: "new-O".into(), ai_reading: "new-R".into(), ai_translated: "new".into(), needs_white_patch: false, is_user_edited: false };
-        let prev = PageTranslation { page_id: "p".into(), target_lang: "id".into(), style: "".into(), model: "".into(), bubbles: vec![old] };
+        let prev = PageTranslation { page_id: "p".into(), target_lang: "id".into(), style: "".into(), model: "".into(), manual_done: false, bubbles: vec![old] };
         let out = preserve_user_edits(vec![fresh], Some(&prev));
         assert_eq!(out[0].translated, "user");
         assert_eq!(out[0].ai_translated, "BASE");
@@ -326,6 +340,17 @@ mod tests {
         assert!(out[0].is_user_edited);
         assert_eq!(out[0].ai_translated, "AI");
         assert_eq!(out[0].ai_original, "AI-O");
+    }
+
+    #[test]
+    fn complete_iff_all_filled_or_manual() {
+        let b = |t: &str| BubbleTranslation { index: 0, x: 0, y: 0, w: 10, h: 10, shape: None, layout: None, font_size: None, original: "o".into(), reading: "".into(), translated: t.into(), ai_original: "".into(), ai_reading: "".into(), ai_translated: "".into(), needs_white_patch: false, is_user_edited: false };
+        let pt = |bubbles: Vec<BubbleTranslation>, manual_done: bool| PageTranslation { page_id: "p".into(), target_lang: "id".into(), style: "".into(), model: "".into(), manual_done, bubbles };
+        assert!(translation_complete(&pt(vec![b("a"), b("b")], false)));
+        assert!(!translation_complete(&pt(vec![b("a"), b("  ")], false)));
+        assert!(!translation_complete(&pt(vec![], false)));
+        assert!(translation_complete(&pt(vec![], true)));
+        assert!(translation_complete(&pt(vec![b("a"), b("")], true)));
     }
 
     #[test]

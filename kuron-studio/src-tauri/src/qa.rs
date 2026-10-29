@@ -136,7 +136,7 @@ mod tests {
     fn pt(bs: Vec<BubbleTranslation>) -> PageTranslation {
         PageTranslation {
             page_id: "p".into(), target_lang: "id".into(), style: "s".into(),
-            model: "m".into(), bubbles: bs,
+            model: "m".into(), manual_done: false, bubbles: bs,
         }
     }
 

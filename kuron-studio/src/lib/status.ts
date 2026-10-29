@@ -69,6 +69,37 @@ export function sortPagesByBubbles(pages: Page[], dir: 1 | -1 = 1): Page[] {
     .map(({ p }) => p);
 }
 
+/** Bubble terjemahan minimal: cukup field `translated` untuk completeness. */
+export interface TrBubble {
+  translated: string;
+}
+
+/** Lengkap = flag manual ATAU semua bubble ada isi (non-blank). */
+export function translationComplete(bubbles: TrBubble[], manualDone?: boolean): boolean {
+  if (manualDone) return true;
+  return bubbles.length > 0 && bubbles.every((b) => b.translated.trim() !== "");
+}
+
+/**
+ * Status setelah simpan geometri bubble (mirror `persist_bubbles` backend):
+ * halaman berterjemahan tak didemosikan; tanpa terjemahan ikut jumlah bubble.
+ */
+export function statusAfterBubbleSave(prev: PageStatus, hasTranslation: boolean, count: number): PageStatus {
+  if (hasTranslation && (prev === "translated" || prev === "translating")) return prev;
+  return count > 0 ? "detected" : "noBubbles";
+}
+
+/**
+ * Status setelah simpan terjemahan (mirror `persist_result` backend):
+ * lengkap → translated; sebagian → status lama (transient translating
+ * jatuh ke detected — backend memakai stash pra-klaim bila ada).
+ */
+export function statusAfterTranslationSave(prev: PageStatus, bubbles: TrBubble[], manualDone?: boolean): PageStatus {
+  if (translationComplete(bubbles, manualDone)) return "translated";
+  if (prev === "translating") return "detected";
+  return prev;
+}
+
 /** Nama file dari path (`a/b/c.jpg` → `c.jpg`). */
 export function fileName(path: string): string {
   return path.split(/[/\\]/).pop() ?? path;
