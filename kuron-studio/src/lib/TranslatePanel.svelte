@@ -5,8 +5,7 @@
   import type { AiModelOption, MosaicQuality, PageTranslation, ProviderView, ReadingDirection, TranslateStyle } from "./types";
   import { t } from "./i18n";
   import Button from "./ui/Button.svelte";
-
-  import Select from "./ui/Select.svelte";
+  import Lov from "./ui/Lov.svelte";
 
   export interface TranslateOpts {
     targetLang: string;
@@ -140,36 +139,27 @@
   </h3>
 
   <div class="space-y-4">
-    <Select
+    <Lov
       label="Provider"
       value={providerId}
-      onchange={(e) => onProviderChange((e.target as HTMLSelectElement).value)}
+      onchange={(v) => onProviderChange(v)}
       hint={providerId ? undefined : "Wajib pilih provider sebelum translate."}
-    >
-      <option value="">— pilih —</option>
-      {#each providers as p (p.id)}<option value={p.id}>{p.name} ({p.model})</option>{/each}
-    </Select>
+      options={[{ value: "", label: "— pilih —" }, ...providers.map((p) => ({ value: p.id, label: `${p.name} (${p.model})` }))]}
+    />
 
     {#if providerId}
-      <Select
+      <Lov
         label="Model"
         value={model}
-        onchange={(e) => (model = (e.target as HTMLSelectElement).value)}
+        onchange={(v) => (model = v)}
         hint={modelsMsg}
-      >
-        {#each models as m (m.id)}
-          <option value={m.id}>{m.label}{m.vision ? " · vision" : ""}</option>
-        {/each}
-      </Select>
+        options={models.map((m) => ({ value: m.id, label: `${m.label}${m.vision ? " · vision" : ""}` }))}
+      />
     {/if}
 
     <div class="grid grid-cols-2 gap-3">
-      <Select label="Target" bind:value={targetLang}>
-        {#each TARGET_LANGS as l (l.value)}<option value={l.value}>{l.label}</option>{/each}
-      </Select>
-      <Select label="Style" bind:value={style}>
-        {#each TRANSLATE_STYLES as s (s.value)}<option value={s.value}>{s.label}</option>{/each}
-      </Select>
+      <Lov label="Target" value={targetLang} onchange={(v) => (targetLang = v)} options={TARGET_LANGS} />
+      <Lov label="Style" value={style} onchange={(v) => (style = v as TranslateStyle)} options={TRANSLATE_STYLES} />
     </div>
 
     <details class="group rounded-md border border-line bg-surface-2/60">
@@ -181,14 +171,13 @@
       </summary>
       <div class="space-y-4 border-t border-line px-3 py-3">
         <div class="grid grid-cols-2 gap-3">
-          <Select
+          <Lov
             label="Mosaic"
-            bind:value={mosaicQuality}
+            value={mosaicQuality}
+            onchange={(v) => (mosaicQuality = v as MosaicQuality)}
             hint={mosaicQuality === "low" ? "±1MB, 75 quality" : "±2MB, 85 quality"}
-          >
-            <option value="low">low</option>
-            <option value="high">high</option>
-          </Select>
+            options={[{ value: "low", label: "low" }, { value: "high", label: "high" }]}
+          />
           <!-- Checkbox disejajarkan dengan control Mosaic (h-9) supaya tepinya
                rata — label::before pseudo-elemen memberi tinggi yang sama. -->
           <label

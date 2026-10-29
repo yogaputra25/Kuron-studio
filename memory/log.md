@@ -132,3 +132,10 @@ menyentuh baris lama).
 - Hasil: `cargo test` hijau, clippy 0, `pnpm test` 416/416, `pnpm check` 0. `openspec validate` hijau, tasks 7/7.
 - Keputusan: override `None`/kosong = perilaku lama byte-for-byte; cache key pakai model hasil resolusi (hindari cache lintas-model basi); footer versi fallback kosong bila getVersion gagal (web preview).
 - Lanjut: user review → `/opsx:archive`.
+
+## 2026-10-30 — openspec page-status-truth untuk bug status Belum/Sudah
+
+- Kerja: Investigasi 3 pertanyaan status (Proses = transient detecting/translating saja; simpan detection timpa translated→detected di `detect.rs:242-245` + `EditorPanel.svelte:322`; klik bubble murni tak ubah status, yang memaksa translated = edit teks/auto-save/auto-push P9/isi-manual/retry 1 bubble). Buat openspec `page-status-truth` (proposal, tasks, specs `library/page-status`) — belum ada perubahan kode.
+- Hasil: 4 file baru di `openspec/changes/page-status-truth/`; verdict: dua-duanya bug (overwrite + coarse last-write-wins).
+- Keputusan: Done = semua bubble `translated` non-kosong; save_bubbles pertahankan translated bila translation ada; transient gantung dinormalisasi saat load; tanpa string i18n baru.
+- Lanjut: user review proposal → `/opsx:apply` (1.1→4.1) → gate penuh → archive.

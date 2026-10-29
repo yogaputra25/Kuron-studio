@@ -49,10 +49,10 @@ describe("ui/Field meneruskan value ke input (controlled)", () => {
 });
 
 describe("primitif lain juga meneruskan value", () => {
-  it("ui/Select mengikat bind:value di <select>", () => {
-    const sel = readFileSync(join(SRC, "lib/ui/Select.svelte"), "utf8");
-    const tag = sel.slice(sel.indexOf("<select"));
-    expect(tag.slice(0, 400)).toMatch(/bind:value/);
+  it("ui/Lov meneruskan pilihan via onchange (tanpa $bindable yang dibuang)", () => {
+    const lov = readFileSync(join(SRC, "lib/ui/Lov.svelte"), "utf8");
+    expect(lov).not.toMatch(/\$bindable/);
+    expect(lov).toContain("onchange?.(");
   });
 });
 

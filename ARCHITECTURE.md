@@ -42,7 +42,8 @@ Import folder/files/zip → Detect bubble (ONNX, per halaman)
   `ReviewGrid` (progres, QA, TM, ekspor), `BatchPanel`,
   `GlossaryPanel`, `ProviderSettings`, `DiagnosticsPanel`,
   `MoveDialog` (pindah halaman + LOV tujuan), `FolderChip`
-  (rename inline + hapus).
+  (rename inline + hapus), `ui/Lov` (satu-satunya dropdown —
+  tombol + search + listbox, dipakai semua form, ganti `Select`).
 - `i18n.ts`: id/en/zh, tombol header cycler, persist localStorage.
   `i18n.test.ts` gagal kalau ada key hilang di satu bahasa.
 - `app.css`: token `--ks-*` (netral warm, aksen coral, sekunder cyan),

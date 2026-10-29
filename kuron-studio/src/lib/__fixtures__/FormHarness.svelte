@@ -1,10 +1,10 @@
 <script lang="ts">
   import Field from "../ui/Field.svelte";
-  import Select from "../ui/Select.svelte";
+  import Lov from "../ui/Lov.svelte";
 
-  // Reproduksi persis alur ProviderSettings: `bind:value` + error dibersihkan
-  // lewat `oninput`. Kalau binding putus, "Nama wajib diisi." muncul walau
-  // input penuh teks (bug screenshot 2026-09-28).
+  // Reproduksi persis alur ProviderSettings: `value` + `onchange` + error
+  // dibersihkan lewat `oninput`. Kalau wiring putus, "Nama wajib diisi."
+  // muncul walau input penuh teks (bug screenshot 2026-09-28).
 
   let name = $state("");
   let ptype = $state("");
@@ -32,11 +32,16 @@
   oninput={() => (error = "")}
 />
 
-<Select label="Tipe" bind:value={ptype}>
-  <option value="">— pilih —</option>
-  <option value="openai">openai</option>
-  <option value="anthropic">anthropic</option>
-</Select>
+<Lov
+  label="Tipe"
+  value={ptype}
+  onchange={(v) => (ptype = v)}
+  options={[
+    { value: "", label: "— pilih —" },
+    { value: "openai", label: "openai" },
+    { value: "anthropic", label: "anthropic" },
+  ]}
+/>
 
 <button data-testid="save" onclick={save}>Simpan</button>
 
