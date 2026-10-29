@@ -53,13 +53,13 @@ const STR: Record<string, Record<Lang, string>> = {
   },
   batch: { en: "Batch", id: "Batch", zh: "批量" },
   glossary: { en: "Glossary", id: "Glossary", zh: "术语表" },
+  resultsExport: { en: "Results & Export", id: "Hasil & Ekspor", zh: "结果与导出" },
   customPrompt: { en: "Custom instructions", id: "Instruksi tambahan", zh: "自定义指令" },
   customPromptPh: {
     en: "e.g. casual tone, avoid the word 'you' plural… (max 2000 chars)",
     id: "cth: bahasa santai, hindari kata 'kau'… (maks 2000 char)",
     zh: "例如：口语化，避免某词……（最多2000字符）",
   },
-  review: { en: "Review", id: "Review", zh: "审阅" },
   detectAll: { en: "Detect all", id: "Detect semua", zh: "全部检测" },
   importFolder: { en: "Import folder", id: "Import folder", zh: "导入文件夹" },
   importFiles: { en: "Import files", id: "Import files", zh: "导入文件" },
@@ -194,6 +194,10 @@ const STR: Record<string, Record<Lang, string>> = {
   sortName: { en: "Name", id: "Nama", zh: "名称" },
   sortStatus: { en: "Status", id: "Status", zh: "状态" },
   sortBubbles: { en: "Bubbles", id: "Bubble", zh: "气泡" },
+  exportScope: { en: "Scope", id: "Cakupan", zh: "范围" },
+  exportScopeFolder: { en: "This folder", id: "Folder ini", zh: "此文件夹" },
+  exportScopeSelected: { en: "Selected", id: "Yang dipilih", zh: "已选" },
+  exportScopeEmpty: { en: "Select pages in the grid first", id: "Pilih halaman di grid dulu", zh: "请先在网格中选择页面" },
 };
 
 export const t = derived(lang, ($l) => (k: string): string => STR[k]?.[$l] ?? k);

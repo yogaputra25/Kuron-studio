@@ -85,6 +85,23 @@ menyentuh baris lama).
 - Keputusan: kolom ukuran = dimensi `WxH` (tanpa byte, tanpa backend) — opsi A sesuai pilihan user.
 - Lanjut: smoke keyboard-only + narrow viewport (3.3), E2E 52/200 halaman (4.3) — butuh GUI + data nyata.
 
+## 2026-10-29 — Arsip grid-sort 9/9 + sync spec (isu #25)
+
+- Kerja: Sync `openspec/specs/grid-sort/spec.md` baru (3 requirement ADDED verbatim; Purpose TBD). Arsip ke `archive/2026-10-29-grid-sort/`.
+- Hasil: Valid strict hijau. Semua artifact done, semua task complete.
+- Lanjut: —
+
+## 2026-10-29 — export-scope 10/11 (filter folder + ekspor terpilih + hapus tab QA/TM)
+
+- Kerja: Filter folder di Hasil & Ekspor + `folder_id` diteruskan; `page_ids` opsional di `export_project` + `select_pages` tunggal (skip terhitung, urutan input); scope "Semua/Folder/Yang dipilih" + hint; QA/TM dihapus dari panel (backend utuh); i18n `exportScope*` 3 bahasa.
+- Hasil: `pnpm test` 405/405, `pnpm check` 0, `cargo test` 116 lulus (termasuk `select_pages_subset_skips_missing` + `pages_in_selection_order_and_skips_missing`), clippy bersih. Kontrak invoke diperbarui (tambah `page_ids`).
+- Lanjut: smoke 3.3 (455 baris → filter folder → ekspor folder/terpilih/skip; mobile).
+
+## 2026-10-29 — export-scope: breadcrumb folder ganda (temuan user, 455 hlm)
+
+- Kerja: Filter folder menampilkan breadcrumb (`default / bleach`) untuk folder bersarang via `folderPath()`; berlaku juga di label scope ekspor. Tanpa sentuh data.
+- Akar: data user memang berisi 2 folder beda bernama "bleach" (1 root + 1 di dalam default, isi halaman berbeda) — bukan bug hitung. UI lama menampilkan nama datar sehingga terlihat duplikat.
+- Hasil: `pnpm test` 405/405, `pnpm check` 0 error.
 ## 2026-10-29 — custom prompt / instruksi tambahan translate (fokus bahasa output)
 
 - Kerja: `append_custom` di `prompt.rs` (cap 2000 char, char-boundary, format JSON tetap wajib) + test; `custom_prompt` masuk `TranslatePageInput/BatchInput/RetryBubbleInput` → `PrepOpts` → prompt + `CacheKey`; frontend: textarea di `TranslatePanel`, `customPrompt` di `TranslateOpts/BatchOpts/TranslateBatchInput/RetryBubbleInput/TranslatePageArgs`, teruskan di translatePage/BatchPanel/ReviewGrid (retry page+bubble); i18n `customPrompt/customPromptPh` 3 bahasa + test list. Sampingan: hapus import tak terpakai di `panel-tablet.test.ts` (pre-existing, `pnpm check` merah).
@@ -132,3 +149,9 @@ menyentuh baris lama).
 - Hasil: `cargo test` hijau, clippy 0, `pnpm test` 416/416, `pnpm check` 0. `openspec validate` hijau, tasks 7/7.
 - Keputusan: override `None`/kosong = perilaku lama byte-for-byte; cache key pakai model hasil resolusi (hindari cache lintas-model basi); footer versi fallback kosong bila getVersion gagal (web preview).
 - Lanjut: user review → `/opsx:archive`.
+
+## 2026-10-29 — Merge main (24 commit) ke feat/grid-preview-perf, tanpa fitur hilang
+
+- Kerja: Merge `origin/main` (PR #23–#32: provider rework, translate regroup, editor footer, dsb). Konflik hanya 2 file i18n (key `resultsExport` milik kita + `customPrompt*` milik main — digabung, `review` lama dibuang).
+- Verifikasi tidak ada yang hilang: diff vs HEAD hanya penambahan main (customPrompt/model pass-through); seluruh fitur kita utuh (Grid/List, sortir toolbar, scope ekspor, cache preview).
+- Hasil: `pnpm test` 417/417, `pnpm check` 0, `cargo test` 125 lulus, clippy bersih.
