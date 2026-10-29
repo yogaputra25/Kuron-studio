@@ -23,6 +23,7 @@ pub struct CacheKey<'a> {
     pub skip_sfx: bool,
     pub reading_dir: &'a str,
     pub glossary: Option<&'a str>,
+    pub custom_prompt: Option<&'a str>,
 }
 
 pub fn cache_key(job: CacheKey<'_>) -> String {
@@ -36,6 +37,7 @@ pub fn cache_key(job: CacheKey<'_>) -> String {
     h.update(job.reading_dir.as_bytes());
     // Normalize: None/""/whitespace all map to empty so key is stable.
     h.update(job.glossary.unwrap_or("").trim().as_bytes());
+    h.update(job.custom_prompt.unwrap_or("").trim().as_bytes());
     format!("{:x}", h.finalize())
 }
 
@@ -138,6 +140,7 @@ mod tests {
             skip_sfx,
             reading_dir,
             glossary,
+            custom_prompt: None,
         })
     }
 
@@ -160,6 +163,26 @@ mod tests {
         assert_ne!(base, key(true, "rtl", Some("A=B")));
         // Glossary None vs blank is the same input.
         assert_eq!(base, key(true, "rtl", Some("  ")));
+    }
+
+    #[test]
+    fn key_covers_custom_prompt() {
+        let base = key(true, "rtl", None);
+        let with = |c: Option<&str>| {
+            cache_key(CacheKey {
+                image: b"img",
+                bubbles_json: "[]",
+                target_lang: "id",
+                style: "standard",
+                model: "m",
+                skip_sfx: true,
+                reading_dir: "rtl",
+                glossary: None,
+                custom_prompt: c,
+            })
+        };
+        assert_ne!(base, with(Some("bahasa santai")));
+        assert_eq!(base, with(Some("  ")));
     }
 
     #[test]

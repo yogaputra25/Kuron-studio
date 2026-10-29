@@ -98,6 +98,7 @@
         skipSfx: opts.skipSfx,
         mosaicQuality: opts.mosaicQuality,
         readingDirection: opts.readingDirection,
+        ...(opts.customPrompt ? { customPrompt: opts.customPrompt } : {}),
       });
       onRefresh();
     } catch (e) {
@@ -163,6 +164,7 @@
         skipSfx: opts.skipSfx,
         mosaicQuality: opts.mosaicQuality,
         readingDirection: opts.readingDirection,
+        ...(opts.customPrompt ? { customPrompt: opts.customPrompt } : {}),
       });
       onRefresh();
     } catch (e) {

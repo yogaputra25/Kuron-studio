@@ -53,6 +53,12 @@ const STR: Record<string, Record<Lang, string>> = {
   },
   batch: { en: "Batch", id: "Batch", zh: "批量" },
   glossary: { en: "Glossary", id: "Glossary", zh: "术语表" },
+  customPrompt: { en: "Custom instructions", id: "Instruksi tambahan", zh: "自定义指令" },
+  customPromptPh: {
+    en: "e.g. casual tone, avoid the word 'you' plural… (max 2000 chars)",
+    id: "cth: bahasa santai, hindari kata 'kau'… (maks 2000 char)",
+    zh: "例如：口语化，避免某词……（最多2000字符）",
+  },
   review: { en: "Review", id: "Review", zh: "审阅" },
   detectAll: { en: "Detect all", id: "Detect semua", zh: "全部检测" },
   importFolder: { en: "Import folder", id: "Import folder", zh: "导入文件夹" },

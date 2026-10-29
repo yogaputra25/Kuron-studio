@@ -5,6 +5,8 @@ const KEYS = [
   "providers",
   "batch",
   "glossary",
+  "customPrompt",
+  "customPromptPh",
   "review",
   "detectAll",
   "importFolder",

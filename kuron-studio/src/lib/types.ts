@@ -200,6 +200,7 @@ export interface TranslatePageArgs {
   mosaicQuality: MosaicQuality;
   readingDirection: ReadingDirection;
   glossary?: string;
+  customPrompt?: string;
 }
 
 export const PROVIDER_TYPES: { value: AiProviderType; label: string; needsKey: boolean }[] = [
@@ -253,6 +254,7 @@ export interface BatchOpts {
   skipSfx: boolean;
   mosaicQuality: MosaicQuality;
   readingDirection: ReadingDirection;
+  customPrompt: string;
 }
 
 export interface TranslateBatchInput {
@@ -264,6 +266,7 @@ export interface TranslateBatchInput {
   mosaicQuality: MosaicQuality;
   readingDirection: ReadingDirection;
   glossary?: string;
+  customPrompt?: string;
 }
 
 export interface RetryBubbleInput {
@@ -276,6 +279,7 @@ export interface RetryBubbleInput {
   mosaicQuality: MosaicQuality;
   readingDirection: ReadingDirection;
   glossary?: string;
+  customPrompt?: string;
 }
 
 export interface TranslateProgress {
