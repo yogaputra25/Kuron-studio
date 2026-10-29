@@ -158,3 +158,13 @@ describe("provider form: base_url tidak ditimpa diam-diam", () => {
   });
 });
 
+describe("provider form: filter vision + warning non-vision", () => {
+  it("daftar bisa difilter hanya-vision", () => {
+    expect(panel).toContain("visionOnly");
+  });
+
+  it("warning bila model dipilih non-vision atau tak dikenal di daftar", () => {
+    expect(panel).toMatch(/modelNoVisionWarn|modelUnknownWarn/);
+  });
+});
+

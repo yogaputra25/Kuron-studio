@@ -40,6 +40,17 @@ theme.subscribe((v) => {
 // ponytail: flat keys, no nesting/plural rules. Add a lang by copying one block.
 const STR: Record<string, Record<Lang, string>> = {
   providers: { en: "Providers", id: "Providers", zh: "服务商" },
+  visionOnlyFilter: { en: "Vision only", id: "Hanya vision", zh: "仅视觉" },
+  modelNoVisionWarn: {
+    en: "This model doesn't support images — translation may fail.",
+    id: "Model ini tidak mendukung gambar — translate bisa gagal.",
+    zh: "该模型不支持图片——翻译可能失败。",
+  },
+  modelUnknownWarn: {
+    en: "Model not in the list — if it isn't vision-capable, image translation may fail.",
+    id: "Model tidak ada di daftar — kalau bukan model vision, translate gambar bisa gagal.",
+    zh: "列表中没有该模型——若非视觉模型，图片翻译可能失败。",
+  },
   batch: { en: "Batch", id: "Batch", zh: "批量" },
   glossary: { en: "Glossary", id: "Glossary", zh: "术语表" },
   review: { en: "Review", id: "Review", zh: "审阅" },
