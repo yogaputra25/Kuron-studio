@@ -126,6 +126,15 @@ pub fn is_vision_capable(model_id: &str) -> bool {
     vision_capable(AiProviderType::Custom, model_id)
 }
 
+/// Model aktual untuk satu request: override non-kosong menang,
+/// bila kosong/absen pakai model tersimpan provider.
+pub fn effective_model(rec: &ProviderRecord, model_override: Option<&str>) -> String {
+    match model_override.map(str::trim).filter(|m| !m.is_empty()) {
+        Some(m) => m.to_string(),
+        None => rec.model.clone(),
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderRecord {
@@ -206,6 +215,21 @@ mod tests {
                 "legacy kapital {s}"
             );
         }
+    }
+    #[test]
+    fn effective_model_prefers_override() {
+        let rec = ProviderRecord {
+            id: "x".into(),
+            provider_type: AiProviderType::MetaAi,
+            name: "m".into(),
+            base_url: String::new(),
+            api_key: String::new(),
+            model: "simpanan".into(),
+        };
+        assert_eq!(effective_model(&rec, None), "simpanan");
+        assert_eq!(effective_model(&rec, Some("")), "simpanan");
+        assert_eq!(effective_model(&rec, Some("  ")), "simpanan");
+        assert_eq!(effective_model(&rec, Some("baru")), "baru");
     }
 
     #[test]
