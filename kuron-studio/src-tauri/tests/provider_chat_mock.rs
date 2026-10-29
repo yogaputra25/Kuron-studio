@@ -6,7 +6,6 @@ use std::net::TcpListener;
 use std::sync::mpsc;
 
 use kuron_studio_lib::provider::{cohere, gemini, openai};
-use kuron_studio_lib::provider::config::AiProviderType;
 
 fn read_request(s: &mut std::net::TcpStream) -> (String, String) {
     let mut raw = Vec::new();
