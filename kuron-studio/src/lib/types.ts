@@ -201,6 +201,7 @@ export interface TranslatePageArgs {
   readingDirection: ReadingDirection;
   glossary?: string;
   customPrompt?: string;
+  model?: string;
 }
 
 export const PROVIDER_TYPES: { value: AiProviderType; label: string; needsKey: boolean }[] = [

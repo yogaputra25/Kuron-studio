@@ -28,3 +28,20 @@ describe("translate-cancel (opsi B)", () => {
     expect(tr).toContain("if (!cancelled) busy = false");
   });
 });
+
+describe("translate model per-run (LOV sesi-saja)", () => {
+  it("pilih provider → auto list models, default = simpanan", () => {
+    expect(panelSrc).toContain("loadModelsFor(providerId)");
+    expect(panelSrc).toContain("api.listModels(pid)");
+    expect(panelSrc).toMatch(/models\.find\(\(m\) => m\.vision\)/);
+  });
+
+  it("model masuk opts + dikirim sebagai override", () => {
+    expect(panelSrc).toMatch(/interface TranslateOpts \{[\s\S]*?model: string/);
+    expect(panelSrc).toContain("model: model.trim()");
+  });
+
+  it("pilihan model tak menulis DB (tanpa saveProvider)", () => {
+    expect(panelSrc).not.toContain("saveProvider");
+  });
+});
