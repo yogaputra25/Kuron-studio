@@ -93,7 +93,9 @@ pub struct ProviderRecord {
 impl ProviderRecord {
     pub fn effective_base_url(&self) -> String {
         if !self.base_url.trim().is_empty() {
-            return self.base_url.trim().trim_end_matches('/').to_string();
+            let b = self.base_url.trim().trim_end_matches('/').to_string();
+            // Migrasi diam (#26): preset lama api.llama.com -> api.meta.ai.
+            return b.replace("api.llama.com", "api.meta.ai");
         }
         self.provider_type.default_base_url().to_string()
     }
@@ -131,6 +133,18 @@ mod tests {
         assert!(AiProviderType::Gemini.models_url("https://x").ends_with("/v1beta/models"));
         assert!(!AiProviderType::Custom.needs_key_for_listing());
         assert!(AiProviderType::MetaAi.needs_key_for_listing());
+    }
+    #[test]
+    fn legacy_meta_base_normalizes() {
+        let rec = ProviderRecord {
+            id: "x".into(),
+            provider_type: AiProviderType::MetaAi,
+            name: "m".into(),
+            base_url: "https://api.llama.com/v1".into(),
+            api_key: String::new(),
+            model: String::new(),
+        };
+        assert_eq!(rec.effective_base_url(), "https://api.meta.ai/v1");
     }
 
     #[test]
