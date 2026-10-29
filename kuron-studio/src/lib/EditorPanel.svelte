@@ -1057,7 +1057,7 @@ function setBubbleFontSize(v: number | null) {
           </section>
         {/if}
       </div>
-      <footer class="mt-auto border-t border-line px-4 py-2 text-center text-[10px] text-ink-3">
+      <footer class="mt-auto border-t border-line px-4 py-2.5 text-center text-sm font-semibold text-ink-3">
         Kuron Studio {appVersion ? `v${appVersion}` : ""}
       </footer>
     </aside>
