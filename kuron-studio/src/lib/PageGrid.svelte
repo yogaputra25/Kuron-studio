@@ -2,7 +2,7 @@
   import { fly } from "svelte/transition";
   import type { Action } from "svelte/action";
   import type { Page } from "./types";
-  import { fileName, parentFolder, sortPagesByName } from "./status";
+  import { fileName, parentFolder } from "./status";
   import StatusBadge from "./ui/StatusBadge.svelte";
   import { t } from "./i18n";
 
@@ -34,7 +34,8 @@
     observeCard,
   }: Props = $props();
 
-  const ordered = $derived(sortPagesByName(pages));
+  // grid-sort: pages datang terurut dari App (orderedPages).
+  const ordered = $derived(pages);
 </script>
 
 <section

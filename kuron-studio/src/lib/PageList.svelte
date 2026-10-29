@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Action } from "svelte/action";
   import type { Page } from "./types";
-  import { fileName, parentFolder, sortPagesByBubbles, sortPagesByName, sortPagesByStatus } from "./status";
+  import { fileName, parentFolder } from "./status";
   import StatusBadge from "./ui/StatusBadge.svelte";
   import { t } from "./i18n";
 
@@ -29,27 +29,11 @@
     observeCard,
   }: Props = $props();
 
-  type SortKey = "name" | "status" | "bubbles";
-  let sortKey = $state<SortKey>("name");
-  let sortDir = $state<1 | -1>(1);
   let focusIdx = $state(0);
   let rowEls: (HTMLElement | null)[] = $state([]);
 
-  const sorted = $derived.by(() => {
-    if (sortKey === "status") return sortPagesByStatus(pages, sortDir);
-    if (sortKey === "bubbles") return sortPagesByBubbles(pages, sortDir);
-    const list = sortPagesByName(pages);
-    return sortDir === 1 ? list : [...list].reverse();
-  });
-
-  function setSort(key: SortKey) {
-    if (sortKey === key) sortDir = sortDir === 1 ? -1 : 1;
-    else {
-      sortKey = key;
-      sortDir = 1;
-    }
-    focusIdx = 0;
-  }
+  // grid-sort: urutan datang dari App (orderedPages); fokus jepit saat daftar berubah.
+  const sorted = $derived(pages);
   function moveFocus(ni: number) {
     if (sorted.length === 0) return;
     const next = Math.min(sorted.length - 1, Math.max(0, ni));
@@ -86,21 +70,14 @@
     if (focusIdx >= sorted.length) focusIdx = Math.max(0, sorted.length - 1);
   });
 
-  const arrow = (key: SortKey) => (sortKey === key ? (sortDir === 1 ? " ▲" : " ▼") : "");
 </script>
 
 <div role="listbox" tabindex={-1} aria-label={$t("listView")} aria-orientation="vertical" onkeydown={onListKey} class="px-5 py-3 outline-none">
   <div class="sticky top-0 z-10 flex items-center gap-3 border-b border-line bg-bg px-2 py-1.5 text-[11px] font-semibold text-ink-3">
     <span class="w-6 shrink-0"></span>
-    <button class="min-w-0 flex-1 truncate text-left hover:text-ink" onclick={() => setSort("name")}>
-      {$t("sortName")}{arrow("name")}
-    </button>
-    <button class="hidden w-28 shrink-0 text-left hover:text-ink sm:block" onclick={() => setSort("status")}>
-      {$t("sortStatus")}{arrow("status")}
-    </button>
-    <button class="w-16 shrink-0 text-right hover:text-ink" onclick={() => setSort("bubbles")}>
-      {$t("sortBubbles")}{arrow("bubbles")}
-    </button>
+    <span class="min-w-0 flex-1 truncate text-left">{$t("sortName")}</span>
+    <span class="hidden w-28 shrink-0 text-left sm:block">{$t("sortStatus")}</span>
+    <span class="tnum w-16 shrink-0 text-right">{$t("sortBubbles")}</span>
     <span class="tnum hidden w-24 shrink-0 text-right font-mono text-[11px] text-ink-3 md:block">WxH</span>
   </div>
   {#each sorted as pg, i (pg.id)}

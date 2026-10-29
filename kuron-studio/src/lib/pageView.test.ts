@@ -23,13 +23,16 @@ describe("page grid/list split (page-list-view)", () => {
     expect(listSrc).toContain("$t(");
   });
 
-  it("list: header sortir + keyboard + baris aktif coral + skeleton", () => {
-    expect(listSrc).toContain("setSort");
+  it("list: header statis + keyboard + baris aktif coral + skeleton", () => {
+    // grid-sort D2: sortir milik App; header List statis, kontrol di toolbar.
+    expect(listSrc).not.toContain("setSort");
     expect(listSrc).toContain('role="listbox"');
     expect(listSrc).toContain("onkeydown");
     expect(listSrc).toContain("border-l-accent");
     expect(listSrc).toContain("animate-pulse");
     expect(listSrc).toContain("aria-selected");
+    expect(appSrc).toContain("setSortKey");
+    expect(appSrc).toContain('role="group"');
   });
 
   it("grid: prefix folder + outline pilihan + visual lama utuh", () => {
