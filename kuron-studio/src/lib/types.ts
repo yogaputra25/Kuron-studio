@@ -298,6 +298,16 @@ export interface TranslateProgress {
   message: string;
 }
 
+/// Event `detect_progress` dari Rust (`detect.rs`, camelCase): per halaman
+/// selesai, termasuk yang gagal (ok=false + message) agar batch bisa lanjut.
+
+export interface DetectProgress {
+  pageId: string;
+  done: number;
+  total: number;
+  ok: boolean;
+  message: string;
+}
 export type ExportFormat = "json" | "png" | "cbz" | "psd";
 
 // --- M5: TM + QA + share (kontrak Rust, serde rename_all camelCase) ---

@@ -3,6 +3,8 @@
   import { fly, scale } from "svelte/transition";
   import { open } from "@tauri-apps/plugin-dialog";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
+  import { listen } from "@tauri-apps/api/event";
+  import iconUrl from "../icon.svg";
   import { isMobile } from "./lib/device";
   import { api } from "./lib/api";
   import UpdateButton from "./lib/UpdateButton.svelte";
@@ -23,6 +25,9 @@
   import Onboarding from "./lib/Onboarding.svelte";
   import Snackbar from "./lib/ui/Snackbar.svelte";
   import StatusBadge from "./lib/ui/StatusBadge.svelte";
+  import DetectProgress from "./lib/DetectProgress.svelte";
+  import { initialDetectState, reduceDetectProgress, type DetectState } from "./lib/detectProgress";
+  import type { DetectProgress as DetectProgressEv } from "./lib/types";
   import DiagnosticsPanel from "./lib/DiagnosticsPanel.svelte";
   import { onInvoke } from "./lib/log";
   import { PREFETCH_MARGIN, PREVIEW_CONCURRENCY, pickNext } from "./lib/previewQueue";
@@ -45,6 +50,8 @@
   let heldSelect = false;
   let showMove = $state(false);
   let showProjMenu = $state(false);
+  // detect-ux-pack 3.1: satu tombol Import + menu pola switcher.
+  let showImportMenu = $state(false);
   let projQuery = $state("");
   let thumbs = $state<Record<string, string>>({});
   let fullUrls = $state<Record<string, string>>({});
@@ -68,6 +75,10 @@
   let thumbT0 = 0;
   let thumbFirstAt = 0;
   let thumbSamples: PreviewSample[] = [];
+  // detect-ux-pack D1: overlay progres non-blocking + guard generasi.
+  let detectState = $state<DetectState | null>(null);
+  let detectHidden = $state(false);
+  let detectGen = 0;
   let openError = $state("");
   let dragging = $state(false);
   let busy = $state(false);
@@ -496,18 +507,38 @@
   }
 
   async function detectAll() {
-    if (!current) return;
+    if (!current || scopedPages.length === 0) return;
+    const myGen = ++detectGen;
+    const ids = scopedPages.map((p) => p.id);
+    const names = new Map(scopedPages.map((p) => [p.id, fileName(p.path)]));
+    detectState = initialDetectState(ids.length);
+    detectHidden = false;
     busy = true;
     error = "";
+    const unlisten = await listen<DetectProgressEv>("detect_progress", (e) => {
+      if (myGen !== detectGen || !detectState) return;
+      detectState = reduceDetectProgress(detectState, {
+        ...e.payload,
+        file: names.get(e.payload.pageId) ?? "",
+      });
+    });
     try {
-      await api.detectBatch(scopedPages.map((p) => p.id));
+      await api.detectBatch(ids);
       const updated = await api.getProject(current.id);
+      if (myGen !== detectGen) return;
       projects = projects.map((p) => (p.id === current.id ? updated : p));
     } catch (e) {
-      error = String(e);
+      if (myGen === detectGen) error = String(e);
     } finally {
-      busy = false;
+      unlisten();
+      if (myGen === detectGen) busy = false;
     }
+  }
+
+  /** Tutup overlay: selesai → buang state; jalan → sembunyikan saja. */
+  function closeDetectOverlay() {
+    if (detectState?.finished) detectState = null;
+    else detectHidden = true;
   }
 
   async function importFolder() {
@@ -553,9 +584,13 @@
 
 <main class="flex min-h-screen flex-col bg-bg text-ink" data-theme={$theme}>
   {#if loaded && projects.length > 0}
-  <header class="sticky top-0 z-30 flex flex-wrap items-center gap-2 border-b border-line bg-surface/80 px-4 py-2 backdrop-blur-md">
-    <h1 class="font-display shrink-0 text-base font-semibold tracking-tight">Kuron Studio</h1>
-    <div class="h-5 w-px shrink-0 bg-line" aria-hidden="true"></div>
+  <header class="sticky top-0 z-30 border-b border-line bg-surface/80 backdrop-blur-md">
+    <div class="flex items-center gap-2 px-4 pt-2">
+      <img src={iconUrl} alt="Kuron Studio" class="size-6 shrink-0" />
+      <h1 class="font-display shrink-0 text-base font-semibold tracking-tight">Kuron Studio</h1>
+      <p class="hidden text-[11px] text-ink-3 sm:block">{$t("appTagline")}</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2 px-4 py-2">
     {#if projects.length > 0}
       {@const cur = current}
       {@const curSt = cur ? projectStats(cur) : null}
@@ -660,8 +695,50 @@
         onclick={detectAll}
         disabled={!current || busy || scopedPages.length === 0}
       >{$t("detectAll")}</Button>
-      {#if !isMobile}<Button variant="default" size="sm" onclick={importFolder} disabled={!current || busy}>{$t("importFolder")}</Button>{/if}
-      <Button variant="default" size="sm" onclick={importFiles} disabled={!current || busy}>{$t("importFiles")}</Button>
+      <div
+        class="relative"
+        onfocusout={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) showImportMenu = false; }}
+      >
+        <Button
+          variant="default"
+          size="sm"
+          onclick={() => (showImportMenu = !showImportMenu)}
+          onkeydown={(e) => { if (e.key === "Escape") showImportMenu = false; }}
+          disabled={!current || busy}
+          aria-haspopup="menu"
+          aria-expanded={showImportMenu}
+        >⬆ {$t("importAction")} ▾</Button>
+        {#if showImportMenu}
+          <div
+            class="absolute top-full z-50 mt-1 w-44 overflow-hidden rounded-md border border-line-strong bg-surface-2 py-1"
+            role="menu"
+            aria-label={$t("importAction")}
+          >
+            {#if !isMobile}
+              <button
+                class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-raised"
+                role="menuitem"
+                onclick={() => { showImportMenu = false; void importFolder(); }}
+                onkeydown={(e) => {
+                  if (e.key === "Escape") showImportMenu = false;
+                  if (e.key === "ArrowDown") (e.currentTarget.nextElementSibling as HTMLElement | null)?.focus();
+                }}
+              >📁 {$t("importFolder")}</button>
+            {/if}
+            <button
+              class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-raised"
+              role="menuitem"
+              onclick={() => { showImportMenu = false; void importFiles(); }}
+              onkeydown={(e) => {
+                if (e.key === "Escape") showImportMenu = false;
+                // iOS: folder picker tidak ada (FolderPickerNotImplemented) —
+                // opsi folder disembunyikan total, bukan disabled.
+                if (e.key === "ArrowUp") (e.currentTarget.previousElementSibling as HTMLElement | null)?.focus();
+              }}
+            >🖼️ {$t("importFiles")}</button>
+          </div>
+        {/if}
+      </div>
 
       {#if !isMobile}<div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>{/if}
 
@@ -694,6 +771,7 @@
           : "Diagnostics & log"}
         aria-label="Diagnostics"
       >⚙</Button>{/if}
+    </div>
     </div>
   </header>
   {/if}
@@ -984,6 +1062,9 @@
         />
       {/key}
     </div>
+  {/if}
+  {#if detectState && !detectHidden}
+    <DetectProgress state={detectState} onClose={closeDetectOverlay} />
   {/if}
 
   {#if showBatch && current && batchOpts}
