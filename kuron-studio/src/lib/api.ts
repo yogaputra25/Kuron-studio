@@ -106,8 +106,8 @@ export const api = {
     invoke<string | null>("glossary_context", { bubble_texts }),
 
   // --- M3: export (path = file utk json/cbz, dir utk png/psd) ---
-  exportProject: (project_id: string, format: ExportFormat, path: string, folder_id?: string | null) =>
-    invoke<string>("export_project", { project_id, format, path, folder_id: folder_id ?? null }),
+  exportProject: (project_id: string, format: ExportFormat, path: string, folder_id?: string | null, page_ids?: string[]) =>
+    invoke<string>("export_project", { project_id, format, path, folder_id: folder_id ?? null, page_ids: page_ids ?? null }),
 
   // --- M5: TM + QA + share ---
   tmSearch: (query: string, limit = 10) =>

@@ -740,7 +740,7 @@
         size="sm"
         onclick={() => (showReview = true)}
         disabled={!current}
-      >{$t("review")}</Button>
+      >{$t("resultsExport")}</Button>
 
       <div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>
 
@@ -1158,6 +1158,7 @@
     <ReviewGrid
       project={cur}
       opts={batchOpts}
+      selectedIds={selectedIds}
       onRefresh={() => { void refreshProject(cur.id); }}
       onClose={() => (showReview = false)}
     />

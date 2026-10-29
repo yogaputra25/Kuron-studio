@@ -494,12 +494,34 @@ pub fn render_page_png(
     Ok(out)
 }
 
-/// Halaman project dalam filename order → (nama_file, PNG bytes).
+/// Hasil koleksi halaman + jumlah id terpilih yang hilang (skip, bukan gagal).
+pub type CollectedPages = (Vec<(String, Vec<u8>)>, usize);
+
+/// Satu jalur koleksi halaman untuk semua format (export-scope D2).
+/// Prioritas: `page_ids` eksplisit > `folder_id` > semua. Id hilang → skip + hitung.
+/// `skipped` = id diminta tapi tak ada di store (bukan halaman tanpa terjemahan —
+/// itu tetap diskip diam-diam seperti sebelumnya oleh tiap jalur render).
+pub fn select_pages(
+    proj: &crate::commands::project::Project,
+    folder_id: Option<&str>,
+    page_ids: Option<&[String]>,
+) -> Result<(Vec<crate::commands::project::Page>, usize), String> {
+    match page_ids.map(|ids| ids.iter().filter(|s| !s.is_empty()).cloned().collect::<Vec<_>>()) {
+        Some(ids) if !ids.is_empty() => {
+            let found = proj.pages_in_selection(&ids);
+            let skipped = ids.len().saturating_sub(found.len());
+            Ok((found, skipped))
+        }
+        _ => Ok((proj.pages_in_scope(folder_id)?, 0)),
+    }
+}
+
 pub fn collect_pages(
     state: &State<'_, AppState>,
     project_id: &str,
     folder_id: Option<&str>,
-) -> Result<Vec<(String, Vec<u8>)>, String> {
+    page_ids: Option<&[String]>,
+) -> Result<CollectedPages, String> {
     let store = state.store.lock().map_err(|e| e.to_string())?;
     let proj = store
         .projects
@@ -507,7 +529,7 @@ pub fn collect_pages(
         .ok_or_else(|| format!("project not found: {project_id}"))?
         .clone();
     drop(store);
-    let pages = proj.pages_in_scope(folder_id)?;
+    let (pages, skipped) = select_pages(&proj, folder_id, page_ids)?;
     let mut out = Vec::new();
     for (i, pg) in pages.iter().enumerate() {
         let Some(t) = pg.translation.clone() else {
@@ -522,31 +544,33 @@ pub fn collect_pages(
     if out.is_empty() {
         return Err("belum ada halaman terjemahan untuk export".to_string());
     }
-    Ok(out)
+    Ok((out, skipped))
 }
 
 pub fn export_json_bytes(
     state: &State<'_, AppState>,
     project_id: &str,
     folder_id: Option<&str>,
-) -> Result<Vec<u8>, String> {
+    page_ids: Option<&[String]>,
+) -> Result<(Vec<u8>, usize), String> {
     let store = state.store.lock().map_err(|e| e.to_string())?;
     let proj = store
         .projects
         .get(project_id)
         .ok_or_else(|| format!("project not found: {project_id}"))?
         .clone();
-    let pages = proj.pages_in_scope(folder_id)?;
+    let (pages, skipped) = select_pages(&proj, folder_id, page_ids)?;
     let ts: Vec<&PageTranslation> = pages.iter().filter_map(|p| p.translation.as_ref()).collect();
-    serde_json::to_vec_pretty(&ts).map_err(|e| e.to_string())
+    Ok((serde_json::to_vec_pretty(&ts).map_err(|e| e.to_string())?, skipped))
 }
 
 pub fn export_cbz_bytes(
     state: &State<'_, AppState>,
     project_id: &str,
     folder_id: Option<&str>,
-) -> Result<Vec<u8>, String> {
-    let pages = collect_pages(state, project_id, folder_id)?;
+    page_ids: Option<&[String]>,
+) -> Result<(Vec<u8>, usize), String> {
+    let (pages, skipped) = collect_pages(state, project_id, folder_id, page_ids)?;
     let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
     for (name, png) in &pages {
         zip.start_file(name, zip::write::SimpleFileOptions::default())
@@ -555,7 +579,7 @@ pub fn export_cbz_bytes(
         zip.write_all(png).map_err(|e| e.to_string())?;
     }
     let cursor = zip.finish().map_err(|e| e.to_string())?;
-    Ok(cursor.into_inner())
+    Ok((cursor.into_inner(), skipped))
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -565,27 +589,41 @@ pub fn export_project(
     format: String,
     path: String,
     folder_id: Option<String>,
+    page_ids: Option<Vec<String>>,
 ) -> Result<String, String> {
     let fid = folder_id.as_deref();
+    let pids = page_ids.as_deref();
+    // `done` = file tertulis; `skipped` = id diminta tapi hilang (lapor, bukan gagal).
+    let finish = |done: usize, skipped: usize| {
+        if skipped > 0 {
+            Ok(format!("{path} ({done} halaman, {skipped} dilewati)"))
+        } else {
+            Ok(path.clone())
+        }
+    };
     match format.as_str() {
         "json" => {
-            let bytes = export_json_bytes(&state, &project_id, fid)?;
+            let (bytes, skipped) = export_json_bytes(&state, &project_id, fid, pids)?;
+            let done: usize = serde_json::from_slice::<Vec<serde_json::Value>>(&bytes)
+                .map_err(|e| e.to_string())?
+                .len();
             std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
-            Ok(path)
+            finish(done, skipped)
         }
         "png" => {
-            let pages = collect_pages(&state, &project_id, fid)?;
+            let (pages, skipped) = collect_pages(&state, &project_id, fid, pids)?;
             std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
             for (name, png) in &pages {
                 let f = std::path::Path::new(&path).join(name);
                 std::fs::write(f, png).map_err(|e| e.to_string())?;
             }
-            Ok(path)
+            finish(pages.len(), skipped)
         }
         "cbz" => {
-            let bytes = export_cbz_bytes(&state, &project_id, fid)?;
-            std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
-            Ok(path)
+            let (bytes, skipped) = export_cbz_bytes(&state, &project_id, fid, pids)?;
+            std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+            // Jumlah entri = jumlah halaman ter-render (baca kembali dari zip).
+            finish(count_cbz_entries(&bytes)?, skipped)
         }
         // M5-3: PSD layer-per-bubble via psd::render_page_psd.
         "psd" => {
@@ -596,7 +634,7 @@ pub fn export_project(
                 .ok_or_else(|| format!("project not found: {project_id}"))?
                 .clone();
             drop(store);
-            let pages = proj.pages_in_scope(fid)?;
+            let (pages, skipped) = select_pages(&proj, fid, pids)?;
             std::fs::create_dir_all(&path).map_err(|e| e.to_string())?;
             let mut n = 0;
             for (i, pg) in pages.iter().enumerate() {
@@ -617,10 +655,16 @@ pub fn export_project(
             if n == 0 {
                 return Err("belum ada halaman terjemahan untuk export".to_string());
             }
-            Ok(path)
+            finish(n, skipped)
         }
         other => Err(format!("format unknown: {other} (json|png|cbz|psd)")),
     }
+}
+
+/// Jumlah entri file dalam arsip CBZ (tanpa mengekstrak).
+fn count_cbz_entries(bytes: &[u8]) -> Result<usize, String> {
+    let zip = zip::ZipArchive::new(std::io::Cursor::new(bytes)).map_err(|e| e.to_string())?;
+    Ok(zip.len())
 }
 
 #[cfg(test)]
@@ -769,6 +813,38 @@ mod tests {
         assert!(!text_overflows("HI", 200, 100));
         assert!(!text_overflows("", 60, 30));
         assert!(!text_overflows("   ", 60, 30));
+    }
+
+    /// export-scope 2.3: seleksi subset per format — satu jalur untuk semua.
+    /// Id hilang → skip + hitung; urutan = urutan input; folder scope tak berubah.
+    #[test]
+    fn select_pages_subset_skips_missing() {
+        use crate::commands::project::{ChapterFolder, Page, PageStatus, Project};
+        let mk = |id: &str, folder: &str| Page {
+            id: id.into(),
+            path: format!("{folder}/{id}.png"),
+            width: 100,
+            height: 100,
+            status: PageStatus::Idle,
+            bubbles: Vec::new(),
+            translation: None,
+        };
+        let mut proj = Project::new("c".into());
+        proj.folders = vec![
+            ChapterFolder { id: "f1".into(), name: "A".into(), pages: vec![mk("b", "A"), mk("a", "A")], created_at: 0, parent_id: None },
+            ChapterFolder { id: "f2".into(), name: "B".into(), pages: vec![mk("c", "B")], created_at: 0, parent_id: None },
+        ];
+        // Subset eksplisit: urutan input dipertahankan, yang hilang diskip + dihitung.
+        let (got, skipped) = select_pages(&proj, None, Some(&["c".to_string(), "b".to_string(), "gone".to_string()])).unwrap();
+        assert_eq!(got.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(), vec!["c", "b"]);
+        assert_eq!(skipped, 1);
+        // Folder scope lama tetap jalan (None = semua, tanpa skipped).
+        let (all, skipped) = select_pages(&proj, None, None).unwrap();
+        assert_eq!(all.len(), 3);
+        assert_eq!(skipped, 0);
+        let (sub, skipped) = select_pages(&proj, Some("f2"), None).unwrap();
+        assert_eq!(sub.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(), vec!["c"]);
+        assert_eq!(skipped, 0);
     }
 }
 

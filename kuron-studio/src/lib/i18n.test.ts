@@ -5,9 +5,9 @@ const KEYS = [
   "providers",
   "batch",
   "glossary",
+  "resultsExport",
   "customPrompt",
   "customPromptPh",
-  "review",
   "detectAll",
   "importFolder",
   "importFiles",
@@ -124,6 +124,10 @@ const KEYS = [
   "sortStatus",
   "sortBubbles",
   "markDone",
+  "exportScope",
+  "exportScopeFolder",
+  "exportScopeSelected",
+  "exportScopeEmpty",
 ];
 
 const LANGS: Lang[] = ["en", "id", "zh"];

@@ -53,7 +53,7 @@ const EXPECTED: Record<string, string[]> = {
   glossary_import_csv: ["csv"],
   glossary_export_csv: [],
   glossary_context: ["bubble_texts"],
-  export_project: ["project_id", "format", "path", "folder_id"],
+  export_project: ["project_id", "format", "path", "folder_id", "page_ids"],
   tm_search: ["query", "limit"],
   qa_check: ["project_id"],
   share_project: ["project_id", "path"],
