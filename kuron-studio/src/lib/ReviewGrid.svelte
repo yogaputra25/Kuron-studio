@@ -2,8 +2,8 @@
   import { open, save } from "@tauri-apps/plugin-dialog";
   import { api } from "./api";
   import { t } from "./i18n";
-  import type { BatchOpts, ExportFormat, Project, QaIssue, TmHit } from "./types";
-  import { allPages } from "./library";
+  import type { BatchOpts, ExportFormat, Project } from "./types";
+  import { allPages, folderPath, subtreePages } from "./library";
   import { isMobile } from "./device";
   import Button from "./ui/Button.svelte";
   import Panel from "./ui/Panel.svelte";
@@ -12,23 +12,21 @@
   interface Props {
     project: Project;
     opts: BatchOpts | null;
+    selectedIds: string[];
     onRefresh: () => void;
     onClose: () => void;
   }
 
-  let { project, opts, onRefresh, onClose }: Props = $props();
+  let { project, opts, selectedIds, onRefresh, onClose }: Props = $props();
 
   let busy = $state(false);
   let error = $state("");
   let info = $state("");
-  // M5: tab tampilan + state QA/TM.
-  let tab = $state<"pages" | "qa" | "tm">("pages");
-  let issues = $state<QaIssue[]>([]);
-  let tmQuery = $state("");
-  let tmHits = $state<TmHit[]>([]);
-  let qaLoaded = $state(false);
-  /** Filter status di tab Halaman — default sembunyikan yang sudah beres. */
-  let pageFilter = $state<"todo" | "all">("todo");
+  // M5 note: tab QA/TM dihapus dari panel ini (export-scope) — backend utuh.
+  /** Filter status di tab Halaman — default tampilkan semua (hasil jadi langsung terlihat). */
+  let pageFilter = $state<"todo" | "all">("all");
+  /** Filter folder di tab Halaman — "all" = semua folder (scope default ekspor). */
+  let folderFilter = $state<string | "all">("all");
 
   /** Ringkasan progress: berapa halaman selesai vs belum, per status. */
   const stats = $derived.by(() => {
@@ -51,11 +49,21 @@
     };
   });
 
-  const visiblePages = $derived(
-    pageFilter === "todo"
-      ? allPages(project).filter((p) => p.status !== "translated")
-      : allPages(project),
+  const scopedPages = $derived(
+    folderFilter === "all" ? allPages(project) : subtreePages(project, folderFilter),
   );
+  const visiblePages = $derived(
+    pageFilter === "todo" ? scopedPages.filter((p) => p.status !== "translated") : scopedPages,
+  );
+
+  // export-scope D4: satu seleksi (dari dashboard), scope eksplisit saat export.
+  type ExportScope = "all" | "folder" | "selected";
+  let exportScope = $state<ExportScope>("all");
+  /** Id terpilih yang masih ada (buang basi diam-diam sebelum hitung/kirim). */
+  const selectedLive = $derived.by(() => {
+    const live = new Set(allPages(project).map((p) => p.id));
+    return selectedIds.filter((id) => live.has(id));
+  });
 
   async function exportAs(format: ExportFormat) {
     // iOS: folder picker tidak ada; save dialog iOS hanya bisa pindah file
@@ -77,7 +85,9 @@
         });
       }
       if (!path) return;
-      const out = await api.exportProject(project.id, format, path);
+      const scopeFolder = exportScope === "folder" && folderFilter !== "all" ? folderFilter : null;
+      const scopeIds = exportScope === "selected" ? selectedLive : undefined;
+      const out = await api.exportProject(project.id, format, path, scopeFolder, scopeIds);
       info = `Tersimpan: ${out}`;
     } catch (e) {
       error = String(e);
@@ -107,31 +117,6 @@
     }
   }
 
-  async function loadQa() {
-    busy = true; error = ""; info = "";
-    try {
-      issues = await api.qaCheck(project.id);
-      qaLoaded = true;
-      info = issues.length === 0 ? "QA bersih — tidak ada masalah." : `${issues.length} masalah QA.`;
-    } catch (e) {
-      error = String(e);
-    } finally {
-      busy = false;
-    }
-  }
-
-  async function searchTm() {
-    const q = tmQuery.trim();
-    if (!q) { tmHits = []; return; }
-    busy = true; error = "";
-    try {
-      tmHits = await api.tmSearch(q, 10);
-    } catch (e) {
-      error = String(e);
-    } finally {
-      busy = false;
-    }
-  }
 
   async function shareZip() {
     busy = true; error = ""; info = "";
@@ -175,7 +160,7 @@
 
 <Panel title={project.name} {onClose} class="max-w-5xl">
   <p class="-mt-1 mb-4 text-xs text-ink-3">
-    {$t("review")} · <span class="tnum">{allPages(project).length}</span> {$t("pages")}
+    {$t("resultsExport")} · <span class="tnum">{allPages(project).length}</span> {$t("pages")}
   </p>
 
   <!-- Progress: satu blok visual, bukan tabel angka. Tongkolnya
@@ -223,6 +208,39 @@
     </div>
   </div>
 
+  <!-- Export: blok primer di bawah progress, sebelum tab. -->
+  <div class="mb-4 rounded-lg border border-line bg-surface-2/60 p-3">
+    <div class="mb-2 text-[11px] font-semibold tracking-wide text-ink-3 uppercase">{$t("export")}</div>
+    <div class="mb-2 flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label={$t("exportScope")}>
+      <button
+        class="rounded-full border px-2.5 py-1 text-xs transition-colors {exportScope === 'all' ? 'border-accent bg-accent/10 font-semibold' : 'border-line hover:border-accent/60'}"
+        role="radio" aria-checked={exportScope === "all"}
+        onclick={() => (exportScope = "all")}
+      >{$t("allFolders")} ({allPages(project).length})</button>
+      <button
+        class="rounded-full border px-2.5 py-1 text-xs transition-colors {exportScope === 'folder' ? 'border-accent bg-accent/10 font-semibold' : 'border-line hover:border-accent/60'}"
+        role="radio" aria-checked={exportScope === "folder"}
+        onclick={() => (exportScope = "folder")}
+        title={folderFilter === "all" ? $t("allFolders") : undefined}
+      >{$t("exportScopeFolder")}{folderFilter === "all" ? "" : `: ${folderPath(project, folderFilter).map((x) => x.name).join(" / ")}`} ({scopedPages.length})</button>
+      <button
+        class="rounded-full border px-2.5 py-1 text-xs transition-colors {exportScope === 'selected' ? 'border-accent bg-accent/10 font-semibold' : 'border-line hover:border-accent/60'} disabled:cursor-not-allowed disabled:opacity-40"
+        role="radio" aria-checked={exportScope === "selected"}
+        disabled={selectedLive.length === 0}
+        title={selectedLive.length === 0 ? $t("exportScopeEmpty") : undefined}
+        onclick={() => (exportScope = "selected")}
+      >{$t("exportScopeSelected")} ({selectedLive.length})</button>
+    </div>
+    <div class="flex flex-wrap items-center gap-1.5">
+      <Button variant="default" size="sm" onclick={() => exportAs("json")} disabled={busy}>{$t("exportJson")}</Button>
+      <Button variant="default" size="sm" onclick={() => exportAs("png")} disabled={busy || isMobile} title={isMobile ? "Butuh folder picker (tak ada di iOS)" : undefined}>{$t("exportPng")}</Button>
+      <Button variant="default" size="sm" onclick={() => exportAs("cbz")} disabled={busy}>{$t("exportCbz")}</Button>
+      <Button variant="default" size="sm" onclick={() => exportAs("psd")} disabled={busy || isMobile} title={isMobile ? "Butuh folder picker (tak ada di iOS)" : undefined}>PSD</Button>
+      <Button variant="default" size="sm" onclick={shareZip} disabled={busy}>ZIP</Button>
+      <Button variant="ghost" size="sm" class="ml-auto" onclick={onRefresh}>{$t("refresh")}</Button>
+    </div>
+  </div>
+
   {#if error}
     <p role="alert" class="mb-3 rounded-md border border-warn-soft bg-warn-soft px-2.5 py-1.5 text-xs text-warn">
       {error}
@@ -233,114 +251,25 @@
       {info}
     </p>
   {/if}
-
-  <!-- Tab di atas (lebih penting); export dipindah ke baris sekunder di
-       bawah — sebelumnya 5 tombol export mendominasi layar sebelum user
-       sempat melihat isi review. -->
-  <div class="mb-4 flex overflow-hidden rounded-md border border-line" role="tablist" aria-label="Tab review">
-    {#each [["pages", $t("pages")], ["qa", "QA"], ["tm", "TM"]] as [key, label] (key)}
-      <button
-        role="tab"
-        aria-selected={tab === key}
-        class={[
-          "h-8 flex-1 border-l border-line text-xs font-medium transition-colors first:border-l-0",
-          tab === key ? "bg-accent text-accent-fg" : "bg-surface-2 text-ink-2 hover:bg-hover hover:text-ink",
-        ]}
-        onclick={() => {
-          tab = key as typeof tab;
-          if (key === "qa") void loadQa();
-        }}
-      >{label}</button>
-    {/each}
-  </div>
-
-  <!-- Export: baris sekunder di bawah tab + konten, bukan di atas. -->
-  <div class="mb-4 flex flex-wrap items-center gap-1.5 border-t border-line pt-3">
-    <span class="mr-1 text-[11px] tracking-wide text-ink-3 uppercase">{$t("export")}</span>
-    <Button variant="default" size="sm" onclick={() => exportAs("json")} disabled={busy}>{$t("exportJson")}</Button>
-    <Button variant="default" size="sm" onclick={() => exportAs("png")} disabled={busy || isMobile} title={isMobile ? "Butuh folder picker (tak ada di iOS)" : undefined}>{$t("exportPng")}</Button>
-    <Button variant="default" size="sm" onclick={() => exportAs("cbz")} disabled={busy}>{$t("exportCbz")}</Button>
-    <Button variant="default" size="sm" onclick={() => exportAs("psd")} disabled={busy || isMobile} title={isMobile ? "Butuh folder picker (tak ada di iOS)" : undefined}>PSD</Button>
-    <Button variant="default" size="sm" onclick={shareZip} disabled={busy}>ZIP</Button>
-    <Button variant="ghost" size="sm" class="ml-auto" onclick={onRefresh}>{$t("refresh")}</Button>
-  </div>
-
-  {#if tab === "qa"}
-    <div class="mb-3 flex items-center gap-2">
-      <Button variant="default" size="sm" onclick={loadQa} disabled={busy}>
-        {qaLoaded ? "Cek ulang" : "Jalankan QA"}
-      </Button>
-    </div>
-    {#if !qaLoaded}
-      <p class="py-8 text-center text-xs text-ink-3">
-        QA belum dijalankan. Cek untranslated, overflow, dan SFX leak per halaman.
-      </p>
-    {:else if issues.length === 0}
-      <div class="rounded-lg border border-success-soft bg-success-soft px-4 py-8 text-center">
-        <p class="text-sm font-medium text-success">QA bersih</p>
-        <p class="mt-1 text-xs text-ink-3">Tidak ada masalah di {allPages(project).length} halaman.</p>
+    {#if project.folders.length > 1}
+      <div class="mb-2 flex items-center gap-1.5 overflow-x-auto pb-1" role="group" aria-label="Filter folder">
+        <button
+          class="shrink-0 rounded-full border px-3 py-1 text-xs transition-colors {folderFilter === 'all' ? 'border-accent bg-accent/10 font-semibold' : 'border-line hover:border-accent/60'}"
+          aria-pressed={folderFilter === "all"}
+          onclick={() => (folderFilter = "all")}
+        >{$t("allFolders")} ({allPages(project).length})</button>
+        {#each project.folders as f (f.id)}
+          {@const n = subtreePages(project, f.id).length}
+          {@const crumbs = folderPath(project, f.id).map((x) => x.name).join(" / ")}
+          <button
+            class="shrink-0 truncate rounded-full border px-3 py-1 text-xs transition-colors {folderFilter === f.id ? 'border-accent bg-accent/10 font-semibold' : 'border-line hover:border-accent/60'}"
+            aria-pressed={folderFilter === f.id}
+            title={crumbs}
+            onclick={() => (folderFilter = f.id)}
+          >{crumbs} ({n})</button>
+        {/each}
       </div>
-    {:else}
-      <table class="w-full text-xs">
-        <thead>
-          <tr class="text-left text-ink-3">
-            <th class="pb-1.5 pr-2 font-medium">File</th>
-            <th class="pb-1.5 pr-2 font-medium">Bubble</th>
-            <th class="pb-1.5 pr-2 font-medium">Jenis</th>
-            <th class="pb-1.5 font-medium">Detail</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each issues as is (is.pageFile + is.bubbleIndex + is.kind)}
-            <tr class="border-t border-line">
-              <td class="max-w-48 truncate py-1.5 pr-2 text-ink-2">{is.pageFile}</td>
-              <td class="tnum pr-2 text-ink-3">{is.bubbleIndex >= 0 ? `#${is.bubbleIndex + 1}` : "—"}</td>
-              <td class="pr-2">
-                <span class="rounded bg-warn-soft px-1.5 py-0.5 text-[10px] font-semibold text-warn">{is.kind}</span>
-              </td>
-              <td class="text-ink-3">{is.detail}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
     {/if}
-  {:else if tab === "tm"}
-    <form class="mb-2 flex gap-2" onsubmit={(e) => { e.preventDefault(); void searchTm(); }}>
-      <input
-        aria-label={$t("search")}
-        class="h-8 min-w-0 flex-1 rounded-md border border-line bg-surface-2 px-3 text-xs text-ink
-               placeholder:text-ink-3 outline-none transition-colors
-               focus:border-accent focus:ring-2 focus:ring-accent/25"
-        placeholder="Cari terjemahan sebelumnya… (Enter)"
-        bind:value={tmQuery}
-      />
-      <Button type="submit" variant="default" size="sm" disabled={busy}>{$t("search")}</Button>
-    </form>
-    {#if tmHits.length === 0}
-      <p class="py-6 text-center text-xs text-ink-3">Ketik lalu Enter — hasil lintas project muncul di sini.</p>
-    {:else}
-      <table class="w-full text-xs">
-        <thead>
-          <tr class="text-left text-ink-3">
-            <th class="pb-1.5 pr-2 font-medium">Project</th>
-            <th class="pb-1.5 pr-2 font-medium">File</th>
-            <th class="pb-1.5 pr-2 font-medium">Asli</th>
-            <th class="pb-1.5 font-medium">Terjemahan</th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each tmHits as h (h.projectName + h.pageFile + h.bubbleIndex)}
-            <tr class="border-t border-line">
-              <td class="max-w-32 truncate py-1.5 pr-2 text-ink-2">{h.projectName}</td>
-              <td class="max-w-32 truncate pr-2 text-ink-3">{h.pageFile}</td>
-              <td class="max-w-48 truncate pr-2 text-ink-2" title={h.original}>{h.original}</td>
-              <td class="max-w-48 truncate text-success" title={h.translated}>{h.translated}</td>
-            </tr>
-          {/each}
-        </tbody>
-      </table>
-    {/if}
-  {:else}
     <div class="mb-3 flex items-center gap-2">
       <div class="flex overflow-hidden rounded-md border border-line" role="group" aria-label="Filter halaman">
         {#each [["todo", "Perlu dikerjakan"], ["all", "Semua"]] as [key, label] (key)}
@@ -367,7 +296,7 @@
           {#if allPages(project).length === 0}Belum ada halaman{:else}Semua halaman selesai{/if}
         </p>
         <p class="mt-1 text-xs text-ink-3">
-          {#if allPages(project).length === 0}Import halaman dulu di grid utama.{:else}Coba tab QA untuk cek kualitas terjemahan.{/if}
+          {#if allPages(project).length === 0}Import halaman dulu di grid utama.{:else}Coba ubah filter di atas.{/if}
         </p>
       </div>
     {:else}
@@ -437,5 +366,4 @@
       </tbody>
     </table>
     {/if}
-  {/if}
 </Panel>

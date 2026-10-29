@@ -84,3 +84,21 @@ menyentuh baris lama).
 - Hasil: `pnpm test` 405/405, `pnpm check` 0 error, `cargo test` 114 lulus, clippy bersih. Main maju PR #23 (merge grid-preview-perf, tanpa diff konten) — tanpa konflik.
 - Keputusan: kolom ukuran = dimensi `WxH` (tanpa byte, tanpa backend) — opsi A sesuai pilihan user.
 - Lanjut: smoke keyboard-only + narrow viewport (3.3), E2E 52/200 halaman (4.3) — butuh GUI + data nyata.
+
+## 2026-10-29 — Arsip grid-sort 9/9 + sync spec (isu #25)
+
+- Kerja: Sync `openspec/specs/grid-sort/spec.md` baru (3 requirement ADDED verbatim; Purpose TBD). Arsip ke `archive/2026-10-29-grid-sort/`.
+- Hasil: Valid strict hijau. Semua artifact done, semua task complete.
+- Lanjut: —
+
+## 2026-10-29 — export-scope 10/11 (filter folder + ekspor terpilih + hapus tab QA/TM)
+
+- Kerja: Filter folder di Hasil & Ekspor + `folder_id` diteruskan; `page_ids` opsional di `export_project` + `select_pages` tunggal (skip terhitung, urutan input); scope "Semua/Folder/Yang dipilih" + hint; QA/TM dihapus dari panel (backend utuh); i18n `exportScope*` 3 bahasa.
+- Hasil: `pnpm test` 405/405, `pnpm check` 0, `cargo test` 116 lulus (termasuk `select_pages_subset_skips_missing` + `pages_in_selection_order_and_skips_missing`), clippy bersih. Kontrak invoke diperbarui (tambah `page_ids`).
+- Lanjut: smoke 3.3 (455 baris → filter folder → ekspor folder/terpilih/skip; mobile).
+
+## 2026-10-29 — export-scope: breadcrumb folder ganda (temuan user, 455 hlm)
+
+- Kerja: Filter folder menampilkan breadcrumb (`default / bleach`) untuk folder bersarang via `folderPath()`; berlaku juga di label scope ekspor. Tanpa sentuh data.
+- Akar: data user memang berisi 2 folder beda bernama "bleach" (1 root + 1 di dalam default, isi halaman berbeda) — bukan bug hitung. UI lama menampilkan nama datar sehingga terlihat duplikat.
+- Hasil: `pnpm test` 405/405, `pnpm check` 0 error.

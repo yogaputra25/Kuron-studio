@@ -193,6 +193,15 @@ impl Project {
         }
     }
 
+    /// Halaman untuk ids eksplisit (urutan = urutan input); id hilang dilewati.
+    /// Dipakai ekspor subset pilihan user — bukan error bila sebagian terhapus.
+    pub fn pages_in_selection(&self, ids: &[String]) -> Vec<Page> {
+        let all = self.sorted_all_pages();
+        ids.iter()
+            .filter_map(|id| all.iter().find(|p| &p.id == id).cloned())
+            .collect()
+    }
+
     pub fn folder(&self, folder_id: &str) -> Option<&ChapterFolder> {
         self.folders.iter().find(|f| f.id == folder_id)
     }
@@ -1298,6 +1307,43 @@ mod tests {
             bubbles: Vec::new(),
             translation: None,
         }
+    }
+
+    fn stub_project() -> Project {
+        let dir = temp_dir("kuron-select");
+        let mk = |id: &str| stub_page(id, &dir.join(format!("{id}.png")));
+        Project {
+            id: "p".into(),
+            name: "c".into(),
+            folders: vec![
+                ChapterFolder {
+                    id: "f1".into(),
+                    name: "Ch1".into(),
+                    pages: vec![mk("b"), mk("a")],
+                    created_at: 0,
+                    parent_id: None,
+                },
+                ChapterFolder {
+                    id: "f2".into(),
+                    name: "Ch2".into(),
+                    pages: vec![mk("c")],
+                    created_at: 0,
+                    parent_id: None,
+                },
+            ],
+            updated_at: 0,
+            legacy_pages: Vec::new(),
+        }
+    }
+
+    /// export-scope 2.1: subset mengikuti urutan input, id hilang dilewati.
+    #[test]
+    fn pages_in_selection_order_and_skips_missing() {
+        let proj = stub_project();
+        let got = proj.pages_in_selection(&["c".to_string(), "b".to_string(), "gone".to_string()]);
+        assert_eq!(got.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(), vec!["c", "b"]);
+        assert!(proj.pages_in_selection(&[]).is_empty());
+        assert!(proj.pages_in_selection(&["gone".to_string()]).is_empty());
     }
 
     #[test]
