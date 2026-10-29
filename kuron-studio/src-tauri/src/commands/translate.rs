@@ -32,6 +32,9 @@ pub struct TranslatePageInput {
     pub glossary: Option<String>,
     #[serde(default)]
     pub custom_prompt: Option<String>,
+    /// Override model per request; kosong/absen = pakai simpanan provider.
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 fn default_lang() -> String { "Indonesian".to_string() }
@@ -260,6 +263,7 @@ pub struct PrepOpts<'a> {
     pub reading_direction: &'a str,
     pub glossary: Option<&'a str>,
     pub custom_prompt: Option<&'a str>,
+    pub model: Option<&'a str>,
 }
 
 /// Halaman siap-kirim: semua milik-owned agar bisa pindah ke worker batch.
@@ -346,7 +350,8 @@ pub async fn prepare_page(
         )
     };
     let bubbles_json = serde_json::to_string(&snap.bubbles).map_err(|e| e.to_string())?;
-    let (client, rec) = load_provider(state, opts.provider_id)?;
+    let (client, mut rec) = load_provider(state, opts.provider_id)?;
+    rec.model = crate::provider::effective_model(&rec, opts.model);
     let key = cache::cache_key(cache::CacheKey {
         image: &jpeg,
         bubbles_json: &bubbles_json,
@@ -469,6 +474,7 @@ pub async fn translate_page(
             reading_direction: &input.reading_direction,
             glossary: input.glossary.as_deref(),
             custom_prompt: input.custom_prompt.as_deref(),
+            model: input.model.as_deref(),
         },
     )
     .await?;
@@ -561,6 +567,24 @@ pub fn fail_page(state: &AppState, page_id: &str, e: String) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn translate_inputs_accept_optional_model() {
+        // Override model per request: absen = None (fallback simpanan).
+        let p: TranslatePageInput =
+            serde_json::from_str(r#"{"pageId":"p","providerId":"v"}"#).unwrap();
+        assert_eq!(p.model, None);
+        let p: TranslatePageInput = serde_json::from_str(
+            r#"{"pageId":"p","providerId":"v","model":"muse-spark-1.3"}"#,
+        )
+        .unwrap();
+        assert_eq!(p.model.as_deref(), Some("muse-spark-1.3"));
+        let b: crate::commands::batch::TranslateBatchInput =
+            serde_json::from_str(r#"{"pageIds":[],"providerId":"v"}"#).unwrap();
+        assert_eq!(b.model, None);
+        let r: crate::commands::batch::RetryBubbleInput =
+            serde_json::from_str(r#"{"pageId":"p","bubbleIndex":0,"providerId":"v"}"#).unwrap();
+        assert_eq!(r.model, None);
+    }
     use crate::bubble::BubbleBox;
     use crate::commands::detect::DetectState;
     use crate::commands::project::{Page, PageStatus, Project, ProjectStore};

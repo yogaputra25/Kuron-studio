@@ -1,5 +1,6 @@
 <script lang="ts">
   import { listen } from "@tauri-apps/api/event";
+  import { getVersion } from "@tauri-apps/api/app";
   import { onDestroy, onMount } from "svelte";
   import { api } from "../lib/api";
   import CanvasEditor from "../lib/CanvasEditor.svelte";
@@ -65,6 +66,7 @@
   let translation = $state<PageTranslation | null>(null);
   let providerId = $state("");
   let lastOpts = $state<TranslateOpts | null>(null);
+  let appVersion = $state("");
   // Label bahasa ikut target aktual, bukan hardcoded sepasang bahasa (#26
   // follow-up: user ID→EN melihat label JP di original dan ID di terjemahan).
   const trgLang = $derived(translation?.targetLang || lastOpts?.targetLang || "id");
@@ -599,6 +601,11 @@ function setBubbleFontSize(v: number | null) {
   }
 
   onMount(async () => {
+    try {
+      appVersion = await getVersion();
+    } catch {
+      appVersion = "";
+    }
     const w0 = typeof window !== "undefined" ? window.innerWidth : 0;
     sidebarW = loadSidebarW(SIDEBAR_MIN, sidebarMax(w0 || undefined), SIDEBAR_DEFAULT);
     syncViewport();
@@ -1054,4 +1061,7 @@ function setBubbleFontSize(v: number | null) {
     {/if}
   </div>
   {/if}
+  <footer class="shrink-0 border-t border-line px-5 py-2 text-center text-sm font-semibold text-ink-3">
+    Kuron Studio {appVersion ? `v${appVersion}` : ""}
+  </footer>
 </div>

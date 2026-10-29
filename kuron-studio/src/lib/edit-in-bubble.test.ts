@@ -111,3 +111,17 @@ describe("in-bubble edit (§2 panel)", () => {
     expect(panelSrc).toMatch(/TARGET_LANGS/);
   });
 });
+
+describe("sidebar footer identitas", () => {
+  it("tampilkan Kuron Studio + versi tauri", () => {
+    expect(panelSrc).toContain("getVersion");
+    expect(panelSrc).toContain("Kuron Studio {appVersion ?");
+  });
+
+  it("footer full-width selebar header (di luar aside)", () => {
+    const asideClose = panelSrc.indexOf("</aside>");
+    const footerAt = panelSrc.indexOf("<footer");
+    expect(asideClose, "aside ada").toBeGreaterThan(-1);
+    expect(footerAt, "footer di luar aside").toBeGreaterThan(asideClose);
+  });
+});

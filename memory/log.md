@@ -118,3 +118,17 @@ menyentuh baris lama).
 - Kerja: User lapor kartu bubble #3 berlabel "Original (JP)"/"Terjemahan (ID)" padahal arah ID→EN. Akar: label hardcoded di `EditorPanel.svelte`. Fix: `trgLang` derived dari `translation.targetLang` (disimpan backend) → `lastOpts.targetLang` → default "id"; label `Original` (sumber tak diketahui app) + `Terjemahan ({trgLabel})` via `TARGET_LANGS`; `createEmptyTranslation` pakai target aktual bukan "id". Test RED (`not.toContain` hardcoded) → GREEN; `edit-in-bubble.test.ts` diperbarui.
 - Hasil: `pnpm test` 410/410, `pnpm check` 0 error.
 - Catatan: prompt backend kirim kode mentah ("into id") — LLM paham, tapi rapi-nya dipetakan ke nama bahasa; tunda (di luar keluhan).
+
+## 2026-10-29 — openspec mobile-home-drawer untuk isu #14
+
+- Kerja: Buat openspec `mobile-home-drawer` (proposal, design, tasks, specs `home/mobile-nav` + `home/header-split`) dari isi issue #14: drawer slide-over + pecah `HomeHeaderDesktop` vs `HomeHeaderMobile` dengan switch `isNarrow`/`watchViewport`; gating `isMobile` hanya untuk kemampuan desktop-only. `openspec validate mobile-home-drawer` hijau.
+- Hasil: 5 file baru di `openspec/changes/mobile-home-drawer/`; belum ada perubahan kode.
+- Keputusan: Breakpoint reuse `TABLET_MAX_W=768`; desktop = pindahan verbatim dulu baru bangun mobile (hindari drift); string baru 3 bahasa satu commit; badge error tetap di luar drawer.
+- Lanjut: review proposal → `/opsx:apply` (fondasi viewport + ekstrak desktop + drawer + gate penuh + smoke 360px vs ≥768px).
+
+## 2026-10-30 — translate-model-per-run 7/7 (model per-run + sidebar + footer)
+
+- Kerja: 1.1 `effective_model(rec, override)` + test. 1.2 field `model` opsional di TranslatePage/Batch/RetryBubbleInput + `PrepOpts.model`, resolusi tepat setelah load (cache key + `translation.model` ikut benar) + test serde kontrak. 2.1 LOV model sesi-saja di TranslatePanel (auto-load saat ganti provider, default = simpanan provider, suffix vision, tanpa tulis DB) + `TranslateOpts.model`. 2.2 teruskan ke batch/retry + `BatchOpts.model` + type `model?`. 2.3 regroup kartu (Opsi lanjutan details + tombol sticky bottom). 2.4 footer `Kuron Studio vX` (`getVersion`) pin-bottom, ukuran disamakan header (text-sm semibold) per koreksi user. Smoke mock: default model = simpanan, filter vision, warning, details+sticky tampil, footer render (versi kosong di mock= wajar, tanpa backend Tauri).
+- Hasil: `cargo test` hijau, clippy 0, `pnpm test` 416/416, `pnpm check` 0. `openspec validate` hijau, tasks 7/7.
+- Keputusan: override `None`/kosong = perilaku lama byte-for-byte; cache key pakai model hasil resolusi (hindari cache lintas-model basi); footer versi fallback kosong bila getVersion gagal (web preview).
+- Lanjut: user review → `/opsx:archive`.

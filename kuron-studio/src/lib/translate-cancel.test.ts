@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import batchSrc from "./BatchPanel.svelte?raw";
 import panelSrc from "./TranslatePanel.svelte?raw";
+import reviewSrc from "./ReviewGrid.svelte?raw";
 
 // Kontrak change reset-translation §4 cancel (opsi B), diverifikasi statis
 // dari sumber (pola sama seperti reset-translation.test.ts): assert pola kode.
@@ -26,5 +28,41 @@ describe("translate-cancel (opsi B)", () => {
     const tr = panelSrc.slice(panelSrc.indexOf("async function translate()"), panelSrc.indexOf("async function translate()") + 1200);
     expect(tr).toContain("cancelled = false");
     expect(tr).toContain("if (!cancelled) busy = false");
+  });
+});
+
+describe("translate model per-run (LOV sesi-saja)", () => {
+  it("pilih provider → auto list models, default = simpanan", () => {
+    expect(panelSrc).toContain("loadModelsFor(providerId)");
+    expect(panelSrc).toContain("api.listModels(pid)");
+    expect(panelSrc).toMatch(/models\.find\(\(m\) => m\.vision\)/);
+  });
+
+  it("model masuk opts + dikirim sebagai override", () => {
+    expect(panelSrc).toMatch(/interface TranslateOpts \{[\s\S]*?model: string/);
+    expect(panelSrc).toContain("model: model.trim()");
+  });
+
+  it("pilihan model tak menulis DB (tanpa saveProvider)", () => {
+    expect(panelSrc).not.toContain("saveProvider");
+  });
+});
+
+describe("translate model per-run (forwarding batch/retry)", () => {
+  it("batch + retry teruskan model dari opts", () => {
+    for (const [name, src] of [["BatchPanel", batchSrc], ["ReviewGrid", reviewSrc]] as const) {
+      expect(src, name).toContain("...(opts.model");
+    }
+  });
+});
+
+describe("translate kartu regroup (hierarki)", () => {
+  it("Model di bawah Provider sebelum Target, opsi lanjut di details, tombol sticky", () => {
+    const modelAt = panelSrc.indexOf('label="Model"');
+    const targetAt = panelSrc.indexOf('label="Target"');
+    expect(modelAt, "Model select ada").toBeGreaterThan(-1);
+    expect(modelAt, "Model sebelum Target").toBeLessThan(targetAt);
+    expect(panelSrc).toContain("<details");
+    expect(panelSrc).toContain("sticky bottom-0");
   });
 });

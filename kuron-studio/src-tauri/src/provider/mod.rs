@@ -3,7 +3,7 @@ pub mod config;
 pub mod gemini;
 pub mod openai;
 
-pub use config::{is_vision_capable, AiModelOption, AiProviderType, ProviderRecord};
+pub use config::{effective_model, is_vision_capable, AiModelOption, AiProviderType, ProviderRecord};
 
 // ponytail: keyring milik M4 (tanpa keyring dep di sini).
 // ponytail: factory = match satu produk; trait object bila provider ke-4 butuh dispatch dinamis.

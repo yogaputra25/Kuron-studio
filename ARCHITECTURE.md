@@ -71,6 +71,8 @@ Import folder/files/zip → Detect bubble (ONNX, per halaman)
     `translating/translated/failed`, retry per page/bubble.
     Preset hapus (OpenRouter/Zen/OpenCodeGo/ClinePass) terbaca sebagai
     Custom; label vision dari allowlist per provider (#26/#27).
+    Model per-run: override opsional di tiap request translate
+    (default = simpanan provider), tercatat di `translation.model`.
   - `export`: JSON / PNG (overlay, typeset TTF sistem + fallback
     bitmap) / CBZ / PSD (folder = dir, file = path).
   - `extras`: `tm_search` lintas project, `qa_check`,

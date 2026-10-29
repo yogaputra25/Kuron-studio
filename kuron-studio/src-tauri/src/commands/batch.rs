@@ -31,6 +31,9 @@ pub struct TranslateBatchInput {
     pub glossary: Option<String>,
     #[serde(default)]
     pub custom_prompt: Option<String>,
+    /// Override model per request; kosong/absen = pakai simpanan provider.
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 fn d_lang() -> String { "Indonesian".to_string() }
@@ -58,6 +61,9 @@ pub struct RetryBubbleInput {
     pub glossary: Option<String>,
     #[serde(default)]
     pub custom_prompt: Option<String>,
+    /// Override model per request; kosong/absen = pakai simpanan provider.
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -129,6 +135,7 @@ pub async fn translate_batch(
                 reading_direction: &input.reading_direction,
                 glossary: input.glossary.as_deref(),
                 custom_prompt: input.custom_prompt.as_deref(),
+                model: input.model.as_deref(),
             },
         )
         .await
@@ -261,7 +268,8 @@ pub async fn retry_bubble(
         ),
         input.custom_prompt.as_deref(),
     );
-    let (client, rec) = load_provider(state.inner(), &input.provider_id)?;
+    let (client, mut rec) = load_provider(state.inner(), &input.provider_id)?;
+    rec.model = crate::provider::effective_model(&rec, input.model.as_deref());
     let text = backoff_translate(state.inner(), &input.page_id, &client, &rec, &prompt, &jpeg)
         .await
         .map_err(|e| cancel_or_fail(state.inner(), &input.page_id, e))?;
