@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import panelSrc from "./EditorPanel.svelte?raw";
-import appSrc from "../App.svelte?raw";
 import deviceSrc from "./device?raw";
 import gridSrc from "./PageGrid.svelte?raw";
 

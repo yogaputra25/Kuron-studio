@@ -22,7 +22,7 @@
   import { ARCHIVE_EXTS, IMAGE_EXTS, PDF_EXTS } from "./lib/types";
   import { allPages, childrenOf, folderPath, groupKanban, hasNesting, projectStats, rangeSelect, subtreePages, subtreeStats } from "./lib/library";
   import Button from "./lib/ui/Button.svelte";
-  import { fileName, sortPagesByName } from "./lib/status";
+  import { fileName, sortPagesByBubbles, sortPagesByName, sortPagesByStatus } from "./lib/status";
   import FolderChip from "./lib/FolderChip.svelte";
   import MoveDialog from "./lib/MoveDialog.svelte";
   import Onboarding from "./lib/Onboarding.svelte";
@@ -116,6 +116,26 @@
     else if (e.key === "l" || e.key === "L") void setPageView("list");
   }
   let openError = $state("");
+  // grid-sort D1: satu state sortir untuk Grid + List.
+  type SortKey = "name" | "status" | "bubbles";
+  let sortKey = $state<SortKey>("name");
+  let sortDir = $state<1 | -1>(1);
+
+  /** Urutkan sekali di App; kedua view terima jadi (tanpa fetch ulang). */
+  const orderedPages = $derived.by(() => {
+    if (sortKey === "status") return sortPagesByStatus(visiblePages, sortDir);
+    if (sortKey === "bubbles") return sortPagesByBubbles(visiblePages, sortDir);
+    const list = sortPagesByName(visiblePages);
+    return sortDir === 1 ? list : [...list].reverse();
+  });
+
+  function setSortKey(key: SortKey) {
+    if (sortKey === key) sortDir = sortDir === 1 ? -1 : 1;
+    else {
+      sortKey = key;
+      sortDir = 1;
+    }
+  }
   let dragging = $state(false);
   let busy = $state(false);
   let showProviders = $state(false);
@@ -1001,6 +1021,16 @@
           onclick={() => void setPageView("list")}
         >☰ {$t("listView")}</button>
       </div>
+      <div class="flex overflow-hidden rounded-md border border-line" role="group" aria-label={$t("sortBy")}>
+        {#each [["name", $t("sortName")], ["status", $t("sortStatus")], ["bubbles", $t("sortBubbles")]] as [key, label]}
+          <button
+            class="h-7 px-2.5 text-xs font-medium transition-colors {sortKey === key ? 'bg-accent text-accent-fg' : 'bg-surface-2 text-ink-2 hover:bg-hover hover:text-ink'} {key !== 'name' ? 'border-l border-line' : ''}"
+            aria-pressed={sortKey === key}
+          title={label}
+            onclick={() => setSortKey(key as SortKey)}
+          >{label}{sortKey === key ? (sortDir === 1 ? " ▲" : " ▼") : ""}</button>
+        {/each}
+      </div>
     </section>
     {#if selectedIds.length > 0}
       <div class="tnum mx-5 mt-3 flex items-center gap-2 rounded-md border border-line bg-surface-2 px-3 py-1.5 text-xs" role="status" transition:fly={{ y: -8, duration: 180 }}>
@@ -1021,7 +1051,7 @@
     {/if}
     {#if pageView === "grid"}
       <PageGrid
-        pages={visiblePages}
+        pages={orderedPages}
         {thumbs}
         {broken}
         {selectedIds}
@@ -1035,7 +1065,7 @@
       />
     {:else}
       <PageList
-        pages={visiblePages}
+        pages={orderedPages}
         {thumbs}
         {broken}
         {selectedIds}
