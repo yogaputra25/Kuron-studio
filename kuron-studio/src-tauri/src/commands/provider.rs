@@ -3,7 +3,7 @@ use tauri::State;
 use uuid::Uuid;
 
 use crate::cache;
-use crate::provider::config::{is_vision_capable, AiProviderType, ProviderRecord};
+use crate::provider::config::{vision_capable, AiProviderType, ProviderRecord};
 use crate::provider;
 use crate::AppState;
 
@@ -54,7 +54,7 @@ fn view_of(rec: &ProviderRecord) -> ProviderView {
         base_url: rec.effective_base_url(),
         model: rec.model.clone(),
         has_key: has_key_of(rec),
-        is_vision_capable: is_vision_capable(&rec.model),
+        is_vision_capable: vision_capable(rec.provider_type, &rec.model),
     }
 }
 

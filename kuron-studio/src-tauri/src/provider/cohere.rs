@@ -1,6 +1,6 @@
 use base64::Engine;
 
-use super::config::{is_vision_capable, AiModelOption};
+use super::config::{vision_capable, AiModelOption, AiProviderType};
 
 /// Tolerate legacy saved bases ending in /v2 (old frontend default).
 fn norm_base(base_url: &str) -> &str {
@@ -103,7 +103,7 @@ pub async fn list_models(
         .and_then(|m| m.as_array())
         .map(|a| a.iter().filter_map(|m| m.get("name").and_then(|n| n.as_str()).map(String::from)).collect())
         .unwrap_or_default();
-    Ok(ids.into_iter().map(|id| AiModelOption { label: id.clone(), vision: is_vision_capable(&id), id }).collect())
+    Ok(ids.into_iter().map(|id| AiModelOption { label: id.clone(), vision: vision_capable(AiProviderType::Cohere, &id), id }).collect())
 }
 
 pub async fn validate_minimal(

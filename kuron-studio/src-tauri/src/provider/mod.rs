@@ -31,7 +31,7 @@ pub async fn list_models(
     match rec.provider_type {
         AiProviderType::Gemini => gemini::list_models(client, &base, &rec.api_key).await,
         AiProviderType::Cohere => cohere::list_models(client, &base, &rec.api_key).await,
-        _ => openai::list_models(client, &base, &rec.api_key).await,
+        _ => openai::list_models(client, &base, &rec.api_key, rec.provider_type).await,
     }
 }
 
