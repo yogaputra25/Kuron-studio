@@ -55,3 +55,14 @@ describe("translate model per-run (forwarding batch/retry)", () => {
     }
   });
 });
+
+describe("translate kartu regroup (hierarki)", () => {
+  it("Model di bawah Provider sebelum Target, opsi lanjut di details, tombol sticky", () => {
+    const modelAt = panelSrc.indexOf('label="Model"');
+    const targetAt = panelSrc.indexOf('label="Target"');
+    expect(modelAt, "Model select ada").toBeGreaterThan(-1);
+    expect(modelAt, "Model sebelum Target").toBeLessThan(targetAt);
+    expect(panelSrc).toContain("<details");
+    expect(panelSrc).toContain("sticky bottom-0");
+  });
+});

@@ -172,88 +172,99 @@
       </Select>
     </div>
 
-    <div class="grid grid-cols-2 gap-3">
-      <Select
-        label="Mosaic"
-        bind:value={mosaicQuality}
-        hint={mosaicQuality === "low" ? "±1MB, 75 quality" : "±2MB, 85 quality"}
+    <details class="group rounded-md border border-line bg-surface-2/60">
+      <summary
+        class="cursor-pointer list-none px-3 py-2 text-[11px] font-medium text-ink-2 select-none
+               transition-colors hover:text-ink"
       >
-        <option value="low">low</option>
-        <option value="high">high</option>
-      </Select>
-      <!-- Checkbox disejajarkan dengan control Mosaic (h-9) supaya tepinya
-           rata — label::before pseudo-elemen memberi tinggi yang sama. -->
-      <label
-        class="flex cursor-pointer items-center gap-2.5 self-end rounded-md border border-line
-               bg-surface-2 px-3 text-[13px] text-ink-2 transition-colors hover:border-line-strong"
-      >
-        <input type="checkbox" class="size-4 shrink-0 accent-accent" bind:checked={skipSfx} />
-        Skip SFX
-      </label>
+        Opsi lanjutan
+      </summary>
+      <div class="space-y-4 border-t border-line px-3 py-3">
+        <div class="grid grid-cols-2 gap-3">
+          <Select
+            label="Mosaic"
+            bind:value={mosaicQuality}
+            hint={mosaicQuality === "low" ? "±1MB, 75 quality" : "±2MB, 85 quality"}
+          >
+            <option value="low">low</option>
+            <option value="high">high</option>
+          </Select>
+          <!-- Checkbox disejajarkan dengan control Mosaic (h-9) supaya tepinya
+               rata — label::before pseudo-elemen memberi tinggi yang sama. -->
+          <label
+            class="flex cursor-pointer items-center gap-2.5 self-end rounded-md border border-line
+                   bg-surface-2 px-3 text-[13px] text-ink-2 transition-colors hover:border-line-strong"
+          >
+            <input type="checkbox" class="size-4 shrink-0 accent-accent" bind:checked={skipSfx} />
+            Skip SFX
+          </label>
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label
+            for="glossary-override"
+            class="text-[11px] font-medium tracking-wide text-ink-2 uppercase"
+          >
+            Glossary override
+          </label>
+          <textarea
+            id="glossary-override"
+            class="w-full rounded-md border border-line bg-surface-2 px-3 py-2.5 font-mono text-[12px]
+                   leading-relaxed text-ink placeholder:text-ink-3 outline-none transition-colors
+                   focus:border-accent focus:ring-2 focus:ring-accent/25"
+            rows="2"
+            bind:value={glossary}
+            placeholder="Auto dari Glossary DB — override manual di sini"
+          ></textarea>
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label
+            for="custom-prompt"
+            class="text-[11px] font-medium tracking-wide text-ink-2 uppercase"
+          >
+            {$t("customPrompt")}
+          </label>
+          <textarea
+            id="custom-prompt"
+            class="w-full rounded-md border border-line bg-surface-2 px-3 py-2.5 text-[12px]
+                   leading-relaxed text-ink placeholder:text-ink-3 outline-none transition-colors
+                   focus:border-accent focus:ring-2 focus:ring-accent/25"
+            rows="2"
+            maxlength="2000"
+            bind:value={customPrompt}
+            placeholder={$t("customPromptPh")}
+          ></textarea>
+        </div>
+
+        {#if glossaryPreview}
+          <details class="group rounded-md border border-line bg-surface-2/60">
+            <summary
+              class="cursor-pointer list-none px-3 py-2 text-[11px] font-medium text-ink-2 select-none
+                     transition-colors hover:text-ink"
+            >
+              Auto-context dari Glossary ({glossaryPreview.split("\n").length} baris)
+            </summary>
+            <pre
+              class="max-h-40 overflow-auto whitespace-pre-wrap border-t border-line px-3 py-2.5
+                     font-mono text-[11px] leading-relaxed text-ink-3"
+              title="Auto-context glossary">{glossaryPreview}</pre>
+          </details>
+        {/if}
+      </div>
+    </details>
+
+    <div class="sticky bottom-0 -mx-4 -mb-4 border-t border-line bg-surface-2 px-4 py-3">
+      <Button
+        variant="primary"
+        block
+        onclick={busy ? cancel : translate}
+        disabled={!busy && !providerId}
+      >{busy ? "Batal" : "Translate"}</Button>
+
+      {#if info}
+        <p role="status" class="mt-2 text-[11px] leading-relaxed text-ink-3">{info}</p>
+      {/if}
     </div>
-
-    <div class="flex flex-col gap-1.5">
-      <label
-        for="glossary-override"
-        class="text-[11px] font-medium tracking-wide text-ink-2 uppercase"
-      >
-        Glossary override
-      </label>
-      <textarea
-        id="glossary-override"
-        class="w-full rounded-md border border-line bg-surface-2 px-3 py-2.5 font-mono text-[12px]
-               leading-relaxed text-ink placeholder:text-ink-3 outline-none transition-colors
-               focus:border-accent focus:ring-2 focus:ring-accent/25"
-        rows="2"
-        bind:value={glossary}
-        placeholder="Auto dari Glossary DB — override manual di sini"
-      ></textarea>
-    </div>
-
-    <div class="flex flex-col gap-1.5">
-      <label
-        for="custom-prompt"
-        class="text-[11px] font-medium tracking-wide text-ink-2 uppercase"
-      >
-        {$t("customPrompt")}
-      </label>
-      <textarea
-        id="custom-prompt"
-        class="w-full rounded-md border border-line bg-surface-2 px-3 py-2.5 text-[12px]
-               leading-relaxed text-ink placeholder:text-ink-3 outline-none transition-colors
-               focus:border-accent focus:ring-2 focus:ring-accent/25"
-        rows="2"
-        maxlength="2000"
-        bind:value={customPrompt}
-        placeholder={$t("customPromptPh")}
-      ></textarea>
-    </div>
-
-    {#if glossaryPreview}
-      <details class="group rounded-md border border-line bg-surface-2/60">
-        <summary
-          class="cursor-pointer list-none px-3 py-2 text-[11px] font-medium text-ink-2 select-none
-                 transition-colors hover:text-ink"
-        >
-          Auto-context dari Glossary ({glossaryPreview.split("\n").length} baris)
-        </summary>
-        <pre
-          class="max-h-40 overflow-auto whitespace-pre-wrap border-t border-line px-3 py-2.5
-                 font-mono text-[11px] leading-relaxed text-ink-3"
-          title="Auto-context glossary">{glossaryPreview}</pre>
-      </details>
-    {/if}
-
-    <Button
-      variant="primary"
-      block
-      class="pt-1"
-      onclick={busy ? cancel : translate}
-      disabled={!busy && !providerId}
-    >{busy ? "Batal" : "Translate"}</Button>
-
-    {#if info}
-      <p role="status" class="text-[11px] leading-relaxed text-ink-3">{info}</p>
-    {/if}
   </div>
 </div>
