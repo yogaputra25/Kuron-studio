@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::future::Future;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
@@ -75,6 +76,8 @@ pub struct DetectProgress {
     pub page_id: String,
     pub done: usize,
     pub total: usize,
+    pub ok: bool,
+    pub message: String,
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -114,21 +117,101 @@ pub async fn detect_bubbles_batch(
     state: State<'_, AppState>,
     page_ids: Vec<String>,
 ) -> Result<Vec<Vec<BubbleBox>>, String> {
+    // detect-ux-pack 2.1: satu gagal → catat + lanjut, bukan abort (`?`).
+    let out = collect_batch(
+        &page_ids,
+        |id: String| {
+            let state = state.clone();
+            async move {
+                match detect_bubbles(state.clone(), id.clone()).await {
+                    Ok(b) => (b, true, String::new()),
+                    Err(e) => {
+                        let _ = set_page_status(state.clone(), &id, "failed");
+                        (Vec::new(), false, e)
+                    }
+                }
+            }
+        },
+        |ev| {
+            let _ = app.emit("detect_progress", ev);
+        },
+    )
+    .await;
+    Ok(out)
+}
+
+/// Inti loop batch tanpa AppHandle/State: urutan = input, gagal lanjut.
+/// Murni sisi orkestrasi (fetch di-inject) → unit-test tanpa Tauri runtime.
+async fn collect_batch<Fut>(
+    page_ids: &[String],
+    mut fetch: impl FnMut(String) -> Fut,
+    mut emit: impl FnMut(DetectProgress),
+) -> Vec<Vec<BubbleBox>>
+where
+    Fut: Future<Output = (Vec<BubbleBox>, bool, String)>,
+{
     let total = page_ids.len();
     let mut all = Vec::with_capacity(total);
     for (i, id) in page_ids.iter().enumerate() {
-        let boxes = detect_bubbles(state.clone(), id.clone()).await?;
+        let (boxes, ok, message) = fetch(id.clone()).await;
         all.push(boxes);
-        let _ = app.emit(
-            "detect_progress",
-            DetectProgress {
-                page_id: id.clone(),
-                done: i + 1,
-                total,
-            },
-        );
+        emit(DetectProgress {
+            page_id: id.clone(),
+            done: i + 1,
+            total,
+            ok,
+            message,
+        });
     }
-    Ok(all)
+    all
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bubble::BubbleBox;
+
+    fn box_at(x: i32) -> BubbleBox {
+        BubbleBox {
+            x,
+            y: 0,
+            w: 10,
+            h: 10,
+            confidence: 1.0,
+            shape: None,
+            kind: None,
+            tail: None,
+        }
+    }
+
+    /// detect-ux-pack 2.2: gagal di tengah → sisa tetap jalan + ringkasan benar.
+    #[tokio::test]
+    async fn gagal_tengah_lanjut_dan_urutan_utuh() {
+        let ids = ["p1".to_string(), "p2".to_string(), "p3".to_string()];
+        let mut events = Vec::new();
+        let out = collect_batch(
+            &ids,
+            |id| async move {
+                if id == "p2" {
+                    (Vec::new(), false, "decode failed".to_string())
+                } else {
+                    (vec![box_at(1)], true, String::new())
+                }
+            },
+            |ev| events.push(ev),
+        )
+        .await;
+        assert_eq!(out.len(), 3);
+        assert_eq!(out[0].len(), 1);
+        assert!(out[1].is_empty());
+        assert_eq!(out[2].len(), 1);
+        assert_eq!(events.len(), 3);
+        assert_eq!(events.iter().map(|e| e.done).collect::<Vec<_>>(), vec![1, 2, 3]);
+        assert!(events.iter().all(|e| e.total == 3));
+        assert_eq!(events.iter().map(|e| e.ok).collect::<Vec<_>>(), vec![true, false, true]);
+        assert_eq!(events[1].page_id, "p2");
+        assert_eq!(events[1].message, "decode failed");
+    }
 }
 
 /// Simpan bubble hasil edit canvas + update status page:

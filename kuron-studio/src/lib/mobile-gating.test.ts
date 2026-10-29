@@ -15,11 +15,24 @@ describe("mobile header gating (iOS/Android)", () => {
 
   it("tombol desktop-only disembunyikan di mobile", () => {
     // Token situs pemakaian di markup (bukan definisi fungsi / label i18n).
-    for (const token of ["onclick={importFolder}", "<UpdateButton", "onclick={cleanPages}"]) {
+    for (const token of ["<UpdateButton", "onclick={cleanPages}"]) {
       const i = appSrc.lastIndexOf(token);
       expect(i, `${token} hilang dari App`).toBeGreaterThan(-1);
       expect(appSrc.slice(Math.max(0, i - 150), i)).toContain("!isMobile");
     }
+  });
+
+  it("Import gabungan: satu tombol + menu, opsi folder gating mobile", () => {
+    // detect-ux-pack 3.1: tidak ada lagi onclick terpisah di header.
+    expect(appSrc).not.toContain("onclick={importFolder}");
+    expect(appSrc).not.toContain("onclick={importFiles}");
+    expect(appSrc).toContain("showImportMenu");
+    expect(appSrc).toContain('aria-haspopup="menu"');
+    // Opsi folder hanya dirender saat bukan mobile.
+    const i = appSrc.indexOf("void importFolder()");
+    expect(i).toBeGreaterThan(-1);
+    expect(appSrc.slice(Math.max(0, i - 400), i)).toContain("!isMobile");
+    expect(appSrc).toContain('{$t("importAction")}');
   });
 
   it("action bar scroll horizontal di layar kecil, wrap di desktop", () => {

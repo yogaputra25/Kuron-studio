@@ -56,9 +56,9 @@ const STR: Record<string, Record<Lang, string>> = {
     zh: "将文件夹/压缩包拖到此处，或使用导入按钮。",
   },
   emptyHintMobile: {
-    en: "Use Import files to add pages.",
-    id: "Pakai tombol Import files untuk tambah halaman.",
-    zh: "使用导入文件按钮添加页面。",
+    en: "Use Import to add pages.",
+    id: "Pakai tombol Import untuk tambah halaman.",
+    zh: "使用导入按钮添加页面。",
   },
   batchTitle: { en: "Batch translate", id: "Batch translate", zh: "批量翻译" },
   parallel: { en: "parallel", id: "paralel", zh: "并行" },
@@ -167,6 +167,10 @@ const STR: Record<string, Record<Lang, string>> = {
   moveGroupRoots: { en: "Other roots", id: "Root lain", zh: "其他根目录" },
   moveDone: { en: "{n} pages moved to {d}", id: "{n} halaman dipindah ke {d}", zh: "已移动 {n} 页到 {d}" },
   skippedCount: { en: "{n} skipped", id: "{n} dilewati", zh: "跳过 {n}" },
+  detecting: { en: "Detecting bubbles…", id: "Mendeteksi bubble…", zh: "正在检测气泡…" },
+  detectSummary: { en: "{ok} succeeded, {failed} failed", id: "{ok} berhasil, {failed} gagal", zh: "成功 {ok}，失败 {failed}" },
+  importAction: { en: "Import", id: "Import", zh: "导入" },
+  appTagline: { en: "Manga translation workspace", id: "Ruang kerja terjemahan manga", zh: "漫画翻译工作区" },
 };
 
 export const t = derived(lang, ($l) => (k: string): string => STR[k]?.[$l] ?? k);

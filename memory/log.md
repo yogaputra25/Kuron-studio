@@ -57,3 +57,23 @@ menyentuh baris lama).
 - Hasil: Selesai, kode tidak tersentuh.
 - Keputusan: secret (API key, password, signing key, isi keychain/`.env`) tidak pernah ke repo termasuk log/rules; temuan di output → `[REDACTED]` (aturan no. 8 di `AGENTS.md`).
 - Lanjut: —
+
+## 2026-10-29 — detect-ux-pack 15/17 di atas mainline baru (isu #17)
+
+- Kerja: Implementasi overlay progres Detect (`DetectProgress.svelte` + `reduceDetectProgress` + `listen detect_progress` + guard `detectGen`), backend lanjut-saat-gagal (`collect_batch` + event `ok/message`, test `gagal_tengah_lanjut_dan_urutan_utuh`), 1 tombol Import + menu pola switcher, header dua baris (`icon.svg` + tagline). Base pindah tengah jalan (main merge PR #16/#19–#22 ke `fa26334`); diff diverifikasi tanpa revert + gates diulang di base baru.
+- Hasil: `pnpm test` 395/395, `pnpm check` 0 error, `cargo test` 114 lulus, `clippy -D warnings` bersih.
+- Keputusan: tombol overlay = "Tutup" (dismiss, bukan cancel — backend tak punya cancel-flag); transport event diperkaya `ok/message` tanpa ubah wire invoke; `move_pages` main yang sempat tertelan resolusi dikembalikan verbatim (compiler menangkap).
+- Lanjut: smoke `tauri dev` 25 halaman (1.5) + E2E manual isu #17 (5.4).
+
+## 2026-10-29 — detect-ux-pack 17/17: smoke + E2E manual lulus (isu #17)
+
+- Kerja: Verifikasi manual oleh user (25 halaman, counter + filename + Tutup tengah jalan, 1 file rusak, mobile/sempit).
+- Hasil: LULUS. Change 17/17 complete. Siap archive.
+- Lanjut: `/opsx:archive` untuk detect-ux-pack.
+
+## 2026-10-29 — Arsip massal 15 change + sync 15 spec baru (opsi 1)
+
+- Kerja: Sync 15 main spec baru (verbatim ADDED + TBD Purpose) + 3 merge MODIFIED ke `kuron-studio` (batch import viewport/cache; 2 skenario manual-edit baru — sisanya sudah tercakup main). Perbaikan normatif: 4 badan before-after-split + 2 preview-transport tanpa SHALL/MUST. Arsip 15 change ke `archive/2026-10-29-*`. Validasi akhir: 20/20 spec strict hijau, tanpa delta header tersisa.
+- Hasil: Semua change terarsip. `openspec/changes/` tinggal `archive/` (26 entri). MAIN SPECS bertambah 15.
+- Catatan: `kuron-studio-mvp` tanpa delta spec → arsip langsung. Purpose 15 spec baru = TBD, perbarui menyusul.
+- Lanjut: commit + push (kode detect-ux-pack + grid-preview-perf masih uncommitted di worktree).

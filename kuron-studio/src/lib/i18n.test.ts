@@ -111,6 +111,10 @@ const KEYS = [
   "moveGroupRoots",
   "moveDone",
   "skippedCount",
+  "detecting",
+  "detectSummary",
+  "importAction",
+  "appTagline",
 ];
 
 const LANGS: Lang[] = ["en", "id", "zh"];
