@@ -148,13 +148,18 @@
     busy = true; error = "";
     try {
       // ponytail: M2 simpan sqlite kolom "stored:key"; M4 pindah ke OS keychain.
-      await api.saveProvider({
+      const saved = await api.saveProvider({
         ...(editId ? { id: editId } : {}),
         providerType: fType, name: fName.trim(), baseUrl: fBaseUrl,
         ...(fKey ? { apiKey: fKey } : {}), model: fModel,
       });
       fKey = "";
-      startNew();
+      // Tetap di mode edit (bukan startNew) supaya tombol Validate langsung
+      // aktif — user tidak harus klik Edit di daftar dulu. Tombol "Baru"
+      // tetap tersedia untuk mengosongkan form.
+      editId = saved.id;
+      hasStoredKey = saved.hasKey;
+      validMsg = ""; validOk = null;
       await load();
     } catch (e) {
       error = String(e);
@@ -303,7 +308,10 @@
         disabled={busy || !canListModels}
         title={canListModels ? "Ambil daftar model dari provider" : "Isi API key dulu"}
       >Load models</Button>
-      <Button variant="default" size="sm" onclick={validate} disabled={busy || !editId}>
+      <Button
+        variant="default" size="sm" onclick={validate} disabled={busy || !editId}
+        title={!editId ? "Simpan provider dulu, baru Validate aktif." : "Tes koneksi + kunci ke provider."}
+      >
         Validate
       </Button>
       <Button variant="ghost" size="sm" class="ml-auto" onclick={startNew}>Baru</Button>
