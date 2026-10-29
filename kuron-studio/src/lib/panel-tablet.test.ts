@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import panelSrc from "./EditorPanel.svelte?raw";
 import appSrc from "../App.svelte?raw";
 import deviceSrc from "./device?raw";
+import gridSrc from "./PageGrid.svelte?raw";
 
 // panel-resize-tablet: layout resizable + mode tablet wajib lewat jalur
 // terpusat (device.ts + panel.ts), bukan angka/UA-sniff tersebar.
@@ -30,8 +31,9 @@ describe("resizable panel + tablet mode wiring", () => {
     expect(panelSrc).not.toContain("w-[19rem]");
   });
 
-  it("grid tablet = 3 kolom di md", () => {
-    expect(appSrc).toContain("md:grid-cols-3");
+  it("grid tablet = 3 kolom di md (PageGrid, pindahan App utuh)", () => {
+    // page-list-view 2.3: markup grid pindah ke PageGrid — perilaku sama.
+    expect(gridSrc).toContain("md:grid-cols-3");
   });
 
   it("device.ts tidak mengandalkan UA untuk tablet", () => {

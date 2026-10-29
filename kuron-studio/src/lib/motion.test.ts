@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import appSrc from "../App.svelte?raw";
+import gridSrc from "./PageGrid.svelte?raw";
 import moveSrc from "./MoveDialog.svelte?raw";
 import onbSrc from "./Onboarding.svelte?raw";
 import panelSrc from "./ui/Panel.svelte?raw";
@@ -21,9 +22,10 @@ describe("motion pass", () => {
   });
 
   it("kartu grid stagger masuk + hover lift", () => {
-    expect(appSrc).toContain("as pg, idx (pg.id)");
-    expect(appSrc).toContain("in:fly={{ y: 14, duration: 220, delay: Math.min(idx * 15, 300) }}");
-    expect(appSrc).toContain("hover:-translate-y-0.5");
+    // page-list-view 2.3: kartu pindah ke PageGrid — perilaku sama, lokasi baru.
+    expect(gridSrc).toContain("as pg, idx (pg.id)");
+    expect(gridSrc).toContain("in:fly={{ y: 14, duration: 220, delay: Math.min(idx * 15, 300) }}");
+    expect(gridSrc).toContain("hover:-translate-y-0.5");
   });
 
   it("dropdown project dan bar seleksi beranimasi", () => {

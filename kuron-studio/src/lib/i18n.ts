@@ -171,6 +171,12 @@ const STR: Record<string, Record<Lang, string>> = {
   detectSummary: { en: "{ok} succeeded, {failed} failed", id: "{ok} berhasil, {failed} gagal", zh: "成功 {ok}，失败 {failed}" },
   importAction: { en: "Import", id: "Import", zh: "导入" },
   appTagline: { en: "Manga translation workspace", id: "Ruang kerja terjemahan manga", zh: "漫画翻译工作区" },
+  gridView: { en: "Grid", id: "Grid", zh: "网格" },
+  listView: { en: "List", id: "Daftar", zh: "列表" },
+  sortBy: { en: "Sort", id: "Urut", zh: "排序" },
+  sortName: { en: "Name", id: "Nama", zh: "名称" },
+  sortStatus: { en: "Status", id: "Status", zh: "状态" },
+  sortBubbles: { en: "Bubbles", id: "Bubble", zh: "气泡" },
 };
 
 export const t = derived(lang, ($l) => (k: string): string => STR[k]?.[$l] ?? k);
