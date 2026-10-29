@@ -1,6 +1,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum AiProviderType {
     Gemini,
     OpenAi,
@@ -16,11 +17,11 @@ impl<'de> Deserialize<'de> for AiProviderType {
     {
         let s = String::deserialize(deserializer)?;
         match s.as_str() {
-            "gemini" => Ok(Self::Gemini),
-            "openAi" => Ok(Self::OpenAi),
-            "metaAi" => Ok(Self::MetaAi),
-            "cohere" => Ok(Self::Cohere),
-            "custom" => Ok(Self::Custom),
+            "gemini" | "Gemini" => Ok(Self::Gemini),
+            "openAi" | "OpenAi" => Ok(Self::OpenAi),
+            "metaAi" | "MetaAi" => Ok(Self::MetaAi),
+            "cohere" | "Cohere" => Ok(Self::Cohere),
+            "custom" | "Custom" => Ok(Self::Custom),
             // Preset hapus (#26/#27): simpanan lama tetap terbaca, jadi Custom.
             "zen" | "openCodeGo" | "openRouter" | "clinePass" => Ok(Self::Custom),
             other => Err(serde::de::Error::unknown_variant(
@@ -173,6 +174,38 @@ mod tests {
         // Penyintas tidak berubah.
         let t: AiProviderType = serde_json::from_str("\"metaAi\"").unwrap();
         assert_eq!(t, AiProviderType::MetaAi);
+    }
+    #[test]
+    fn provider_type_serde_roundtrip_camel() {
+        use AiProviderType::*;
+        for (t, s) in [
+            (Gemini, "gemini"),
+            (OpenAi, "openAi"),
+            (MetaAi, "metaAi"),
+            (Cohere, "cohere"),
+            (Custom, "custom"),
+        ] {
+            assert_eq!(serde_json::to_string(&t).unwrap(), format!("\"{s}\""), "serialize {s}");
+            assert_eq!(
+                serde_json::from_str::<AiProviderType>(&format!("\"{s}\"")).unwrap(),
+                t,
+                "deserialize {s}"
+            );
+        }
+        // Baris yang sempat tersimpan kapital (build tanpa rename_all) tetap terbaca.
+        for (s, t) in [
+            ("Gemini", Gemini),
+            ("OpenAi", OpenAi),
+            ("MetaAi", MetaAi),
+            ("Cohere", Cohere),
+            ("Custom", Custom),
+        ] {
+            assert_eq!(
+                serde_json::from_str::<AiProviderType>(&format!("\"{s}\"")).unwrap(),
+                t,
+                "legacy kapital {s}"
+            );
+        }
     }
 
     #[test]
