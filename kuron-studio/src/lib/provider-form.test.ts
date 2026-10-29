@@ -84,9 +84,9 @@ describe("provider form: model bisa dipilih sebelum disimpan", () => {
     expect(panel).toContain("Isi API key dulu");
   });
 
-  it("otomatis pilih model pertama agar field tidak kosong", () => {
+  it("otomatis pilih model vision pertama agar field tidak kosong", () => {
     const fn = panel.slice(panel.indexOf("async function loadModels"));
-    expect(fn).toContain("if (models.length > 0 && !fModel) fModel = models[0].id;");
+    expect(fn).toContain("if (models.length > 0 && !fModel) fModel = (models.find((m) => m.vision) ?? models[0]).id;");
   });
 
   it("select model Spiegelkan fModel, bukan selalu value=\"\"", () => {
@@ -157,3 +157,14 @@ describe("provider form: base_url tidak ditimpa diam-diam", () => {
     expect(fn).toContain("fBaseUrl = DEFAULT_BASE_URLS[t];");
   });
 });
+
+describe("provider form: filter vision + warning non-vision", () => {
+  it("daftar bisa difilter hanya-vision", () => {
+    expect(panel).toContain("visionOnly");
+  });
+
+  it("warning bila model dipilih non-vision atau tak dikenal di daftar", () => {
+    expect(panel).toMatch(/modelNoVisionWarn|modelUnknownWarn/);
+  });
+});
+

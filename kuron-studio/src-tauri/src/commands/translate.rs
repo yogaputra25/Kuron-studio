@@ -5,7 +5,7 @@ use crate::bubble::BubbleBox;
 use crate::cache;
 use crate::image_ops::{build_mosaic, compress_page, MosaicQuality};
 use crate::parser::{parse_full_image_json, parse_mosaic_json, preview_200};
-use crate::prompt::{append_glossary, build_mosaic_prompt, full_image_prompt, TranslateStyle};
+use crate::prompt::{append_custom, append_glossary, build_mosaic_prompt, full_image_prompt, TranslateStyle};
 use crate::provider;
 use crate::provider::config::ProviderRecord;
 use crate::translation::{
@@ -30,6 +30,8 @@ pub struct TranslatePageInput {
     #[serde(default = "default_dir")]
     pub reading_direction: String,
     pub glossary: Option<String>,
+    #[serde(default)]
+    pub custom_prompt: Option<String>,
 }
 
 fn default_lang() -> String { "Indonesian".to_string() }
@@ -257,6 +259,7 @@ pub struct PrepOpts<'a> {
     pub mosaic_quality: &'a str,
     pub reading_direction: &'a str,
     pub glossary: Option<&'a str>,
+    pub custom_prompt: Option<&'a str>,
 }
 
 /// Halaman siap-kirim: semua milik-owned agar bisa pindah ke worker batch.
@@ -326,14 +329,20 @@ pub async fn prepare_page(
 
     let gloss = effective_glossary(state, opts.glossary, snap.prev.as_ref());
     let prompt = if snap.bubbles.is_empty() {
-        append_glossary(
-            full_image_prompt(opts.target_lang, style, opts.skip_sfx),
-            gloss.as_deref(),
+        append_custom(
+            append_glossary(
+                full_image_prompt(opts.target_lang, style, opts.skip_sfx),
+                gloss.as_deref(),
+            ),
+            opts.custom_prompt,
         )
     } else {
-        append_glossary(
-            build_mosaic_prompt(opts.target_lang, style, opts.skip_sfx, ordered.len()),
-            gloss.as_deref(),
+        append_custom(
+            append_glossary(
+                build_mosaic_prompt(opts.target_lang, style, opts.skip_sfx, ordered.len()),
+                gloss.as_deref(),
+            ),
+            opts.custom_prompt,
         )
     };
     let bubbles_json = serde_json::to_string(&snap.bubbles).map_err(|e| e.to_string())?;
@@ -347,6 +356,7 @@ pub async fn prepare_page(
         skip_sfx: opts.skip_sfx,
         reading_dir: opts.reading_direction,
         glossary: gloss.as_deref(),
+        custom_prompt: opts.custom_prompt,
     });
     Ok(PagePrep {
         page_id: snap.page_id,
@@ -458,6 +468,7 @@ pub async fn translate_page(
             mosaic_quality: &input.mosaic_quality,
             reading_direction: &input.reading_direction,
             glossary: input.glossary.as_deref(),
+            custom_prompt: input.custom_prompt.as_deref(),
         },
     )
     .await?;

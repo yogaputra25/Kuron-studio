@@ -84,3 +84,37 @@ menyentuh baris lama).
 - Hasil: `pnpm test` 405/405, `pnpm check` 0 error, `cargo test` 114 lulus, clippy bersih. Main maju PR #23 (merge grid-preview-perf, tanpa diff konten) — tanpa konflik.
 - Keputusan: kolom ukuran = dimensi `WxH` (tanpa byte, tanpa backend) — opsi A sesuai pilihan user.
 - Lanjut: smoke keyboard-only + narrow viewport (3.3), E2E 52/200 halaman (4.3) — butuh GUI + data nyata.
+
+## 2026-10-29 — custom prompt / instruksi tambahan translate (fokus bahasa output)
+
+- Kerja: `append_custom` di `prompt.rs` (cap 2000 char, char-boundary, format JSON tetap wajib) + test; `custom_prompt` masuk `TranslatePageInput/BatchInput/RetryBubbleInput` → `PrepOpts` → prompt + `CacheKey`; frontend: textarea di `TranslatePanel`, `customPrompt` di `TranslateOpts/BatchOpts/TranslateBatchInput/RetryBubbleInput/TranslatePageArgs`, teruskan di translatePage/BatchPanel/ReviewGrid (retry page+bubble); i18n `customPrompt/customPromptPh` 3 bahasa + test list. Sampingan: hapus import tak terpakai di `panel-tablet.test.ts` (pre-existing, `pnpm check` merah).
+- Hasil: `cargo test` 118 lulus, clippy bersih, `pnpm test` 405/405, `pnpm check` 0 error.
+- Keputusan: custom prompt ditempel SETELAH glossary (paling dekat ekspektasi akhir) tapi tanpa wewenang melonggarkan format JSON; cache key ikut custom prompt supaya ganti instruksi = translate ulang, bukan cache basi.
+- Lanjut: smoke translate sekali pakai custom prompt di Tauri dev (verifikasi prompt terkirim); pertimbangkan preset instruksi bahasa bila user memintanya.
+
+## 2026-10-30 — provider-api-refresh 9/9 di worktree (isu #26 + #27)
+
+- Kerja: Worktree `Kuron-studio-provider-api-refresh` branch `feat/provider-api-refresh` (isolasi dari dirt custom-prompt di checkout utama). 1.1: hapus preset OpenRouter/Zen/OpenCodeGo/ClinePass (Rust+TS), deserializer toleran nama hapus → Custom (`cache.rs` sudah `unwrap_or(Custom)`). 1.2: preset Meta `api.meta.ai/v1` + normalisasi simpanan `api.llama.com` di `effective_base_url` + `provider-preset-contract.test.ts` (TS==Rust via `?raw`). 2.1: `vision_capable(provider,id)` allowlist (Meta muse-spark/wonder; Cohere command-a-vision/aya-vision; pola umum) + blacklist non-vision + fallback lama; `openai::list_models` tambah param provider. 2.2/2.3: mock TcpListener `provider_list_mock` + `provider_chat_mock` (path/auth/body per provider, tanpa dev-dep baru). 3.1: default = vision pertama. 3.2/3.3: checkbox Hanya vision + warning non-vision/tak dikenal (i18n id/en/zh) — smoke browser mock: default muse-spark-1.3, filter sisakan vision saja, warning tampil. 4.1: ARCHITECTURE "5 provider BYOK".
+- Hasil: `cargo test` 118+8 mock lulus, clippy bersih, `pnpm test` 410/410, `pnpm check` 0 error. `openspec validate provider-api-refresh` hijau, tasks 10/10.
+- Keputusan (Ruling): mock tanpa wiremock/mockito ikut preseden `translate_mock.rs` (TcpListener, tanpa dev-dep). Normalisasi base lama tanpa log (mapping murni). Test lama `models[0]` diganti (bukan di-pin) karena spek mengubah perilakunya. Fix `panel-tablet.test.ts` (import tak terpakai) diadopsi dari dirt checkout utama supaya gate hijau. Deserializer mengembalikan error untuk nama benar-benar asing (bukan silent Custom).
+- Lanjut: user review → `/opsx:archive`; merge branch worktree ke main (perhatikan dirt custom-prompt yang belum commit di checkout utama).
+
+## 2026-10-30 — fix TLS: webpki roots (semua HTTPS provider gagal UnknownIssuer)
+
+- Kerja: User lapor `error sending request for url (.../v1beta/models?key=...)` saat Load models Gemini. Host reachable via curl (403 wajar) → bukan jaringan. Akar: `reqwest` feature `rustls-tls-manual-roots` TANPA root cert → semua HTTPS gagal di handshake. Fix: tambah feature `rustls-tls-webpki-roots` + `.tls_built_in_root_certs(true)` di builder `AppState::http` (`lib.rs`). Verifikasi throwaway test HTTPS ke generativelanguage (respons HTTP, bukan transport error), lalu hapus.
+- Hasil: `cargo test` hijau, clippy 0 error. Commit di atas merge provider-api-refresh.
+- Catatan: key user (`AQ.Ab8...`) BUKAN format Gemini API key (`AIza...`, dari AI Studio) — setelah TLS pulih, key salah akan muncul sebagai error API 400, bukan transport. Sampaikan ke user.
+- Lanjut: restart dev server; bila user ganti key valid, Load models Gemini harus hijau.
+
+## 2026-10-30 — fix serde AiProviderType (dispatch Gemini nyasar ke /chat/completions → 404)
+
+- Kerja: Log user tunjukkan POST ke `generativelanguage.../chat/completions` (jalur OpenAI) untuk provider Gemini. Akar: saat hapus preset, `rename_all="camelCase"` ikut terbuang dari `Serialize` → DB tulis `"Gemini"` kapital → Deserialize (lowercase saja) gagal → `unwrap_or(Custom)` → dispatch `_ => openai`. Fix: kembalikan `rename_all`, Deserialize terima dua-duanya (`"gemini"|"Gemini"` dst.) supaya baris yang sempat tersimpan kapital tetap terbaca benar. Test RED (`serialize gemini` → `"Gemini"`) lalu GREEN.
+- Hasil: `cargo test` hijau, clippy 0, `pnpm test` 410/410, `pnpm check` 0.
+- Catatan: model `gemma-4-31b-it`/`gemini-3.8-flash` tidak ada di katalog — user harus pilih dari Load models. Key 401 sebelumnya urusan key user, bukan app.
+- Lanjut: restart dev server; provider Gemini tersimpan otomatis benar tanpa simpan ulang.
+
+## 2026-10-30 — fix label bahasa kartu bubble (ID→EN tampil JP/ID)
+
+- Kerja: User lapor kartu bubble #3 berlabel "Original (JP)"/"Terjemahan (ID)" padahal arah ID→EN. Akar: label hardcoded di `EditorPanel.svelte`. Fix: `trgLang` derived dari `translation.targetLang` (disimpan backend) → `lastOpts.targetLang` → default "id"; label `Original` (sumber tak diketahui app) + `Terjemahan ({trgLabel})` via `TARGET_LANGS`; `createEmptyTranslation` pakai target aktual bukan "id". Test RED (`not.toContain` hardcoded) → GREEN; `edit-in-bubble.test.ts` diperbarui.
+- Hasil: `pnpm test` 410/410, `pnpm check` 0 error.
+- Catatan: prompt backend kirim kode mentah ("into id") — LLM paham, tapi rapi-nya dipetakan ke nama bahasa; tunda (di luar keluhan).

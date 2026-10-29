@@ -47,6 +47,7 @@
         skipSfx: opts.skipSfx,
         mosaicQuality: opts.mosaicQuality,
         readingDirection: opts.readingDirection,
+        ...(opts.customPrompt ? { customPrompt: opts.customPrompt } : {}),
       });
     } catch (e) {
       error = String(e);

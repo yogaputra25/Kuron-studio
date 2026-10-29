@@ -3,6 +3,7 @@
   import { api } from "./api";
   import { TARGET_LANGS, TRANSLATE_STYLES } from "./types";
   import type { MosaicQuality, PageTranslation, ProviderView, ReadingDirection, TranslateStyle } from "./types";
+  import { t } from "./i18n";
   import Button from "./ui/Button.svelte";
 
   import Select from "./ui/Select.svelte";
@@ -12,6 +13,7 @@
     style: TranslateStyle;
     skipSfx: boolean;
     mosaicQuality: MosaicQuality;
+    customPrompt: string;
   }
 
   interface Props {
@@ -34,6 +36,7 @@
   let skipSfx = $state(true);
   let mosaicQuality = $state<MosaicQuality>("low");
   let glossary = $state("");
+  let customPrompt = $state("");
   let glossaryPreview = $state<string | null>(null);
   let busy = $state(false);
   let cancelled = $state(false);
@@ -41,8 +44,8 @@
 
   // Angkat opts ke parent (Batch/Review) + preview glossary auto-context.
   $effect(() => {
-    targetLang; style; skipSfx; mosaicQuality;
-    onOptsChange({ targetLang, style, skipSfx, mosaicQuality });
+    targetLang; style; skipSfx; mosaicQuality; customPrompt;
+    onOptsChange({ targetLang, style, skipSfx, mosaicQuality, customPrompt: customPrompt.trim() });
   });
 
   $effect(() => {
@@ -77,6 +80,7 @@
         mosaicQuality,
         readingDirection: readingDir,
         ...(glossary.trim() ? { glossary: glossary.trim() } : {}),
+        ...(customPrompt.trim() ? { customPrompt: customPrompt.trim() } : {}),
       });
       if (cancelled) return; // response telat pasca-Batal: buang, tanpa persist ganda
       info = `${t.model} · ${t.bubbles.length} bubble · ${((performance.now() - t0) / 1000).toFixed(1)}s`;
@@ -163,6 +167,25 @@
         rows="2"
         bind:value={glossary}
         placeholder="Auto dari Glossary DB — override manual di sini"
+      ></textarea>
+    </div>
+
+    <div class="flex flex-col gap-1.5">
+      <label
+        for="custom-prompt"
+        class="text-[11px] font-medium tracking-wide text-ink-2 uppercase"
+      >
+        {$t("customPrompt")}
+      </label>
+      <textarea
+        id="custom-prompt"
+        class="w-full rounded-md border border-line bg-surface-2 px-3 py-2.5 text-[12px]
+               leading-relaxed text-ink placeholder:text-ink-3 outline-none transition-colors
+               focus:border-accent focus:ring-2 focus:ring-accent/25"
+        rows="2"
+        maxlength="2000"
+        bind:value={customPrompt}
+        placeholder={$t("customPromptPh")}
       ></textarea>
     </div>
 

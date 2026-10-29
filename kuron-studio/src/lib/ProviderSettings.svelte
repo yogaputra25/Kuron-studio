@@ -30,6 +30,8 @@
   let modelsMsg = $state("");
   let validMsg = $state("");
   let validOk = $state<boolean | null>(null);
+  let visionOnly = $state(false);
+  const shownModels = $derived(visionOnly ? models.filter((m) => m.vision) : models);
 
   const typeLabel = (t: string) => PROVIDER_TYPES.find((p) => p.value === t)?.label ?? t;
 
@@ -120,7 +122,7 @@
         ? await api.listModels(editId)
         : await api.listModelsDraft({ providerType: fType, baseUrl: fBaseUrl, apiKey: fKey.trim() });
       modelsMsg = models.length > 0 ? `${models.length} model.` : "Provider tidak mengembalikan model.";
-      if (models.length > 0 && !fModel) fModel = models[0].id;
+      if (models.length > 0 && !fModel) fModel = (models.find((m) => m.vision) ?? models[0]).id;
     } catch (e) {
       modelsMsg = String(e);
     } finally {
@@ -262,17 +264,28 @@
     </div>
 
     {#if models.length > 0}
+      <label class="mt-4 flex cursor-pointer items-center gap-2 text-xs text-ink-2">
+        <input type="checkbox" bind:checked={visionOnly} class="accent-current" />
+        {$t("visionOnlyFilter")}
+      </label>
       <Select
         label="Model tersedia"
-        class="mt-4"
         value={fModel}
         onchange={(e) => (fModel = (e.target as HTMLSelectElement).value)}
       >
         <option value="">— pilih dari daftar —</option>
-        {#each models as m (m.id)}
+        {#each shownModels as m (m.id)}
           <option value={m.id}>{m.label}{m.vision ? " · vision" : ""}</option>
         {/each}
       </Select>
+      {#if fModel}
+        {@const hit = models.find((m) => m.id === fModel)}
+        {#if !hit || !hit.vision}
+          <p role="alert" class="mt-2 text-[11px] leading-relaxed text-warn">
+            {$t(!hit ? "modelUnknownWarn" : "modelNoVisionWarn")}
+          </p>
+        {/if}
+      {/if}
     {/if}
 
     {#if modelsMsg}

@@ -32,7 +32,7 @@ lopdf = "0.35"
 flate2 = "1"
 ort = "=2.0.0-rc.13"
 ndarray = "0.17"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-manual-roots"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-manual-roots", "rustls-tls-webpki-roots"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 sha2 = "0.10"
 # PENTING: tanpa feature "apple-native", crate keyring otomatis memakai
@@ -43,6 +43,7 @@ sha2 = "0.10"
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "linux-native"] }
 # ponytail: tokio hanya untuk sleep retry 429 + #[tokio::test]; runtime utama milik tauri.
 # ponytail: manual-roots tanpa bundled roots (MSVC-safe, tanpa OpenSSL); bila HTTPS gagal verify, tambah "rustls-tls-webpki-roots".
+# webpki-roots = data Mozilla murni-Rust (tanpa OpenSSL, MSVC-safe); wajib karena tanpa root, SEMUA https gagal UnknownIssuer.
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"] }
 
 [target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]

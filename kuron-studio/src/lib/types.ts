@@ -110,13 +110,9 @@ export interface DetectStatus {
 
 // --- M2: AI providers + translation (kontrak Rust, invoke keys snake_case) ---
 export type AiProviderType =
-  | "zen"
-  | "openCodeGo"
   | "gemini"
   | "openAi"
-  | "openRouter"
   | "metaAi"
-  | "clinePass"
   | "cohere"
   | "custom";
 
@@ -204,16 +200,13 @@ export interface TranslatePageArgs {
   mosaicQuality: MosaicQuality;
   readingDirection: ReadingDirection;
   glossary?: string;
+  customPrompt?: string;
 }
 
 export const PROVIDER_TYPES: { value: AiProviderType; label: string; needsKey: boolean }[] = [
-  { value: "zen", label: "Zen", needsKey: false },
-  { value: "openCodeGo", label: "OpenCode Go", needsKey: true },
   { value: "gemini", label: "Gemini", needsKey: true },
   { value: "openAi", label: "OpenAI", needsKey: true },
-  { value: "openRouter", label: "OpenRouter", needsKey: true },
   { value: "metaAi", label: "Meta AI", needsKey: true },
-  { value: "clinePass", label: "Cline Pass", needsKey: true },
   { value: "cohere", label: "Cohere", needsKey: true },
   { value: "custom", label: "Custom", needsKey: true },
 ];
@@ -221,13 +214,9 @@ export const PROVIDER_TYPES: { value: AiProviderType; label: string; needsKey: b
 // Must match Rust AiProviderType::default_base_url exactly: Rust appends
 // endpoint paths (/v1beta/models, /v2/chat, ...) so bases stay origin-level.
 export const DEFAULT_BASE_URLS: Record<AiProviderType, string> = {
-  zen: "http://localhost:8080",
-  openCodeGo: "http://localhost:8080",
   gemini: "https://generativelanguage.googleapis.com",
   openAi: "https://api.openai.com/v1",
-  openRouter: "https://openrouter.ai/api/v1",
-  metaAi: "https://api.llama.com/v1",
-  clinePass: "https://api.cline.bot/v1",
+  metaAi: "https://api.meta.ai/v1",
   cohere: "https://api.cohere.ai",
   custom: "",
 };
@@ -265,6 +254,7 @@ export interface BatchOpts {
   skipSfx: boolean;
   mosaicQuality: MosaicQuality;
   readingDirection: ReadingDirection;
+  customPrompt: string;
 }
 
 export interface TranslateBatchInput {
@@ -276,6 +266,7 @@ export interface TranslateBatchInput {
   mosaicQuality: MosaicQuality;
   readingDirection: ReadingDirection;
   glossary?: string;
+  customPrompt?: string;
 }
 
 export interface RetryBubbleInput {
@@ -288,6 +279,7 @@ export interface RetryBubbleInput {
   mosaicQuality: MosaicQuality;
   readingDirection: ReadingDirection;
   glossary?: string;
+  customPrompt?: string;
 }
 
 export interface TranslateProgress {
