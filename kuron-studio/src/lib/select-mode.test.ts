@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import appSrc from "../App.svelte?raw";
+import gridSrc from "./PageGrid.svelte?raw";
 import moveSrc from "./MoveDialog.svelte?raw";
 
 // Mode pilih manual: checkbox kartu + "Pilih semua" disembunyikan sampai
@@ -7,8 +8,9 @@ import moveSrc from "./MoveDialog.svelte?raw";
 // Folder asal pilihan tampil disabled di dialog pindah.
 describe("select mode gating + move source", () => {
   it("checkbox kartu hanya dirender di mode pilih", () => {
-    const gate = appSrc.indexOf("{#if selectMode}");
-    const checkbox = appSrc.indexOf('type="checkbox"');
+    // page-list-view 2.3: kartu pindah ke PageGrid — gating sama, lokasi baru.
+    const gate = gridSrc.indexOf("{#if selectMode}");
+    const checkbox = gridSrc.indexOf('type="checkbox"');
     expect(gate, "gate {#if selectMode} hilang").toBeGreaterThan(-1);
     expect(checkbox, "checkbox hilang").toBeGreaterThan(gate);
   });
@@ -22,7 +24,7 @@ describe("select mode gating + move source", () => {
   });
 
   it("masuk mode via ctrl/shift-klik dan tahan gambar", () => {
-    expect(appSrc).toContain("onpointerdown={() => onCardPress(pg)}");
+    expect(gridSrc).toContain("onpointerdown={() => onCardPress(pg)}");
     expect(appSrc).toContain("selectMode = true;");
   });
 

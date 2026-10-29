@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import appSrc from "../App.svelte?raw";
+import gridSrc from "./PageGrid.svelte?raw";
+import listSrc from "./PageList.svelte?raw";
 
 // grid-preview-perf: antrean + viewport + guard + progress wajib lewat jalur
 // terpusat (previewQueue/previewMetrics), bukan angka tersebar. Pola-sumber
@@ -28,7 +30,8 @@ describe("grid preview queue wiring (grid-preview-perf)", () => {
     expect(appSrc).toContain("new IntersectionObserver");
     expect(appSrc).toContain("rootMargin");
     expect(appSrc).toContain("io.disconnect()");
-    expect(appSrc).toContain("use:observeCard");
+    expect(gridSrc).toContain("use:observeCard");
+    expect(listSrc).toContain("use:observeCard");
   });
 
   it("progress jujur: label Memuat n/m + retry yang gagal", () => {

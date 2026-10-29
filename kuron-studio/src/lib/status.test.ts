@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sortPagesByName, statusBadgeClass, statusLabel } from "./status";
+import { fileName, parentFolder, sortPagesByBubbles, sortPagesByName, sortPagesByStatus, statusBadgeClass, statusLabel } from "./status";
 import type { Page, PageStatus } from "./types";
 
 const page = (path: string): Page => ({ id: path, path, width: 0, height: 0, status: "idle", bubbles: [] });
@@ -56,5 +56,42 @@ describe("sortPagesByName", () => {
   it("orders numerically by filename", () => {
     const out = sortPagesByName([page("p10.jpg"), page("p2.jpg"), page("p1.jpg")]);
     expect(out.map((p) => p.path)).toEqual(["p1.jpg", "p2.jpg", "p10.jpg"]);
+  });
+});
+
+describe("sortPagesByStatus", () => {
+  const withStatus = (path: string, status: PageStatus): Page => ({ ...page(path), status });
+
+  it("orders todo < doing < done < failed, tiebreak name", () => {
+    const pages = [
+      withStatus("b.jpg", "failed"),
+      withStatus("a.jpg", "translated"),
+      withStatus("c.jpg", "idle"),
+      withStatus("d.jpg", "detecting"),
+    ];
+    expect(sortPagesByStatus(pages).map((p) => p.path)).toEqual(["c.jpg", "d.jpg", "a.jpg", "b.jpg"]);
+    expect(sortPagesByStatus(pages, -1).map((p) => p.path)).toEqual(["b.jpg", "a.jpg", "d.jpg", "c.jpg"]);
+  });
+});
+
+describe("sortPagesByBubbles", () => {
+  const withBubbles = (path: string, n: number): Page => ({
+    ...page(path),
+    bubbles: Array(n).fill({ x: 0, y: 0, w: 1, h: 1, confidence: 1, shape: null, kind: null, tail: null }),
+  });
+
+  it("orders by bubble count, tiebreak name", () => {
+    const pages = [withBubbles("b.jpg", 5), withBubbles("a.jpg", 5), withBubbles("c.jpg", 0)];
+    expect(sortPagesByBubbles(pages).map((p) => p.path)).toEqual(["c.jpg", "a.jpg", "b.jpg"]);
+    expect(sortPagesByBubbles(pages, -1).map((p) => p.path)).toEqual(["b.jpg", "a.jpg", "c.jpg"]);
+  });
+});
+
+describe("fileName/parentFolder", () => {
+  it("splits posix and windows paths", () => {
+    expect(fileName("a/Ch08/p037.jpg")).toBe("p037.jpg");
+    expect(fileName("C:\\img\\p1.png")).toBe("p1.png");
+    expect(parentFolder("a/Ch08/p037.jpg")).toBe("Ch08");
+    expect(parentFolder("p037.jpg")).toBe("");
   });
 });

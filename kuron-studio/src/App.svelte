@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { tick } from "svelte";
   import { fly, scale } from "svelte/transition";
   import { open } from "@tauri-apps/plugin-dialog";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -13,18 +14,19 @@
   import GlossaryPanel from "./lib/GlossaryPanel.svelte";
   import ProviderSettings from "./lib/ProviderSettings.svelte";
   import ReviewGrid from "./lib/ReviewGrid.svelte";
-  import { sortPagesByName } from "./lib/status";
+  import PageGrid from "./lib/PageGrid.svelte";
+  import PageList from "./lib/PageList.svelte";
   import { lang, t, theme } from "./lib/i18n";
   import type { Lang, Theme } from "./lib/i18n";
   import type { BatchOpts, Page, Project, ReadingDirection } from "./lib/types";
   import { ARCHIVE_EXTS, IMAGE_EXTS, PDF_EXTS } from "./lib/types";
   import { allPages, childrenOf, folderPath, groupKanban, hasNesting, projectStats, rangeSelect, subtreePages, subtreeStats } from "./lib/library";
   import Button from "./lib/ui/Button.svelte";
+  import { fileName, sortPagesByName } from "./lib/status";
   import FolderChip from "./lib/FolderChip.svelte";
   import MoveDialog from "./lib/MoveDialog.svelte";
   import Onboarding from "./lib/Onboarding.svelte";
   import Snackbar from "./lib/ui/Snackbar.svelte";
-  import StatusBadge from "./lib/ui/StatusBadge.svelte";
   import DetectProgress from "./lib/DetectProgress.svelte";
   import { initialDetectState, reduceDetectProgress, type DetectState } from "./lib/detectProgress";
   import type { DetectProgress as DetectProgressEv } from "./lib/types";
@@ -79,6 +81,40 @@
   let detectState = $state<DetectState | null>(null);
   let detectHidden = $state(false);
   let detectGen = 0;
+  // page-list-view D4/D5: mode Grid/List + pref + scroll per mode.
+  function loadPageView(): "grid" | "list" {
+    try {
+      return localStorage.getItem("kuron-page-view") === "list" ? "list" : "grid";
+    } catch {
+      return "grid";
+    }
+  }
+  let pageView = $state<"grid" | "list">(loadPageView());
+  let scrollByView: Record<"grid" | "list", number> = { grid: 0, list: 0 };
+
+  /** Ganti mode: simpan scroll lama, pulihkan scroll mode tujuan. */
+  async function setPageView(v: "grid" | "list") {
+    if (v === pageView) return;
+    scrollByView[pageView] = window.scrollY;
+    pageView = v;
+    try {
+      localStorage.setItem("kuron-page-view", v);
+    } catch {
+      /* private mode: sesi ini saja */
+    }
+    await tick();
+    window.scrollTo(0, scrollByView[v] ?? 0);
+  }
+
+  /** G/L global khusus grid (abaikan saat editor/menu/input fokus). */
+  function onViewKey(e: KeyboardEvent) {
+    if (selectedPage || e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = e.target as HTMLElement | null;
+    const tag = t?.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || !!t?.isContentEditable) return;
+    if (e.key === "g" || e.key === "G") void setPageView("grid");
+    else if (e.key === "l" || e.key === "L") void setPageView("list");
+  }
   let openError = $state("");
   let dragging = $state(false);
   let busy = $state(false);
@@ -118,7 +154,6 @@
   const selectedPage = $derived(allPages(current ?? { id: "", name: "", folders: [] } as Project).find((p) => p.id === selectedId) ?? null);
   /** Halaman yang preview-nya gagal → jumlah tombol "Bersihkan". */
   const brokenCount = $derived(Object.keys(broken).length);
-  const fileName = (path: string) => path.split(/[/\\]/).pop() ?? path;
   const filteredProjects = $derived(
     projQuery.trim()
       ? projects.filter((p) => p.name.toLowerCase().includes(projQuery.trim().toLowerCase()))
@@ -950,6 +985,22 @@
           <Button variant="ghost" size="sm" onclick={() => (selectMode = false)}>{$t("close")}</Button>
         {/if}
       {/if}
+      <div class="ml-auto flex overflow-hidden rounded-md border border-line" role="tablist" aria-label="{$t('gridView')} / {$t('listView')}">
+        <button
+          class="h-7 px-3 text-xs font-medium transition-colors {pageView === 'grid' ? 'bg-accent text-accent-fg' : 'bg-surface-2 text-ink-2 hover:bg-hover hover:text-ink'}"
+          role="tab"
+          aria-selected={pageView === "grid"}
+          title="{$t('gridView')} (G)"
+          onclick={() => void setPageView("grid")}
+        >⬢ {$t("gridView")}</button>
+        <button
+          class="h-7 border-l border-line px-3 text-xs font-medium transition-colors {pageView === 'list' ? 'bg-accent text-accent-fg' : 'bg-surface-2 text-ink-2 hover:bg-hover hover:text-ink'}"
+          role="tab"
+          aria-selected={pageView === "list"}
+          title="{$t('listView')} (L)"
+          onclick={() => void setPageView("list")}
+        >☰ {$t("listView")}</button>
+      </div>
     </section>
     {#if selectedIds.length > 0}
       <div class="tnum mx-5 mt-3 flex items-center gap-2 rounded-md border border-line bg-surface-2 px-3 py-1.5 text-xs" role="status" transition:fly={{ y: -8, duration: 180 }}>
@@ -968,75 +1019,33 @@
         <Button variant="ghost" size="sm" onclick={retryThumbs}>{$t("retryThumbs")}</Button>
       </p>
     {/if}
-    <section
-      class="grid grid-cols-2 gap-3 p-5 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-6 xl:grid-cols-8"
-      class:outline-2={dragging}
-      class:outline-accent={dragging}
-    >
-      {#each sortPagesByName(visiblePages) as pg, idx (pg.id)}
-        {@const sel = selectedIds.includes(pg.id)}
-        <div class="relative">
-        <button
-          use:observeCard={pg.id}
-          class="group block w-full overflow-hidden rounded-lg border bg-surface text-left transition-all duration-150
-                 hover:-translate-y-0.5 hover:border-accent/60 hover:shadow-lg focus-visible:border-accent
-                 disabled:cursor-not-allowed disabled:opacity-60 {sel ? 'border-accent' : 'border-line'}"
-          in:fly={{ y: 14, duration: 220, delay: Math.min(idx * 15, 300) }}
-          onclick={(e) => onCardClick(e, pg)}
-          onpointerdown={() => onCardPress(pg)}
-          onpointerup={cancelHold}
-          onpointerleave={cancelHold}
-          onpointercancel={cancelHold}
-          disabled={!!broken[pg.id]}
-        >
-          <div class="relative">
-            {#if thumbs[pg.id]}
-              <img
-                src={thumbs[pg.id]}
-                alt={fileName(pg.path)}
-                class="aspect-[3/4] w-full bg-raised object-cover"
-                loading="lazy"
-              />
-            {:else if broken[pg.id]}
-              <div
-                class="flex aspect-[3/4] w-full flex-col items-center justify-center gap-1 bg-danger-soft p-2 text-center"
-                role="img"
-                aria-label="Preview gagal"
-              >
-                <span class="text-base text-danger" aria-hidden="true">⚠</span>
-                <span class="text-[10px] leading-tight text-danger" title={broken[pg.id]}>preview gagal</span>
-              </div>
-            {:else}
-              <div class="aspect-[3/4] w-full animate-pulse bg-raised"></div>
-            {/if}
-            {#if (pg.bubbles?.length ?? 0) > 0}
-              <span
-                class="tnum absolute top-1.5 right-1.5 rounded bg-cyan-soft/90 px-1.5 py-0.5
-                       text-[10px] font-semibold text-cyan backdrop-blur-sm"
-                title="{pg.bubbles.length} bubble"
-              >⬢{pg.bubbles.length}</span>
-            {/if}
-          </div>
-          <div class="flex items-center gap-1.5 border-t border-line px-2 py-1.5">
-            <span class="truncate text-[11px] text-ink-2 group-hover:text-ink" title={pg.path}>
-              {fileName(pg.path)}
-            </span>
-            <StatusBadge status={pg.status} class="ml-auto" />
-          </div>
-        </button>
-        {#if selectMode}
-          <input
-            type="checkbox"
-            class="absolute top-1.5 left-1.5 h-4 w-4 cursor-pointer accent-accent"
-            checked={sel}
-            aria-label="{$t('selectPage')}: {fileName(pg.path)}"
-            onclick={(e) => e.stopPropagation()}
-            onchange={() => toggleSelect(pg.id)}
-          />
-        {/if}
-        </div>
-      {/each}
-    </section>
+    {#if pageView === "grid"}
+      <PageGrid
+        pages={visiblePages}
+        {thumbs}
+        {broken}
+        {selectedIds}
+        {selectMode}
+        {dragging}
+        onCardClick={(e, pg) => onCardClick(e, pg)}
+        onCardPress={(pg) => onCardPress(pg)}
+        onRelease={cancelHold}
+        onToggleSelect={(id) => toggleSelect(id)}
+        observeCard={observeCard}
+      />
+    {:else}
+      <PageList
+        pages={visiblePages}
+        {thumbs}
+        {broken}
+        {selectedIds}
+        {selectMode}
+        onCardClick={(e, pg) => onCardClick(e, pg)}
+        onOpen={(pg) => openEditor(pg)}
+        onToggleSelect={(id) => toggleSelect(id)}
+        observeCard={observeCard}
+      />
+    {/if}
     {#if scopedPages.length === 0}
       <p class="mt-16 px-8 text-center text-sm text-ink-3">
         {#if dragging}Lepaskan file untuk import…{:else if isMobile}{$t("emptyHintMobile")}{:else}{$t("emptyHint")}{/if}
@@ -1132,3 +1141,5 @@
     <DiagnosticsPanel onClose={() => (showDiagnostics = false)} />
   {/if}
 </main>
+
+<svelte:window onkeydown={onViewKey} />

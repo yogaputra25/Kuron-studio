@@ -29,3 +29,53 @@ export function sortPagesByName(pages: Page[]): Page[] {
     a.path.localeCompare(b.path, undefined, { numeric: true }),
   );
 }
+
+/** Urutan status untuk sortir: Belum → Proses → Sudah → Gagal (cerminan bucket kanban). */
+const STATUS_RANK: Record<PageStatus, number> = {
+  idle: 0,
+  detected: 0,
+  noBubbles: 0,
+  detecting: 1,
+  translating: 1,
+  translated: 2,
+  failed: 3,
+};
+
+/** Sortir stabil: status (bucket kanban), tiebreak nama natural. */
+export function sortPagesByStatus(pages: Page[], dir: 1 | -1 = 1): Page[] {
+  return [...pages]
+    .map((p, i) => ({ p, i }))
+    .sort((a, b) => {
+      const r = (STATUS_RANK[a.p.status] ?? 99) - (STATUS_RANK[b.p.status] ?? 99);
+      if (r !== 0) return dir * r;
+      const n = a.p.path.localeCompare(b.p.path, undefined, { numeric: true });
+      if (n !== 0) return dir * n;
+      return a.i - b.i;
+    })
+    .map(({ p }) => p);
+}
+
+/** Sortir stabil: jumlah bubble, tiebreak nama natural. */
+export function sortPagesByBubbles(pages: Page[], dir: 1 | -1 = 1): Page[] {
+  return [...pages]
+    .map((p, i) => ({ p, i }))
+    .sort((a, b) => {
+      const r = a.p.bubbles.length - b.p.bubbles.length;
+      if (r !== 0) return dir * r;
+      const n = a.p.path.localeCompare(b.p.path, undefined, { numeric: true });
+      if (n !== 0) return dir * n;
+      return a.i - b.i;
+    })
+    .map(({ p }) => p);
+}
+
+/** Nama file dari path (`a/b/c.jpg` → `c.jpg`). */
+export function fileName(path: string): string {
+  return path.split(/[/\\]/).pop() ?? path;
+}
+
+/** Folder induk langsung (`a/Ch08/p037.jpg` → `Ch08`; tanpa folder → ""). */
+export function parentFolder(path: string): string {
+  const parts = path.split(/[/\\]/).filter((p) => p.length > 0);
+  return parts.length > 1 ? parts[parts.length - 2] : "";
+}

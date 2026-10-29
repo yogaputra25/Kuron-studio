@@ -77,3 +77,10 @@ menyentuh baris lama).
 - Hasil: Semua change terarsip. `openspec/changes/` tinggal `archive/` (26 entri). MAIN SPECS bertambah 15.
 - Catatan: `kuron-studio-mvp` tanpa delta spec → arsip langsung. Purpose 15 spec baru = TBD, perbarui menyusul.
 - Lanjut: commit + push (kode detect-ux-pack + grid-preview-perf masih uncommitted di worktree).
+
+## 2026-10-29 — page-list-view 11/13 di worktree (isu #12, opsi A frontend saja)
+
+- Kerja: Helper sortir (`sortPagesByStatus/Bubbles`, `fileName`, `parentFolder`) + test; `PageGrid` (ekstrak + prefix folder) + `PageList` (sortir, keyboard j/k/Enter/Space, roving focus, skeleton) + `pageView.test`; switcher Grid/List (`tablist`, G/L, pref localStorage, scroll per mode); retarget 4 test pola-sumber yang pindah file (motion, panel-tablet, previewGrid, select-mode).
+- Hasil: `pnpm test` 405/405, `pnpm check` 0 error, `cargo test` 114 lulus, clippy bersih. Main maju PR #23 (merge grid-preview-perf, tanpa diff konten) — tanpa konflik.
+- Keputusan: kolom ukuran = dimensi `WxH` (tanpa byte, tanpa backend) — opsi A sesuai pilihan user.
+- Lanjut: smoke keyboard-only + narrow viewport (3.3), E2E 52/200 halaman (4.3) — butuh GUI + data nyata.

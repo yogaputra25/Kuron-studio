@@ -115,6 +115,12 @@ const KEYS = [
   "detectSummary",
   "importAction",
   "appTagline",
+  "gridView",
+  "listView",
+  "sortBy",
+  "sortName",
+  "sortStatus",
+  "sortBubbles",
 ];
 
 const LANGS: Lang[] = ["en", "id", "zh"];
