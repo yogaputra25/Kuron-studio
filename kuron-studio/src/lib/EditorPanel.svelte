@@ -10,6 +10,7 @@
   import { computeTextLayout } from "../lib/textLayout";
   import { textMeasure } from "../lib/textMeasure";
   import type { BubbleBox, Page, PageTranslation, ReadingDirection, Tool } from "../lib/types";
+  import { TARGET_LANGS } from "../lib/types";
   import { allPages } from "./library";
   import { t } from "./i18n";
   import Button from "./ui/Button.svelte";
@@ -64,6 +65,10 @@
   let translation = $state<PageTranslation | null>(null);
   let providerId = $state("");
   let lastOpts = $state<TranslateOpts | null>(null);
+  // Label bahasa ikut target aktual, bukan hardcoded sepasang bahasa (#26
+  // follow-up: user ID→EN melihat label JP di original dan ID di terjemahan).
+  const trgLang = $derived(translation?.targetLang || lastOpts?.targetLang || "id");
+  const trgLabel = $derived(TARGET_LANGS.find((l) => l.value === trgLang)?.label ?? trgLang);
   let savingTr = $state(false);
   let glossMsg = $state("");
   let manualSel = $state<number | null>(null);
@@ -385,7 +390,7 @@
     const idx = bubbles.map((_, i) => i);
     if (new Set(idx).size !== idx.length) { error = "Index bubble duplikat — simpan bubble dulu."; return; }
     const empty = {
-      pageId: page.id, targetLang: "id", style: lastOpts?.style ?? "standard", model: "",
+      pageId: page.id, targetLang: lastOpts?.targetLang ?? "id", style: lastOpts?.style ?? "standard", model: "",
       bubbles: bubbles.map((b, i) => ({
         index: i, x: b.x, y: b.y, w: b.w, h: b.h, shape: b.shape,
         original: "", reading: "", translated: "",
@@ -954,7 +959,7 @@ function setBubbleFontSize(v: number | null) {
                       >↺</button>
                     {/if}
                   </div>
-                  <p class="mt-0.5 block text-[10px] text-ink-3">Original (JP)</p>
+                  <p class="mt-0.5 block text-[10px] text-ink-3">Original</p>
                   <textarea
                     rows="2"
                     class="mt-1 w-full rounded-md border border-line bg-surface px-2.5 py-2 text-[13px] text-ink
@@ -978,7 +983,7 @@ function setBubbleFontSize(v: number | null) {
                     oncompositionend={compEnd}
                     onblur={commitDraft}
                   ></textarea>
-                  <p class="mt-1.5 block text-[10px] text-ink-3">Terjemahan (ID)</p>
+                  <p class="mt-1.5 block text-[10px] text-ink-3">Terjemahan ({trgLabel})</p>
                   <textarea
                     rows="2"
                     class="mt-1 w-full rounded-md border border-line bg-surface px-2.5 py-2 text-[13px] text-ink
