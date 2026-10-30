@@ -267,16 +267,176 @@ pub const LAYOUT_FONT_STEP: f32 = 0.5;
 /// Aturannya harus sama dengan kanvas; yang berbeda hanya sumber metrik
 /// (TTF sistem di sini, Konva di kanvas). Kalau satu sisi mengubah rumusnya,
 /// ubah keduanya — atau test kontrak konstanta akan gagal lebih dulu.
-fn layout_from_text(text: &str, w: i32, h: i32) -> (f32, Vec<String>) {
+fn layout_from_text(text: &str, w: i32, h: i32, shape: Option<&[[i32; 2]]>) -> (f32, Vec<String>) {
     let inner_w = (w - LAYOUT_PADDING * 2).max(1) as u32;
     let inner_h = (h - LAYOUT_PADDING * 2).max(1) as f32;
+    let valid_shape = shape.filter(|s| s.len() >= 3);
+    if valid_shape.is_none() {
+        let mut font = LAYOUT_MAX_FONT;
+        let mut lines = wrap_words(text, inner_w, font);
+        while font > LAYOUT_MIN_FONT && lines.len() as f32 * font * LAYOUT_LINE_HEIGHT > inner_h {
+            font = (font - LAYOUT_FONT_STEP).max(LAYOUT_MIN_FONT);
+            lines = wrap_words(text, inner_w, font);
+        }
+        return (font, lines);
+    }
+    // Jalur polygon: cermin `computeTextLayout` TS (D1). Shape relatif bubble.
+    let s = valid_shape.expect("difilter di atas");
+    let pad = LAYOUT_PADDING as f32;
+    // Badan saja (ekor keluar dari area teks); fallback = kotak dalam.
+    let (lo, hi) = body_span(s, w, h, LAYOUT_PADDING).unwrap_or((pad, h as f32 - pad));
+    let span_h = (hi - lo).max(1.0);
+    let height_limit = inner_h.min(span_h);
+    let cx = w as f32 / 2.0;
+    let band_w = |y: f32| -> u32 {
+        match chord_at(s, y, cx) {
+            Some((x0, x1)) => ((x1 - x0 - pad * 2.0).min(inner_w as f32).max(1.0)) as u32,
+            None => 1,
+        }
+    };
+    let fits = |lines: &[String], font: f32| -> bool {
+        let line_px = font * LAYOUT_LINE_HEIGHT;
+        if lines.len() as f32 * line_px > height_limit + 1e-6 {
+            return false;
+        }
+        let top = lo + (span_h - lines.len() as f32 * line_px) / 2.0;
+        lines.iter().enumerate().all(|(j, ln)| {
+            text_width(ln, font) as f32 <= band_w(top + (j as f32 + 0.5) * line_px) as f32 + 1e-6
+        })
+    };
+    let try_font = |font: f32| -> Vec<String> {
+        let line_px = font * LAYOUT_LINE_HEIGHT;
+        let n0 = wrap_words(text, inner_w, font).len().max(1);
+        let top0 = lo + (span_h - n0 as f32 * line_px) / 2.0;
+        let widths: Vec<u32> = (0..n0).map(|i| band_w(top0 + (i as f32 + 0.5) * line_px)).collect();
+        wrap_words_var(text, &widths, font)
+    };
     let mut font = LAYOUT_MAX_FONT;
-    let mut lines = wrap_words(text, inner_w, font);
-    while font > LAYOUT_MIN_FONT && lines.len() as f32 * font * LAYOUT_LINE_HEIGHT > inner_h {
+    let mut lines = try_font(font);
+    while font > LAYOUT_MIN_FONT && !fits(&lines, font) {
         font = (font - LAYOUT_FONT_STEP).max(LAYOUT_MIN_FONT);
-        lines = wrap_words(text, inner_w, font);
+        lines = try_font(font);
     }
     (font, lines)
+}
+
+/// Port `chordAt` (`src/lib/textLayout.ts`): tali-busur polygon (relatif
+/// bubble) pada garis horizontal `y`. Pilih interval yang memuat `cx`,
+/// kalau tak ada yang terlebar. `None` = garis tak memotong.
+fn chord_at(shape: &[[i32; 2]], y: f32, cx: f32) -> Option<(f32, f32)> {
+    let mut xs: Vec<f32> = Vec::new();
+    let n = shape.len();
+    for i in 0..n {
+        let (x1, y1) = (shape[i][0] as f32, shape[i][1] as f32);
+        let (x2, y2) = (shape[(i + 1) % n][0] as f32, shape[(i + 1) % n][1] as f32);
+        if (y1 > y) != (y2 > y) {
+            xs.push(x1 + (x2 - x1) * (y - y1) / (y2 - y1));
+        }
+    }
+    if xs.len() < 2 {
+        return None;
+    }
+    xs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let mut best: Option<(f32, f32)> = None;
+    let mut i = 0;
+    while i + 1 < xs.len() {
+        let (a, b) = (xs[i], xs[i + 1]);
+        i += 2;
+        if b > a {
+            if cx >= a && cx <= b {
+                return Some((a, b));
+            }
+            if best.map(|(x0, x1)| b - a > x1 - x0).unwrap_or(true) {
+                best = Some((a, b));
+            }
+        }
+    }
+    best
+}
+
+/// Port `BODY_MIN_FRAC`: fraksi chord minimum agar pita dianggap badan.
+pub const BODY_MIN_FRAC: f32 = 0.35;
+/// Port langkah sampling vertikal (px). Sama di dua sisi.
+const BODY_SCAN_STEP: f32 = 2.0;
+
+/// Port `bodySpan`: lajur menyambung di sekitar chord terlebar dengan lebar
+/// >= `BODY_MIN_FRAC` × terlebar. Ekor sempit keluar dari area teks.
+fn body_span(shape: &[[i32; 2]], w: i32, h: i32, padding: i32) -> Option<(f32, f32)> {
+    let cx = w as f32 / 2.0;
+    let mut widths: Vec<f32> = Vec::new();
+    let mut y = 0.0;
+    while y < h as f32 {
+        match chord_at(shape, y + BODY_SCAN_STEP / 2.0, cx) {
+            Some((x0, x1)) => widths.push(x1 - x0),
+            None => widths.push(0.0),
+        }
+        y += BODY_SCAN_STEP;
+    }
+    if widths.is_empty() {
+        return None;
+    }
+    let mut max_w = 0.0f32;
+    let mut arg = 0usize;
+    for (i, &wd) in widths.iter().enumerate() {
+        if wd > max_w {
+            max_w = wd;
+            arg = i;
+        }
+    }
+    if max_w <= 0.0 {
+        return None;
+    }
+    let th = max_w * BODY_MIN_FRAC;
+    let mut lo = arg;
+    while lo > 0 && widths[lo - 1] >= th {
+        lo -= 1;
+    }
+    let mut hi = arg;
+    while hi + 1 < widths.len() && widths[hi + 1] >= th {
+        hi += 1;
+    }
+    Some((
+        (padding as f32).max(lo as f32 * BODY_SCAN_STEP),
+        (h as f32 - padding as f32).min((hi + 1) as f32 * BODY_SCAN_STEP),
+    ))
+}
+
+/// Port `LineBand`: pita + chord tiap baris (relatif bubble).
+struct LineBand {
+    top: f32,
+    x0: f32,
+    x1: f32,
+}
+
+/// Port `lineBands`: blok tengah dalam rentang polygon (dijepit padding).
+/// `None` = tanpa shape (pemanggil pakai jalur kotak lama).
+fn line_bands(
+    shape: Option<&[[i32; 2]]>,
+    w: i32,
+    h: i32,
+    padding: i32,
+    line_count: usize,
+    font_size: f32,
+    line_height: f32,
+) -> Option<Vec<LineBand>> {
+    let s = shape.filter(|s| s.len() >= 3)?;
+    if line_count == 0 {
+        return None;
+    }
+    let (lo, hi) = body_span(s, w, h, padding).unwrap_or((padding as f32, h as f32 - padding as f32));
+    let span_h = (hi - lo).max(1.0);
+    let line_px = font_size * line_height;
+    let top = lo + (span_h - line_count as f32 * line_px) / 2.0;
+    let cx = w as f32 / 2.0;
+    let mut bands = Vec::with_capacity(line_count);
+    for j in 0..line_count {
+        let yc = top + (j as f32 + 0.5) * line_px;
+        match chord_at(s, yc, cx) {
+            Some((x0, x1)) => bands.push(LineBand { top: top + j as f32 * line_px, x0, x1 }),
+            None => bands.push(LineBand { top: top + j as f32 * line_px, x0: cx, x1: cx }),
+        }
+    }
+    Some(bands)
 }
 
 /// Bungkus kata agar muat `max_w`, dan PECAH kata yang lebih lebar dari kotak
@@ -287,6 +447,16 @@ fn layout_from_text(text: &str, w: i32, h: i32) -> (f32, Vec<String>) {
 /// dari kotak. Paragraf kosong dipertahankan sebagai baris kosong — sama
 /// seperti `wrapLines` di sisi TypeScript.
 fn wrap_words(text: &str, max_w: u32, px: f32) -> Vec<String> {
+    wrap_words_core(text, &|_| max_w, px)
+}
+
+/// Bungkus dengan batas lebar per-baris (untuk polygon: tali-busur tiap pita).
+fn wrap_words_var(text: &str, widths: &[u32], px: f32) -> Vec<String> {
+    let last = widths.last().copied().unwrap_or(1);
+    wrap_words_core(text, &|i| widths.get(i).copied().unwrap_or(last), px)
+}
+
+fn wrap_words_core(text: &str, width_for_line: &dyn Fn(usize) -> u32, px: f32) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
     for para in text.split('\n') {
         let words: Vec<&str> = para.split_whitespace().collect();
@@ -301,20 +471,20 @@ fn wrap_words(text: &str, max_w: u32, px: f32) -> Vec<String> {
             } else {
                 format!("{cur} {w}")
             };
-            if text_width(&cand, px) <= max_w {
+            if text_width(&cand, px) <= width_for_line(lines.len()) {
                 cur = cand;
                 continue;
             }
             if !cur.is_empty() {
                 lines.push(std::mem::take(&mut cur));
             }
-            if text_width(w, px) <= max_w {
+            if text_width(w, px) <= width_for_line(lines.len()) {
                 cur = w.to_string();
                 continue;
             }
             let mut piece = String::new();
             for ch in w.chars() {
-                if !piece.is_empty() && text_width(&format!("{piece}{ch}"), px) > max_w {
+                if !piece.is_empty() && text_width(&format!("{piece}{ch}"), px) > width_for_line(lines.len()) {
                     lines.push(std::mem::take(&mut piece));
                 }
                 piece.push(ch);
@@ -367,14 +537,15 @@ pub fn paint_patch(img: &mut RgbImage, b: &BubbleTranslation, shape: Option<&Vec
             }
         }
     }
-    // Teks (export-text-parity P4+P8). Kalau kanvas sudah memutuskan layout,
-    // gambar apa adanya. Kalau belum — hasil AI baru, halaman batch yang tak
-    // pernah dibuka, atau proyek lama — hitung sendiri dengan ATURAN YANG SAMA,
-    // bukan rumus lama (`lebar/90`, rata-atas) yang justru sumber keluhan.
+    // Shape absolut -> relatif bubble (frame yang dipakai layout/chord).
+    let rel: Option<Vec<[i32; 2]>> = shape
+        .filter(|p| p.len() >= 3)
+        .map(|p| p.iter().map(|[px, py]| [px - x0, py - y0]).collect());
+    let rel_ref = rel.as_deref();
     match &b.layout {
-        Some(l) if !l.lines.is_empty() => draw_layout(img, l, x0, y0, x1, y1),
+        Some(l) if !l.lines.is_empty() => draw_layout(img, l, x0, y0, x1, y1, rel_ref),
         _ => {
-            let (font_size, lines) = layout_from_text(&b.translated, x1 - x0, y1 - y0);
+            let (font_size, lines) = layout_from_text(&b.translated, x1 - x0, y1 - y0, rel_ref);
             if !lines.is_empty() {
                 draw_layout(
                     img,
@@ -388,6 +559,7 @@ pub fn paint_patch(img: &mut RgbImage, b: &BubbleTranslation, shape: Option<&Vec
                     y0,
                     x1,
                     y1,
+                    rel_ref,
                 );
             }
         }
@@ -397,9 +569,9 @@ pub fn paint_patch(img: &mut RgbImage, b: &BubbleTranslation, shape: Option<&Vec
 /// Gambar layout final dari kanvas (px halaman) apa adanya.
 ///
 /// Aturan penempatan WAJIB sama dengan `CanvasEditor`: padding di dalam kotak,
-/// tiap baris rata tengah, blok di tengah vertikal, jarak baris
-/// `fontSize * lineHeight`. Kalau salah satu sisi mengubah rumusnya, paritas
-/// hilang — ubah keduanya atau jangan ubah sama sekali.
+/// tiap baris rata tengah (pada chord bila shape ada), blok di tengah vertikal,
+/// jarak baris `fontSize * lineHeight`. Kalau salah satu sisi mengubah rumusnya,
+/// paritas hilang — ubah keduanya atau jangan ubah sama sekali.
 fn draw_layout(
     img: &mut RgbImage,
     l: &crate::translation::TextLayout,
@@ -407,10 +579,21 @@ fn draw_layout(
     y0: i32,
     x1: i32,
     y1: i32,
+    shape: Option<&[[i32; 2]]>,
 ) {
     let (box_w, box_h) = (x1 - x0, y1 - y0);
     let line_px = l.font_size * l.line_height;
     let block_h = l.lines.len() as f32 * line_px;
+    if let Some(bands) = line_bands(shape, box_w, box_h, l.padding, l.lines.len(), l.font_size, l.line_height) {
+        // Tiap baris tengah pada chord-nya (cermin kanvas per-baris).
+        for (line, band) in l.lines.iter().zip(bands.iter()) {
+            let w = text_width(line, l.font_size);
+            let center = (band.x0 + band.x1) / 2.0;
+            let x = x0 + (center - w as f32 / 2.0).round() as i32;
+            draw_text(img, line, x, (y0 as f32 + band.top).round() as i32, l.font_size);
+        }
+        return;
+    }
     let mut y = y0 as f32 + (box_h as f32 - block_h) / 2.0;
     for line in &l.lines {
         let w = text_width(line, l.font_size);
@@ -423,10 +606,31 @@ fn draw_layout(
 /// Luber menurut layout final dari kanvas (export-text-parity P7).
 ///
 /// Dinilai dari `layout` — bukan dihitung ulang dengan algoritma lama, yang
-/// justru sudah berbeda dari yang dipakai export sekarang.
-pub fn layout_overflows(l: &crate::translation::TextLayout, w: i32, h: i32) -> bool {
-    let inner_w = (w - l.padding * 2).max(1) as u32;
+/// justru sudah berbeda dari yang dipakai export sekarang. Bila shape ada,
+/// tiap baris dinilai terhadap chord pitanya (text-fit-polygon).
+pub fn layout_overflows(
+    l: &crate::translation::TextLayout,
+    w: i32,
+    h: i32,
+    shape: Option<&[[i32; 2]]>,
+) -> bool {
     let inner_h = (h - l.padding * 2).max(1) as f32;
+    if shape.is_some_and(|s| s.len() >= 3) {
+        let bands = line_bands(shape, w, h, l.padding, l.lines.len(), l.font_size, l.line_height);
+        if let Some(bands) = bands {
+            let block_h = l.lines.len() as f32 * l.font_size * l.line_height;
+            let s = shape.expect("bands ada berarti shape valid");
+            let (lo, hi) = body_span(s, w, h, l.padding).unwrap_or((l.padding as f32, h as f32 - l.padding as f32));
+            let span_h = (hi - lo).max(1.0);
+            if block_h > span_h.min(inner_h) + 1e-6 {
+                return true;
+            }
+            return l.lines.iter().zip(bands.iter()).any(|(line, band)| {
+                text_width(line, l.font_size) as f32 > (band.x1 - band.x0 - l.padding as f32 * 2.0).max(1.0) + 1e-6
+            });
+        }
+    }
+    let inner_w = (w - l.padding * 2).max(1) as u32;
     if l.lines.len() as f32 * l.font_size * l.line_height > inner_h {
         return true;
     }
@@ -436,18 +640,25 @@ pub fn layout_overflows(l: &crate::translation::TextLayout, w: i32, h: i32) -> b
 /// Cek overflow memakai metrik renderer yang sama (TTF/bitmap dispatch).
 /// Mirip layout paint_patch: bungkus kata + loop susut skala.
 /// ponytail: tanpa shaping/ligatur/RTL — upgrade ke harfbuzz bila perlu.
-pub fn text_overflows(text: &str, w: i32, h: i32) -> bool {
+pub fn text_overflows(text: &str, w: i32, h: i32, shape: Option<&[[i32; 2]]>) -> bool {
     if text.split_whitespace().next().is_none() {
         return false;
     }
     // Nilai dari port layout yang sama dengan export memakai — bukan rumus
     // terpisah. Dihitung ulang di sini karena QA berjalan tanpa `layout`
     // tersimpan.
-    let (font_size, lines) = layout_from_text(text, w, h);
-    let inner_w = (w - LAYOUT_PADDING * 2).max(1) as u32;
-    let inner_h = (h - LAYOUT_PADDING * 2).max(1) as f32;
-    lines.len() as f32 * font_size * LAYOUT_LINE_HEIGHT > inner_h
-        || lines.iter().any(|l| text_width(l, font_size) > inner_w)
+    let (font_size, lines) = layout_from_text(text, w, h, shape);
+    layout_overflows(
+        &crate::translation::TextLayout {
+            font_size,
+            line_height: LAYOUT_LINE_HEIGHT,
+            padding: LAYOUT_PADDING,
+            lines,
+        },
+        w,
+        h,
+        shape,
+    )
 }
 
 /// Repair R4: shape diambil dari `translation` dulu (sumber pasca-save sidebar),
@@ -809,10 +1020,10 @@ mod tests {
 
     #[test]
     fn text_overflows_mirrors_layout() {
-        assert!(text_overflows("kata ".repeat(50).trim(), 60, 30));
-        assert!(!text_overflows("HI", 200, 100));
-        assert!(!text_overflows("", 60, 30));
-        assert!(!text_overflows("   ", 60, 30));
+        assert!(text_overflows("kata ".repeat(50).trim(), 60, 30, None));
+        assert!(!text_overflows("HI", 200, 100, None));
+        assert!(!text_overflows("", 60, 30, None));
+        assert!(!text_overflows("   ", 60, 30, None));
     }
 
     /// export-scope 2.3: seleksi subset per format — satu jalur untuk semua.
@@ -948,12 +1159,12 @@ mod text_position_tests {
             lines: vec!["x".into(); 10],
         };
         // Blok 10 * 20 * 1.25 = 250 px > 100 - 8 → luber.
-        assert!(layout_overflows(&banyak, 200, 100));
+        assert!(layout_overflows(&banyak, 200, 100, None));
         let sedikit = crate::translation::TextLayout {
             font_size: 10.0, line_height: 1.25, padding: 4,
             lines: vec!["x".into()],
         };
-        assert!(!layout_overflows(&sedikit, 200, 100));
+        assert!(!layout_overflows(&sedikit, 200, 100, None));
     }
 
     #[test]
@@ -962,8 +1173,8 @@ mod text_position_tests {
         // untuk hampir semua bubble. Sekarang ukuran dicari sampai blok teks
         // muat TINGGI kotak, jadi kotak yang lebih tinggi mendapat font lebih
         // besar.
-        let (kecil, _) = layout_from_text("HI", 100, 40);
-        let (besar, _) = layout_from_text("HI", 400, 400);
+        let (kecil, _) = layout_from_text("HI", 100, 40, None);
+        let (besar, _) = layout_from_text("HI", 400, 400, None);
         assert!(
             besar > kecil,
             "kotak lebih tinggi harus dapat font lebih besar: {kecil} vs {besar}"
@@ -985,7 +1196,7 @@ mod text_position_tests {
 
     #[test]
     fn fallback_lines_fit_inner_width() {
-        let (_, lines) = layout_from_text("kata ".repeat(30).trim(), 160, 200);
+        let (_, lines) = layout_from_text("kata ".repeat(30).trim(), 160, 200, None);
         let inner = (160 - LAYOUT_PADDING * 2) as u32;
         assert!(!lines.is_empty());
         for l in &lines {
@@ -994,5 +1205,106 @@ mod text_position_tests {
                 "baris harus muat lebar dalam pada ukuran minimum: {l:?}"
             );
         }
+    }
+
+    /// Elips kasar 200x200 (cermin vektor TS di `textLayout.test.ts`).
+    fn ellipse_shape() -> Vec<[i32; 2]> {
+        vec![
+            [100, 0], [150, 14], [180, 50], [190, 100],
+            [180, 150], [150, 186], [100, 200], [50, 186],
+            [20, 150], [10, 100], [20, 50], [50, 14],
+        ]
+    }
+
+    #[test]
+    fn chord_narrow_at_tip_wide_at_middle() {
+        let s = ellipse_shape();
+        let top = chord_at(&s, 5.0, 100.0).expect("garis y=5 harus memotong");
+        let mid = chord_at(&s, 100.0, 100.0).expect("garis y=100 harus memotong");
+        assert!(mid.1 - mid.0 > top.1 - top.0, "tengah harus lebih lebar dari ujung");
+        assert!(mid.1 - mid.0 > 150.0, "tengah elips harus hampir penuh");
+        assert!(chord_at(&s, -10.0, 100.0).is_none());
+        assert!(chord_at(&s, 300.0, 100.0).is_none());
+    }
+
+    #[test]
+    fn rect_shape_matches_no_shape() {
+        let rect = vec![[0, 0], [200, 0], [200, 100], [0, 100]];
+        let (f1, l1) = layout_from_text("halo dunia yang panjang", 200, 100, None);
+        let (f2, l2) = layout_from_text("halo dunia yang panjang", 200, 100, Some(&rect));
+        assert!((f1 - f2).abs() < 1e-6, "rect harus identik dengan tanpa-shape");
+        assert_eq!(l1, l2);
+    }
+
+    #[test]
+    fn polygon_lines_fit_their_chords() {
+        let s = ellipse_shape();
+        let text = "kata ".repeat(30).trim().to_string();
+        let (font, lines) = layout_from_text(&text, 200, 200, Some(&s));
+        let bands = line_bands(Some(&s), 200, 200, LAYOUT_PADDING, lines.len(), font, LAYOUT_LINE_HEIGHT)
+            .expect("bands harus ada");
+        assert_eq!(bands.len(), lines.len());
+        for (ln, band) in lines.iter().zip(bands.iter()) {
+            let avail = (band.x1 - band.x0 - LAYOUT_PADDING as f32 * 2.0).max(1.0);
+            assert!(
+                text_width(ln, font) as f32 <= avail + 1e-6,
+                "baris keluar chord: {ln:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn overflow_flags_line_outside_chord() {
+        let s = ellipse_shape();
+        // Satu baris selebar kotak di pita sempit elips -> luber.
+        let l = crate::translation::TextLayout {
+            font_size: 20.0,
+            line_height: LAYOUT_LINE_HEIGHT,
+            padding: 0,
+            lines: vec!["abcdefghijklmnopqrstuvwxyz0123456789".into()],
+        };
+        assert!(layout_overflows(&l, 200, 200, Some(&s)));
+        let ok = crate::translation::TextLayout {
+            font_size: 10.0,
+            line_height: LAYOUT_LINE_HEIGHT,
+            padding: 0,
+            lines: vec!["hi".into()],
+        };
+        assert!(!layout_overflows(&ok, 200, 200, Some(&s)));
+    }
+
+    fn tailed_shape() -> Vec<[i32; 2]> {
+        vec![[0, 0], [200, 0], [200, 150], [110, 150], [100, 300], [90, 150], [0, 150]]
+    }
+
+    #[test]
+    fn tail_excluded_from_text_area() {
+        let s = tailed_shape();
+        let (lo, hi) = body_span(&s, 200, 300, LAYOUT_PADDING).expect("badan harus ketemu");
+        assert!(hi <= 152.0, "ekor (mulai y=150) harus di luar span: hi={hi}");
+        assert!(lo <= 4.0, "badan mulai dari atas");
+        let text = "kata ".repeat(30).trim().to_string();
+        let (font, lines) = layout_from_text(&text, 200, 300, Some(&s));
+        assert!(font > LAYOUT_MIN_FONT, "font tidak terjepit selebar ekor");
+        let bands = line_bands(Some(&s), 200, 300, LAYOUT_PADDING, lines.len(), font, LAYOUT_LINE_HEIGHT)
+            .expect("bands harus ada");
+        for b in &bands {
+            assert!(
+                b.top + font * LAYOUT_LINE_HEIGHT <= 152.0,
+                "pita masuk ekor: top={}",
+                b.top
+            );
+        }
+        assert!(!layout_overflows(
+            &crate::translation::TextLayout {
+                font_size: font,
+                line_height: LAYOUT_LINE_HEIGHT,
+                padding: LAYOUT_PADDING,
+                lines,
+            },
+            200,
+            300,
+            Some(&s),
+        ));
     }
 }

@@ -99,13 +99,28 @@ pub async fn detect_bubbles(
     };
     let page_path = page_path_of(&state, &page_id)?;
     let detector = state.detect.detector.clone();
+    let path_for_infer = page_path.clone();
     let boxes = tauri::async_runtime::spawn_blocking(move || {
-        let bytes = std::fs::read(&page_path).map_err(|e| format!("read: {e}"))?;
+        let bytes = std::fs::read(&path_for_infer).map_err(|e| format!("read: {e}"))?;
         detector.detect_bytes(&model_path, &bytes)
     })
     .await
     .map_err(|e| format!("infer task: {e}"))??;
-    let cleaned = post_process(sanitize_bubbles(boxes));
+    // bubble-polygon: isi shape dari outline gambar bila kotak polos.
+    // Gagal/tak-cocok = diam, fallback kotak (tak pernah error di sini).
+    let mut cleaned = post_process(sanitize_bubbles(boxes));
+    if cleaned.iter().any(|b| b.shape.is_none()) {
+        if let Ok(bytes) = std::fs::read(&page_path) {
+            if let Ok(img) = image::load_from_memory(&bytes) {
+                let rgb = img.to_rgb8();
+                for b in cleaned.iter_mut().filter(|b| b.shape.is_none()) {
+                    if let Some(poly) = crate::outline::refine_outline(&rgb, b.x, b.y, b.w, b.h) {
+                        b.shape = Some(poly);
+                    }
+                }
+            }
+        }
+    }
     set_page_status(state.clone(), &page_id, "idle")?;
     persist_bubbles(&state, &page_id, cleaned.clone())?;
     Ok(cleaned)

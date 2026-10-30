@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use crate::bubble::{post_process, BubbleBox};
-use crate::detect_decode::{decode, letterbox};
+use crate::detect_decode::{decode_kept, letterbox, mask_coeffs, model_mask_polygon, proto_crop};
 use ort::value::Tensor;
 
 pub struct BubbleDetector {
@@ -63,6 +63,7 @@ impl BubbleDetector {
 
         let session = self.session.as_mut().ok_or("session belum load")?;
         let input_name = model_input_name(session)?;
+        let has_protos = session.outputs().iter().any(|o| o.name() == "output1");
         let outputs = session
             .run(ort::inputs![input_name.as_str() => tensor])
             .map_err(|e| format!("infer {w}x{h}: {e}"))?;
@@ -74,8 +75,36 @@ impl BubbleDetector {
             return Err(format!("output0 shape tak dikenal: {s:?}"));
         }
         let flat: Vec<f32> = arr.iter().copied().collect();
-        Ok(post_process(decode(&flat, &lb, 0.25)))
-    }
+        // Prototypes mask (YOLO-seg output1): opsional — bentuk asing = abaikan diam-diam.
+        let protos: Option<Vec<f32>> = has_protos
+            .then(|| {
+                outputs["output1"]
+                    .try_extract_array::<f32>()
+                    .ok()
+                    .filter(|a| a.shape() == [1, 32, 256, 256])
+                    .map(|a| a.iter().copied().collect())
+            })
+            .flatten();
+        let kept = decode_kept(&flat, &lb, 0.25);
+        let boxes: Vec<BubbleBox> = kept
+            .into_iter()
+            .map(|(mut b, _, anchor)| {
+                if b.shape.is_none() {
+                    if let Some(p) = &protos {
+                        let coeffs = mask_coeffs(&flat, anchor);
+                        if let Some(crop) = proto_crop(&b, &lb) {
+                            if let Some(poly) = model_mask_polygon(p, &coeffs, crop, &lb) {
+                                b.shape = Some(poly);
+                            }
+                        }
+                    }
+                }
+                b
+            })
+            .collect();
+        // ponytail: mask threshold 0.5 + RDP default; tuning setelah overlay M2 dinilai mata.
+        Ok(post_process(boxes))
+}
 }
 
 /// Nama input dibaca dari metadata session (aman dari rename "images").

@@ -89,42 +89,58 @@ impl Letterbox {
     }
 }
 
-/// Decode `output0` flat (37*N_ANCHORS, row-major [row][anchor]) → boxes.
-/// Dipanggil dengan `conf_thres=0.25` (selaras `post_process`).
-pub fn decode(output0: &[f32], lb: &Letterbox, conf_thres: f32) -> Vec<BubbleBox> {
-    assert_eq!(output0.len(), 37 * N_ANCHORS);
-    let at = |row: usize, a: usize| output0[row * N_ANCHORS + a];
-    let mut out: Vec<(BubbleBox, f32)> = Vec::new();
-    for a in 0..N_ANCHORS {
-        let score = at(4, a);
-        if score < conf_thres {
-            continue;
-        }
-        let (cx, cy, w, h) = (at(0, a), at(1, a), at(2, a), at(3, a));
-        if !cx.is_finite() || !cy.is_finite() || w <= 0.0 || h <= 0.0 {
-            continue;
-        }
-        if let Some(b) = lb.unmap(cx, cy, w, h, score) {
-            out.push((b, score));
-        }
-    }
-    nms(out)
+/// Sisi grid prototypes `output1` (1,32,256,256) = input 1024 / 4.
+pub const PROTO_SIDE: usize = 256;
+
+ /// Decode `output0` flat (37*N_ANCHORS, row-major [row][anchor]) → boxes.
+ /// Dipanggil dengan `conf_thres=0.25` (selaras `post_process`).
+ pub fn decode(output0: &[f32], lb: &Letterbox, conf_thres: f32) -> Vec<BubbleBox> {
+    decode_inner(output0, lb, conf_thres)
+        .into_iter()
+        .map(|(b, _, _)| b)
+        .collect()
 }
 
-/// NMS greedy per-class tunggal, IoU threshold 0.5.
-fn nms(mut cands: Vec<(BubbleBox, f32)>) -> Vec<BubbleBox> {
-    cands.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-    let mut kept: Vec<BubbleBox> = Vec::with_capacity(cands.len());
-    'outer: for (b, _) in cands {
-        for k in &kept {
-            if iou(&b, k) > NMS_IOU {
-                continue 'outer;
-            }
-        }
-        kept.push(b);
-    }
-    kept
+/// Seperti `decode`, tapi tiap box membawa score + index anchor lolos NMS —
+/// anchor dibutuhkan untuk mengambil 32 koefisien mask (`mask_coeffs`).
+pub fn decode_kept(output0: &[f32], lb: &Letterbox, conf_thres: f32) -> Vec<(BubbleBox, f32, usize)> {
+    decode_inner(output0, lb, conf_thres)
 }
+
+fn decode_inner(output0: &[f32], lb: &Letterbox, conf_thres: f32) -> Vec<(BubbleBox, f32, usize)> {
+     assert_eq!(output0.len(), 37 * N_ANCHORS);
+     let at = |row: usize, a: usize| output0[row * N_ANCHORS + a];
+    let mut out: Vec<(BubbleBox, f32, usize)> = Vec::new();
+     for a in 0..N_ANCHORS {
+         let score = at(4, a);
+         if score < conf_thres {
+             continue;
+         }
+         let (cx, cy, w, h) = (at(0, a), at(1, a), at(2, a), at(3, a));
+         if !cx.is_finite() || !cy.is_finite() || w <= 0.0 || h <= 0.0 {
+             continue;
+         }
+         if let Some(b) = lb.unmap(cx, cy, w, h, score) {
+            out.push((b, score, a));
+         }
+     }
+     nms(out)
+ }
+ 
+ /// NMS greedy per-class tunggal, IoU threshold 0.5.
+fn nms(mut cands: Vec<(BubbleBox, f32, usize)>) -> Vec<(BubbleBox, f32, usize)> {
+     cands.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let mut kept: Vec<(BubbleBox, f32, usize)> = Vec::with_capacity(cands.len());
+    'outer: for (b, s, a) in cands {
+         for k in &kept {
+            if iou(&b, &k.0) > NMS_IOU {
+                 continue 'outer;
+             }
+         }
+        kept.push((b, s, a));
+     }
+     kept
+ }
 
 fn iou(a: &BubbleBox, b: &BubbleBox) -> f32 {
     let (ax1, ay1, ax2, ay2) = (a.x, a.y, a.x + a.w, a.y + a.h);
@@ -139,11 +155,86 @@ fn iou(a: &BubbleBox, b: &BubbleBox) -> f32 {
     inter / union.max(1.0)
 }
 
-#[allow(dead_code)]
-fn mask_coeffs(_output0: &[f32], _anchor: usize) -> [f32; N_COEFF] {
-    // ponytail opsi B: output0[(5+k)*N_ANCHORS + a], lalu
-    // sigmoid(coeff @ prototypes[32][256][256]) crop-box → polygon.
-    [0.0; N_COEFF]
+/// 32 koefisien mask untuk anchor `a`: baris 5..37 output0.
+pub fn mask_coeffs(output0: &[f32], anchor: usize) -> [f32; N_COEFF] {
+    core::array::from_fn(|k| output0[(5 + k) * N_ANCHORS + anchor])
+}
+
+/// Ambang logit mask: sigmoid(x) > 0.5 ⟺ x > 0.
+pub const MASK_LOGIT_THRESH: f32 = 0.0;
+
+/// Box px-original → crop dalam grid prototypes 256 (letterbox/4).
+/// Return None bila crop ambruk (<3px) atau di luar grid.
+pub fn proto_crop(b: &BubbleBox, lb: &Letterbox) -> Option<(usize, usize, usize, usize)> {
+    let s = PROTO_SIDE as f32;
+    let x0 = ((b.x as f32 * lb.scale + lb.pad_l as f32) / 4.0).floor().max(0.0);
+    let y0 = ((b.y as f32 * lb.scale + lb.pad_t as f32) / 4.0).floor().max(0.0);
+    let x1 = (((b.x + b.w) as f32 * lb.scale + lb.pad_l as f32) / 4.0).ceil().min(s);
+    let y1 = (((b.y + b.h) as f32 * lb.scale + lb.pad_t as f32) / 4.0).ceil().min(s);
+    let (x0, y0, x1, y1) = (x0 as usize, y0 as usize, x1 as usize, y1 as usize);
+    if x1.saturating_sub(x0) < 3 || y1.saturating_sub(y0) < 3 {
+        return None;
+    }
+    Some((x0, y0, x1, y1))
+}
+
+/// Mask model → polygon px-original: sigmoid(coeff·protos) di crop box,
+/// threshold 0.5, tracing kontur Moore + RDP, petakan balik via inverse-letterbox.
+/// Return None bila crop/protos tak valid atau mask kosong.
+pub fn model_mask_polygon(
+    protos: &[f32],
+    coeffs: &[f32; N_COEFF],
+    crop: (usize, usize, usize, usize),
+    lb: &Letterbox,
+) -> Option<Vec<[i32; 2]>> {
+    const S: usize = PROTO_SIDE;
+    if protos.len() != N_COEFF * S * S {
+        return None;
+    }
+    let (x0, y0, x1, y1) = crop;
+    if x1 > S || y1 > S || x1.saturating_sub(x0) < 3 || y1.saturating_sub(y0) < 3 {
+        return None;
+    }
+    let (w, h) = (x1 - x0, y1 - y0);
+    let mut mask = vec![vec![false; w]; h];
+    let mut any = false;
+    for (iy, y) in (y0..y1).enumerate() {
+        for (ix, x) in (x0..x1).enumerate() {
+            let mut logit = 0.0f32;
+            for c in 0..N_COEFF {
+                logit += coeffs[c] * protos[(c * S + y) * S + x];
+            }
+            if logit > MASK_LOGIT_THRESH {
+                mask[iy][ix] = true;
+                any = true;
+            }
+        }
+    }
+    if !any {
+        return None;
+    }
+    let contour = crate::outline::trace_contour(&mask)?;
+    let simp = crate::outline::simplify_rdp(
+        &contour,
+        crate::outline::RDP_EPSILON,
+        crate::outline::MAX_POINTS,
+    );
+    if simp.len() < 3 {
+        return None;
+    }
+    let (ow, oh) = (lb.orig_w as i32, lb.orig_h as i32);
+    Some(
+        simp.into_iter()
+            .map(|(lx, ly)| {
+                let ox = ((x0 as i32 + lx) as f32 * 4.0 - lb.pad_l as f32) / lb.scale;
+                let oy = ((y0 as i32 + ly) as f32 * 4.0 - lb.pad_t as f32) / lb.scale;
+                [
+                    (ox.round() as i32).clamp(0, ow - 1),
+                    (oy.round() as i32).clamp(0, oh - 1),
+                ]
+            })
+            .collect(),
+    )
 }
 
 #[cfg(test)]
@@ -231,5 +322,96 @@ mod tests {
             (2, 800.0, 800.0, 60.0, 60.0, 0.8),
         ]);
         assert_eq!(decode(&o, &lb_square(), 0.25).len(), 2);
+    }
+
+    #[test]
+    fn decode_kept_carries_winning_anchors() {
+        let o = synth(&[
+            (1, 100.0, 100.0, 60.0, 60.0, 0.9),
+            (2, 800.0, 800.0, 60.0, 60.0, 0.8),
+        ]);
+        let kept = decode_kept(&o, &lb_square(), 0.25);
+        assert_eq!(kept.len(), 2);
+        let mut anchors: Vec<usize> = kept.iter().map(|(_, _, a)| *a).collect();
+        anchors.sort_unstable();
+        assert_eq!(anchors, vec![1, 2]);
+        let plain = decode(&o, &lb_square(), 0.25);
+        assert_eq!(kept.len(), plain.len());
+    }
+
+    #[test]
+    fn mask_coeffs_reads_rows_5_to_36() {
+        let n = N_ANCHORS;
+        let mut o = vec![0.0f32; 37 * n];
+        let mut want = 1.0f32;
+        for row in o.chunks_exact_mut(n).skip(5).take(N_COEFF) {
+            row[42] = want;
+            want += 1.0;
+        }
+        let c = mask_coeffs(&o, 42);
+        for (k, got) in c.iter().enumerate() {
+            assert!((got - (k as f32 + 1.0)).abs() < 1e-6);
+        }
+    }
+
+    fn bubble_at(x: i32, y: i32, w: i32, h: i32) -> BubbleBox {
+        BubbleBox {
+            x,
+            y,
+            w,
+            h,
+            confidence: 0.9,
+            shape: None,
+            kind: Some("rect".to_string()),
+            tail: None,
+        }
+    }
+
+    #[test]
+    fn proto_crop_maps_box_to_quarter_grid() {
+        let crop = proto_crop(&bubble_at(100, 100, 200, 160), &lb_square()).unwrap();
+        assert_eq!(crop, (25, 25, 75, 65));
+    }
+
+    #[test]
+    fn proto_crop_rejects_degenerate() {
+        assert!(proto_crop(&bubble_at(0, 0, 4, 4), &lb_square()).is_none());
+    }
+
+    fn rect_protos(x0: usize, y0: usize, x1: usize, y1: usize) -> Vec<f32> {
+        const S: usize = PROTO_SIDE;
+        let mut p = vec![0.0f32; N_COEFF * S * S];
+        for y in y0..y1 {
+            for x in x0..x1 {
+                p[y * S + x] = 1.0;
+            }
+        }
+        p
+    }
+
+    #[test]
+    fn model_mask_polygon_recovers_rect() {
+        let protos = rect_protos(25, 25, 75, 65);
+        let mut coeffs = [0.0f32; N_COEFF];
+        coeffs[0] = 8.0;
+        let poly =
+            model_mask_polygon(&protos, &coeffs, (25, 25, 75, 65), &lb_square()).unwrap();
+        assert!(poly.len() >= 4, "rect harus jadi polygon, dapat {}", poly.len());
+        for [px, py] in &poly {
+            assert!((96..=304).contains(px), "x={px} di luar box");
+            assert!((96..=264).contains(py), "y={py} di luar box");
+        }
+    }
+
+    #[test]
+    fn model_mask_polygon_rejects_bad_input() {
+        let mut coeffs = [0.0f32; N_COEFF];
+        coeffs[0] = 8.0;
+        assert!(model_mask_polygon(&[0.0; 10], &coeffs, (0, 0, 64, 64), &lb_square()).is_none());
+        let protos = rect_protos(10, 10, 50, 50);
+        assert!(
+            model_mask_polygon(&protos, &[0.0; N_COEFF], (10, 10, 50, 50), &lb_square()).is_none()
+        );
+        assert!(model_mask_polygon(&protos, &coeffs, (10, 10, 11, 11), &lb_square()).is_none());
     }
 }

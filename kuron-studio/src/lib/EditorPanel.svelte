@@ -374,7 +374,7 @@
       page.width || 800,
       page.height || 1200,
       // Layout dihitung di sini agar nilai tersimpan = yang terlihat di kanvas.
-      (text, w, h) => computeTextLayout(text, w, h, textMeasure),
+      (text, w, h, fontSize, shape) => computeTextLayout(text, w, h, textMeasure, { fontSize, shape }),
     );
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
     const my = ++saveGen;

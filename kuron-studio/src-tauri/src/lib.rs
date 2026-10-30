@@ -1,6 +1,7 @@
 pub mod bubble;
 pub mod cache;
 pub mod memory;
+pub mod outline;
 pub mod psd;
 pub mod qa;
 pub mod secrets;

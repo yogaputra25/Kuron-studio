@@ -521,6 +521,20 @@
     selectedId = null;
     void loadThumbs(id);
   }
+  /** Buka Hasil & Ekspor untuk satu kartu dashboard (pintu-ekspor D2). */
+  async function openResults(id: string) {
+    if (busy) return;
+    if (id !== currentId) {
+      openProject(id);
+      try {
+        await refreshProject(id);
+      } catch (e) {
+        error = String(e);
+        return;
+      }
+    }
+    showReview = true;
+  }
 
   async function createFolder() {
     if (!currentId) return;
@@ -882,17 +896,25 @@
         {#each projects as p (p.id)}
           {@const st = projectStats(p)}
           {@const pct = Math.round(st.progress * 100)}
+        <div class="relative w-36 shrink-0 self-center">
           <button
-            class="relative w-36 shrink-0 self-center overflow-hidden rounded-md border px-2.5 pt-1.5 pb-2.5 text-left transition-colors {p.id === currentId ? 'border-accent bg-accent/10' : 'border-line bg-surface hover:border-accent/60'}"
+            class="block w-full overflow-hidden rounded-md border px-2.5 pt-1.5 pb-2.5 text-left transition-colors {p.id === currentId ? 'border-accent bg-accent/10' : 'border-line bg-surface hover:border-accent/60'}"
             onclick={() => openProject(p.id)}
             title="{p.name} · {st.done}/{st.total} · {st.failed} {$t('kanbanFailed')}"
           >
-            <div class="truncate text-xs font-semibold">{p.name}</div>
+            <div class="truncate pr-5 text-xs font-semibold">{p.name}</div>
             <div class="tnum mt-0.5 text-[10px] {st.failed > 0 ? 'text-danger' : 'text-ink-3'}">{st.done}/{st.total} · {pct}%{st.failed > 0 ? ` · ${st.failed}` : ""}</div>
             <div class="absolute inset-x-0 bottom-0 h-0.5 bg-raised">
               <div class="h-full bg-accent" style="width: {pct}%"></div>
             </div>
           </button>
+          <button
+            class="absolute top-1 right-1 rounded bg-surface-2/90 px-1 py-0.5 text-[11px] leading-none text-ink-2 opacity-70 backdrop-blur-sm transition-opacity hover:bg-hover hover:text-ink hover:opacity-100 focus-visible:opacity-100"
+            title={$t("resultsExport")}
+            aria-label="{$t('resultsExport')}: {p.name}"
+            onclick={(e) => { e.stopPropagation(); void openResults(p.id); }}
+          >⧉</button>
+        </div>
         {/each}
       </div>
       <div class="hidden w-px self-stretch bg-line sm:block" aria-hidden="true"></div>

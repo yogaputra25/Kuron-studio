@@ -188,3 +188,41 @@ menyentuh baris lama).
 - Kerja: `save()` tidak lagi `startNew()` — tetap mode Edit pakai `saved.id` supaya tombol Validate langsung aktif; tooltip "Simpan provider dulu, baru Validate aktif." saat disabled.
 - Hasil: `pnpm test` 437/437, `pnpm check` 0; smoke mock: sebelum simpan DISABLED+tooltip, sesudah simpan ENABLED + header "Edit".
 - Keputusan: kolom Model BENAR dipakai — rantai `fModel -> save_provider.model -> ProviderView.model -> default TranslatePanel (loadModelsFor) -> translation.model + cache key`. Field manual + Lov "Model tersedia" komplementer (ketik vs pilih hasil Load models), bukan duplikat.
+
+## 2026-10-30 — pintu-ekspor 6/7 (pintu Hasil & Ekspor per kartu)
+
+- Kerja: Aksi ⧉ per kartu dashboard + `openResults` (aktifkan bila perlu + tunggu + buka; gagal = panel tidak dibuka); busy guard; tanpa state/i18n baru (reuse `resultsExport`); test pola-sumber baru.
+- Hasil: `pnpm test` 440/440, `pnpm check` 0, `cargo test` 137 lulus, clippy bersih.
+- Lanjut: smoke 2.3 (kartu non-aktif/aktif, mobile 360px).
+
+## 2026-10-29 — bubble-polygon: outline mengikuti bentuk (opsi B, tanpa model)
+
+- Kerja: Modul `outline.rs` baru (`refine_outline`: flood + opening 3x3 + Moore + RDP + cap 64) + kabel di `detect_bubbles` (box tanpa shape dicoba refine, gagal → kotak diam-diam). Aturan leak diperbaiki tengah jalan: border bbox BUKAN bocor (bbox ketat hal biasa), syaratnya menabrak dinding.
+- Verifikasi: unit sintetis hijau (elips/penuh/putih/gelap/tiny), smoke sampel nyata `before.jpeg`: detektor 4 kotak → refine 4/4 lolos, rata-rata 14 titik. `cargo test` 142 lulus, `clippy -D warnings` bersih. File spike dibuang (`spike_shape_tmp`, `spike_outline_tmp`).
+- Lanjut: mata user menilai overlay hijau-vs-merah (`%TEMP%\kuron-smoke-outline.png`); kalau lolos → archive, kalau gagal → catat batasnya.
+
+## 2026-10-30 - bubble-polygon: pivot ke mask model (output1), flood jadi fallback
+
+- Temuan: `bubble.onnx` = YOLO11n-seg manga109, output1 (32x256x256) + koefisien/anchor selama ini tak dibaca. YOLO26-COCO salah domain + AGPL + jumbo -> ditolak.
+- Kerja: `decode_kept` (anchor lolos NMS) + `mask_coeffs` asli + `model_mask_polygon` (sigmoid-dot, crop 256, Moore+RDP, inverse-letterbox) + kabel `detect_bytes` (output1 asing -> diam). Flood-fill tetap sbg fallback lapis-2.
+- Bukti: 6 unit test baru hijau; smoke `before.jpeg` 4/4 shape (avg 12.2 vertex); `cargo test` 148 lulus; clippy bersih; spike dihapus.
+- Sisa: mata user nilai overlay `%TEMP%\kuron-smoke-mask.png` (2.1); kalau lolos -> archive.
+
+## 2026-10-30 - text-fit-polygon: teks wajib di dalam polygon (1.1-1.5 hijau)
+
+- Aturan: tiap baris dibatasi chord polygon pada pitanya (pilih interval muat-cx else terlebar), blok tengah dalam rentang vertikal polygon, tiap baris digambar tengah-chord. Tanpa shape = jalur lama utuh.
+- Dua sisi: TS `textLayout.ts` (kanvas putuskan, simpan di `layout`) + port Rust `export.rs` (fallback + draw + overflow QA). Kabel: `LayoutFor`+shape, `syncGeometryToTranslation`, EditorPanel, CanvasEditor per-baris, `qa.rs`.
+- Bukti: TS 16 + Rust 4 test baru; smoke export: 0 piksel teks di luar elips (`%TEMP%\kuron-smoke-textfit.png`); `pnpm test` 445, `check` 0, `cargo test` 152 lib + semua suite, clippy bersih; spike dihapus.
+- Sisa: mata user di kanvas (`tauri dev`) + PNG export nyata (2.1); manual fontSize tetap pass-through (QA flag bila luber).
+
+## 2026-10-30 - text-fit-polygon 1.6: manual ikut dipaksa masuk polygon
+
+- Manual `fontSize` = batas atas (bukan nilai mutlak): loop susut yang sama sampai muat chord, floor minimum. Tanpa shape tetap pass-through.
+- Test: manual 72 di elips -> susut + tiap baris <= chord; manual 20 yang muat -> tetap. `pnpm test` 447, `check` 0.
+- Catatan: layout lama tersimpan (manual luber era sebelum ini) sembuh saat halaman di-save ulang (`syncGeometryToTranslation` hitung ulang tiap save); sebelum itu QA menandainya.
+
+## 2026-10-30 - text-fit-polygon 1.7: ekor keluar dari area teks
+
+- Masalah (screenshot user): bubble berdurasi/ekor -> chord ekor sempit memaksa font mini + pecah per huruf ("H E L P U S ! !" vertikal di ekor).
+- Aturan: badan = lajur menyambung sekitar chord terlebar dgn lebar >= 0.35x terlebar (sampling 2px); blok teks tengah di badan saja. Konstanta `BODY_MIN_FRAC` dipin kontrak dua sisi.
+- Bukti: TS test ekor, Rust tail-test (span hi<=152, font>min, pita tak masuk ekor, no-overflow); `pnpm test` 448, `check` 0, `cargo test` 153 lib + semua suite, clippy bersih.
