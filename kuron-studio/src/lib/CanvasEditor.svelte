@@ -8,7 +8,10 @@
   import Konva from "konva";
   import type { BubbleBox, BubbleTranslation, ReadingDirection, Tool } from "../lib/types";
   import { chipNumbers, clampBubble } from "../lib/bubble";
-  import { computeTextLayout } from "../lib/textLayout";
+  import { computeTextLayout, lineBands } from "../lib/textLayout";
+  /** Shape absolut (px halaman) -> relatif bubble untuk layout teks. */
+  const relShape = (b: BubbleBox): Array<[number, number]> | null =>
+    b.shape && b.shape.length >= 3 ? b.shape.map(([px, py]) => [px - b.x, py - b.y]) : null;
   import { OVERLAY_FONT_STYLE, overlayFontFamily, textMeasure } from "../lib/textMeasure";
   import Button from "./ui/Button.svelte";
 
@@ -74,7 +77,7 @@
     editingIdx = i;
     editingValue = tr?.translated ?? "";
     // Layout yang sama dengan overlay — bukan rumus sendiri. Dihitung sekali.
-    const lay = computeTextLayout(tr?.translated ?? "", b.w, b.h, textMeasure, { fontSize: tr?.fontSize });
+    const lay = computeTextLayout(tr?.translated ?? "", b.w, b.h, textMeasure, { fontSize: tr?.fontSize, shape: relShape(b) });
     editBox = {
       left: b.x * s,
       top: b.y * s,
@@ -286,11 +289,48 @@
           // Layout teks = SATU sumber (export-text-parity P1). Dihitung dalam
           // px HALAMAN lalu diskalakan untuk tampilan: nilainya tak berubah
           // saat lebar pane berubah, dan export memakai angka yang sama.
-          const lay = computeTextLayout(tr.translated, b.w, b.h, textMeasure, { fontSize: tr.fontSize });
+          const shapeRel = relShape(b);
+          const lay = computeTextLayout(tr.translated, b.w, b.h, textMeasure, { fontSize: tr.fontSize, shape: shapeRel });
           const pad = lay.padding * s;
           const boxW = Math.max(12, (b.w - lay.padding * 2) * s);
           const boxH = Math.max(12, (b.h - lay.padding * 2) * s);
 
+          const bgR = new Konva.Rect({
+            x: pad,
+            y: pad,
+            width: boxW,
+            height: boxH,
+            fill: tr.needsWhitePatch ? "#ffffff" : "rgba(0,0,0,0.78)",
+            cornerRadius: 4,
+            listening: false,
+          });
+          group.add(bgR);
+          const txtFill = tr.needsWhitePatch ? "#111" : "#fff";
+          // text-fit-polygon: bila shape ada, tiap baris digambar sendiri
+          // tengah pada chord-nya (cermin `draw_layout` Rust). Tanpa shape =
+          // satu blok tengah kotak seperti sebelumnya.
+          const bands = lineBands(shapeRel, b.w, b.h, lay.padding, lay.lines.length, lay.fontSize, lay.lineHeight);
+          if (bands) {
+            lay.lines.forEach((ln, j) => {
+              const band = bands[j];
+              const t = new Konva.Text({
+                x: band.x0 * s,
+                y: band.top * s,
+                width: Math.max(1, (band.x1 - band.x0) * s),
+                text: ln,
+                fontSize: lay.fontSize * s,
+                lineHeight: 1,
+                wrap: "none",
+                fontFamily: overlayFontFamily(),
+                fontStyle: OVERLAY_FONT_STYLE,
+                align: "center",
+                fill: txtFill,
+                listening: false,
+              });
+              group.add(t);
+              t.moveToTop();
+            });
+          } else {
           const txt = new Konva.Text({
             x: pad,
             y: pad,
@@ -315,19 +355,10 @@
           txt.height(boxH);
           txt.verticalAlign("middle");
 
-          const bgR = new Konva.Rect({
-            x: pad,
-            y: pad,
-            width: boxW,
-            height: boxH,
-            fill: tr.needsWhitePatch ? "#ffffff" : "rgba(0,0,0,0.78)",
-            cornerRadius: 4,
-            listening: false,
-          });
           if (tr.needsWhitePatch) txt.fill("#111");
-          group.add(bgR);
           txt.moveToTop();
           group.add(txt);
+          }
         }
       }
 

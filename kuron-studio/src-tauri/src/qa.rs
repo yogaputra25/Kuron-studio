@@ -69,11 +69,16 @@ pub fn check_page(
         }
         // export-text-parity P7: kalau bubble punya layout dari kanvas, luber
         // dinilai dari layout itu (satu sumber, tidak dihitung ulang).
+        // text-fit-polygon: shape absolut -> relatif bubble untuk chord.
+        let rel: Option<Vec<[i32; 2]>> = b.shape.as_ref().filter(|p| p.len() >= 3).map(|p| {
+            p.iter().map(|[px, py]| [px - b.x, py - b.y]).collect()
+        });
+        let rel_ref = rel.as_deref();
         let overflow = match &b.layout {
             Some(l) if !l.lines.is_empty() => {
-                crate::commands::export::layout_overflows(l, b.w, b.h)
+                crate::commands::export::layout_overflows(l, b.w, b.h, rel_ref)
             }
-            _ => crate::commands::export::text_overflows(&b.translated, b.w, b.h),
+            _ => crate::commands::export::text_overflows(&b.translated, b.w, b.h, rel_ref),
         };
         if overflow {
             out.push(QaIssue {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import exportRs from "../../src-tauri/src/commands/export.rs?raw";
 import {
+  BODY_MIN_FRAC,
   LAYOUT_FONT_STEP,
   LAYOUT_LINE_HEIGHT,
   LAYOUT_MAX_FONT,
@@ -34,6 +35,7 @@ describe("layout constants contract (TS canvas == Rust fallback)", () => {
     expect(rustF32("LAYOUT_FONT_STEP")).not.toBeNull();
     expect(rustF32("LAYOUT_LINE_HEIGHT")).not.toBeNull();
     expect(rustI32("LAYOUT_PADDING")).not.toBeNull();
+    expect(rustF32("BODY_MIN_FRAC"), "BODY_MIN_FRAC tak ada di export.rs").not.toBeNull();
   });
 
   it("angkanya sama persis di kedua sisi", () => {
@@ -42,6 +44,7 @@ describe("layout constants contract (TS canvas == Rust fallback)", () => {
     expect(rustF32("LAYOUT_FONT_STEP")).toBe(LAYOUT_FONT_STEP);
     expect(rustF32("LAYOUT_LINE_HEIGHT")).toBe(LAYOUT_LINE_HEIGHT);
     expect(rustI32("LAYOUT_PADDING")).toBe(LAYOUT_PADDING);
+    expect(rustF32("BODY_MIN_FRAC")).toBe(BODY_MIN_FRAC);
   });
 });
 
