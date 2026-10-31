@@ -16,8 +16,6 @@
     projects: Project[];
     busy: boolean;
     readingDir: ReadingDirection;
-    /** Provider terpilih untuk batch (null = belum ada opts dari editor). */
-    batchProviderId: string | null;
     lastInvokeError: { command: string; error: string } | null;
     brokenCount: number;
     canDetect: boolean;
@@ -40,7 +38,6 @@
     projects,
     busy,
     readingDir,
-    batchProviderId,
     lastInvokeError,
     brokenCount,
     canDetect,
@@ -94,8 +91,8 @@
         variant="ghost"
         size="sm"
         onclick={onBatch}
-        disabled={!current || !batchProviderId}
-        title={batchProviderId ? "Batch translate" : "Buka satu halaman di editor + pilih provider dulu"}
+        disabled={!current}
+        title="Batch translate"
       >{$t("batch")}</Button>
       <Button variant="ghost" size="sm" onclick={onGlossary}>{$t("glossary")}</Button>
       <Button
