@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { tick } from "svelte";
   import { fly, scale } from "svelte/transition";
   import { open } from "@tauri-apps/plugin-dialog";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
-  import { listen } from "@tauri-apps/api/event";
+
   import iconUrl from "../icon.svg";
   import { isMobile } from "./lib/app/device";
   import { api } from "./lib/contracts/api";
@@ -28,8 +28,7 @@
   import Onboarding from "./lib/app/Onboarding.svelte";
   import Snackbar from "./lib/ui/Snackbar.svelte";
   import DetectProgress from "./lib/detection/DetectProgress.svelte";
-  import { initialDetectState, reduceDetectProgress, type DetectState } from "./lib/detection/detectProgress";
-  import type { DetectProgress as DetectProgressEv } from "./lib/contracts/types";
+  import { createDetectRun } from "./lib/detection/detectRun.svelte.ts";
   import DiagnosticsPanel from "./lib/app/DiagnosticsPanel.svelte";
   import { onInvoke } from "./lib/contracts/log";
   import { createProjectStore } from "./lib/library/projectStore.svelte.ts";
@@ -53,16 +52,15 @@
   let showImportMenu = $state(false);
   let projQuery = $state("");
   let fullUrls = $state<Record<string, string>>({});
+  /** Antrean thumbnail: state milik modul, App hanya merangkai. */
+  const queue = createThumbnailQueue();
   let selectedId = $state<string | null>(null);
   let readingDir = $state<ReadingDirection>("rtl");
   let error = $state("");
   let info = $state("");
-  /** Antrean thumbnail: state milik modul, App hanya merangkai. */
-  const queue = createThumbnailQueue();
   // detect-ux-pack D1: overlay progres non-blocking + guard generasi.
-  let detectState = $state<DetectState | null>(null);
-  let detectHidden = $state(false);
-  let detectGen = 0;
+  const detectRun = createDetectRun();
+  let pendingDetectCancel: (() => void) | null = null;
   // page-list-view D4/D5: mode Grid/List + pref + scroll per mode.
   function loadPageView(): "grid" | "list" {
     try {
@@ -416,37 +414,24 @@
 
   async function detectAll() {
     if (!current || scopedPages.length === 0) return;
-    const myGen = ++detectGen;
-    const ids = scopedPages.map((p) => p.id);
-    const names = new Map(scopedPages.map((p) => [p.id, fileName(p.path)]));
-    detectState = initialDetectState(ids.length);
-    detectHidden = false;
     busy = true;
     error = "";
-    const unlisten = await listen<DetectProgressEv>("detect_progress", (e) => {
-      if (myGen !== detectGen || !detectState) return;
-      detectState = reduceDetectProgress(detectState, {
-        ...e.payload,
-        file: names.get(e.payload.pageId) ?? "",
-      });
-    });
+    const names = new Map(scopedPages.map((p) => [p.id, fileName(p.path)]));
+    const { done, cancel, gen } = detectRun.start(current.id, scopedPages.map((p) => p.id), names);
+    pendingDetectCancel = cancel;
     try {
-      await api.detectBatch(ids);
-      const updated = await api.getProject(current.id);
-      if (myGen !== detectGen) return;
-      projectStore.replaceProject(current.id, updated);
+      const updated = await done;
+      if (updated && current) projectStore.replaceProject(current.id, updated);
     } catch (e) {
-      if (myGen === detectGen) error = String(e);
+      if (detectRun.isCurrent(gen)) error = String(e);
     } finally {
-      unlisten();
-      if (myGen === detectGen) busy = false;
+      if (detectRun.isCurrent(gen)) busy = false;
     }
   }
 
   /** Tutup overlay: selesai → buang state; jalan → sembunyikan saja. */
   function closeDetectOverlay() {
-    if (detectState?.finished) detectState = null;
-    else detectHidden = true;
+    detectRun.closeOverlay();
   }
 
   async function importFolder() {
@@ -490,6 +475,11 @@
       offInvoke();
       selection.dispose();
     };
+  });
+
+  onDestroy(() => {
+    pendingDetectCancel?.();
+    pendingDetectCancel = null;
   });
 </script>
 
@@ -966,8 +956,8 @@
       {/key}
     </div>
   {/if}
-  {#if detectState && !detectHidden}
-    <DetectProgress state={detectState} onClose={closeDetectOverlay} />
+  {#if detectRun.state && !detectRun.hidden}
+    <DetectProgress state={detectRun.state} onClose={closeDetectOverlay} />
   {/if}
 
   {#if showBatch && current && batchOpts}
