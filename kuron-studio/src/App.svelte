@@ -8,11 +8,7 @@
   import { api } from "./lib/contracts/api";
   import AlertBanners from "./lib/app/shell/AlertBanners.svelte";
   import AppHeader from "./lib/app/shell/AppHeader.svelte";
-  import BatchPanel from "./lib/provider/BatchPanel.svelte";
-  import EditorPanel from "./lib/editor/EditorPanel.svelte";
-  import GlossaryPanel from "./lib/provider/GlossaryPanel.svelte";
-  import ProviderSettings from "./lib/provider/ProviderSettings.svelte";
-  import ReviewGrid from "./lib/export/ReviewGrid.svelte";
+  import OverlayHost from "./lib/app/shell/OverlayHost.svelte";
   import PageGrid from "./lib/library/PageGrid.svelte";
   import PageList from "./lib/library/PageList.svelte";
   import { t, theme } from "./lib/app/i18n";
@@ -22,20 +18,16 @@
   import type { KanbanFilter, PageView, SortKey } from "./lib/library/library";
   import Button from "./lib/ui/Button.svelte";
   import { fileName, sortPagesByBubbles, sortPagesByName, sortPagesByStatus } from "./lib/library/status";
-
-  import MoveDialog from "./lib/library/MoveDialog.svelte";
   import Onboarding from "./lib/app/Onboarding.svelte";
   import FolderBar from "./lib/app/shell/FolderBar.svelte";
   import KanbanBar from "./lib/app/shell/KanbanBar.svelte";
   import ProjectCard from "./lib/app/shell/ProjectCard.svelte";
-  import DetectProgress from "./lib/detection/DetectProgress.svelte";
-  import { createDetectRun } from "./lib/detection/detectRun.svelte.ts";
-  import DiagnosticsPanel from "./lib/app/DiagnosticsPanel.svelte";
   import { onInvoke } from "./lib/contracts/log";
   import { createProjectStore } from "./lib/library/projectStore.svelte.ts";
 
   import { createSelection, orderIds } from "./lib/library/selection.svelte.ts";
   import { createThumbnailQueue } from "./lib/previews/thumbnailQueue.svelte.ts";
+  import { createDetectRun } from "./lib/detection/detectRun.svelte.ts";
 
   const projectStore = createProjectStore();
   const projects = $derived(projectStore.projects);
@@ -415,6 +407,26 @@
     detectRun.closeOverlay();
   }
 
+  /** Batch selesai: refresh project + tutup. Dipindah utuh dari markup. */
+  function handleBatchDone() {
+    const cur = projectStore.current;
+    if (cur) void refreshProject(cur.id);
+    showBatch = false;
+  }
+
+  /** Pindah folder selesai: refresh project + buang seleksi/thumb basi. */
+  async function handleMoved(res: { moved: number; skipped: number }, destName: string, cid: string) {
+    const updated = await api.getProject(cid);
+    projectStore.replaceProject(cid, updated);
+    const live = new Set(allPages(updated).map((pg) => pg.id));
+    queue.pruneThumbs(live);
+    for (const id of Object.keys(fullUrls)) if (!live.has(id)) delete fullUrls[id];
+    selection.reset();
+    fullUrls = { ...fullUrls };
+    info = $t("moveDone").replace("{n}", String(res.moved)).replace("{d}", destName)
+      + (res.skipped > 0 ? ` (${$t("skippedCount").replace("{n}", String(res.skipped))})` : "");
+  }
+
   async function importFolder() {
     const dir = await open({ directory: true });
     if (typeof dir === "string") await doImport([dir]);
@@ -626,87 +638,42 @@
     {/if}
   {/if}
 
-  {#if selectedPage && projectStore.currentId}
-    <div class="fixed inset-0 z-50 flex flex-col bg-bg">
-      {#key selectedPage.id}
-        <EditorPanel
-          projectId={projectStore.currentId}
-          page={selectedPage}
-        fullImageUrl={fullUrls[selectedPage.id] ?? queue.thumbs[selectedPage.id] ?? ""}
-        fallbackUrl={queue.thumbs[selectedPage.id] ?? ""}
-          openError={openError}
-          {readingDir}
-          onClose={closeEditor}
-          onSaved={onSaved}
-          onBatchOpts={(o) => (batchOpts = { providerId: o.providerId, ...o.opts, readingDirection: readingDir }) }
-        />
-      {/key}
-    </div>
-  {/if}
-  {#if detectRun.state && !detectRun.hidden}
-    <DetectProgress state={detectRun.state} onClose={closeDetectOverlay} />
-  {/if}
+  <OverlayHost
+    {selection}
+    {queue}
+    {detectRun}
+    {selectedPage}
+    {current}
+    currentId={projectStore.currentId}
+    {fullUrls}
+    {openError}
+    {readingDir}
+    {showBatch}
+    {batchOpts}
+    {showGlossary}
+    {showMove}
+    {folderId}
+    {busy}
+    {showReview}
+    {showProviders}
+    {showDiagnostics}
+    scopedPages={visiblePages}
+    onCloseEditor={closeEditor}
+    {onSaved}
+    onBatchOpts={(o) => (batchOpts = { providerId: o.providerId, ...o.opts, readingDirection: readingDir }) }
+    onDetectClose={closeDetectOverlay}
+    onBatchDone={handleBatchDone}
+    onBatchClose={() => (showBatch = false)}
+    onGlossaryClose={() => (showGlossary = false)}
+    onMoveClose={() => (showMove = false)}
+    onMoveError={(msg) => (error = msg)}
+    onMoved={(res, destName, cid) => void handleMoved(res, destName, cid)}
+    onReviewClose={() => (showReview = false)}
+    onRefreshReview={() => { const c = projectStore.current; if (c) void refreshProject(c.id); }}
+    onProvidersClose={() => (showProviders = false)}
+    onDiagnosticsClose={() => (showDiagnostics = false)}
+  />
 
-  {#if showBatch && current && batchOpts}
-    {@const cur = current}
-    <BatchPanel
-      pages={scopedPages}
-      opts={batchOpts}
-      onDone={() => { void refreshProject(cur.id); showBatch = false; }}
-      onClose={() => (showBatch = false)}
-    />
-  {/if}
-
-  {#if showGlossary}
-    <GlossaryPanel onClose={() => (showGlossary = false)} />
-  {/if}
-
-  {#if showMove && current && projectStore.currentId}
-    {@const cur = current}
-    {@const cid = projectStore.currentId}
-    <MoveDialog
-      project={cur}
-      fromFolderId={folderId}
-      pageIds={selection.selectedIds}
-      {busy}
-      onClose={() => (showMove = false)}
-      onError={(msg) => (error = msg)}
-      onMoved={(res, destName) => {
-        // Dialog tetap terbuka: tampilkan layar sukses, user yang menutup.
-        void (async () => {
-          const updated = await api.getProject(cid);
-          projectStore.replaceProject(cid, updated);
-          // Seleksi + thumbnail basi dibuang: halaman sudah pindah folder.
-          const live = new Set(allPages(updated).map((pg) => pg.id));
-          queue.pruneThumbs(live);
-          for (const id of Object.keys(fullUrls)) if (!live.has(id)) delete fullUrls[id];
-          selection.reset();
-          fullUrls = { ...fullUrls };
-          info = $t("moveDone").replace("{n}", String(res.moved)).replace("{d}", destName)
-            + (res.skipped > 0 ? ` (${$t("skippedCount").replace("{n}", String(res.skipped))})` : "");
-        })();
-      }}
-    />
-  {/if}
-
-  {#if showReview && current}
-    {@const cur = current}
-    <ReviewGrid
-      project={cur}
-      opts={batchOpts}
-      selectedIds={selection.selectedIds}
-      onRefresh={() => { void refreshProject(cur.id); }}
-      onClose={() => (showReview = false)}
-    />
-  {/if}
-
-  {#if showProviders}
-    <ProviderSettings onClose={() => (showProviders = false)} />
-  {/if}
-
-  {#if showDiagnostics}
-    <DiagnosticsPanel onClose={() => (showDiagnostics = false)} />
-  {/if}
 </main>
 
 <svelte:window onkeydown={onViewKey} />
