@@ -1,9 +1,9 @@
 <script lang="ts">
   import type { Action } from "svelte/action";
-  import type { Page } from "./contracts/types";
+  import type { Page } from "../contracts/types";
   import { fileName, parentFolder } from "./status";
-  import StatusBadge from "./ui/StatusBadge.svelte";
-  import { t } from "./app/i18n";
+  import StatusBadge from "../ui/StatusBadge.svelte";
+  import { t } from "../app/i18n";
 
   interface Props {
     pages: Page[];

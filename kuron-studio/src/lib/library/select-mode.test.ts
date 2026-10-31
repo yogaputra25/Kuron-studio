@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import appSrc from "../App.svelte?raw";
+import appSrc from "../../App.svelte?raw";
 import gridSrc from "./PageGrid.svelte?raw";
 import moveSrc from "./MoveDialog.svelte?raw";
 

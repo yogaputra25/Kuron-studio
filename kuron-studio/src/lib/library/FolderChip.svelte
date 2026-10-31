@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { api } from "./contracts/api";
-  import { t } from "./app/i18n";
-  import type { ChapterFolder } from "./contracts/types";
+  import { api } from "../contracts/api";
+  import { t } from "../app/i18n";
+  import type { ChapterFolder } from "../contracts/types";
   import { isSiblingNameTaken, type FolderStats } from "./library";
 
   interface Props {

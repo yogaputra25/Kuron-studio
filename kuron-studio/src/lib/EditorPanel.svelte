@@ -12,9 +12,9 @@
   import { textMeasure } from "../lib/textMeasure";
   import type { BubbleBox, Page, PageTranslation, ReadingDirection, Tool } from "../lib/contracts/types";
   import { TARGET_LANGS } from "../lib/contracts/types";
-  import { allPages } from "./library";
+  import { allPages } from "./library/library";
   import { t } from "./app/i18n";
-  import { statusAfterBubbleSave, statusAfterTranslationSave, translationComplete } from "./status";
+  import { statusAfterBubbleSave, statusAfterTranslationSave, translationComplete } from "./library/status";
   import Button from "./ui/Button.svelte";
   import StatusBadge from "./ui/StatusBadge.svelte";
   import { isNarrow, isTablet, loadSidebarW, saveSidebarW, watchViewport } from "./app/device";

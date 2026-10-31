@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import gridSrc from "./PageGrid.svelte?raw";
 import listSrc from "./PageList.svelte?raw";
-import appSrc from "../App.svelte?raw";
+import appSrc from "../../App.svelte?raw";
 
 // page-list-view: grid diekstrak + list baru, props identik, tanpa string
 // inline. Pola-sumber (gaya preview-transport.test.ts): komponen Svelte,

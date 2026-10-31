@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fileName, parentFolder, sortPagesByBubbles, sortPagesByName, sortPagesByStatus, statusBadgeClass, statusLabel } from "./status";
-import type { Page, PageStatus } from "./contracts/types";
+import type { Page, PageStatus } from "../contracts/types";
 
 const page = (path: string): Page => ({ id: path, path, width: 0, height: 0, status: "idle", bubbles: [] });
 
