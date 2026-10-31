@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import appSrc from "../App.svelte?raw";
-import snackSrc from "./ui/Snackbar.svelte?raw";
+import appSrc from "../../App.svelte?raw";
+import snackSrc from "./Snackbar.svelte?raw";
 
 // Hasil sukses (mis. "41 halaman dipindah ke X") tampil sebagai snackbar
 // melayang yang auto-hilang — bukan strip yang menggeser layout.

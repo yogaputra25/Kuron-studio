@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 // searchable ala LOV project), bukan <select> bawaan yang beda tampilan
 // per OS dan tidak bisa di-search.
 
-const SRC = fileURLToPath(new URL("..", import.meta.url));
+const SRC = fileURLToPath(new URL("../..", import.meta.url));
 
 function svelteFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((d) => {

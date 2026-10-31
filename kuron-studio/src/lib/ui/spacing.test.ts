@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 // mengunci batas bawahnya supaya komponen berikutnya tidak mengulang masalah
 // yang sama.
 
-const SRC = fileURLToPath(new URL("..", import.meta.url));
+const SRC = fileURLToPath(new URL("../..", import.meta.url));
 
 function svelteFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((d) => {

@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 // jadi file ini baca lewat node:fs. Batasnya: `node:*` hanya boleh di
 // `*.test.ts` — bukan di kode app.
 
-const css = readFileSync(fileURLToPath(new URL("../app.css", import.meta.url)), "utf8");
+const css = readFileSync(fileURLToPath(new URL("../../app.css", import.meta.url)), "utf8");
 
 type Var = Record<string, string>;
 

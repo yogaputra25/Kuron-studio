@@ -1,6 +1,6 @@
 <script lang="ts">
-  import Field from "../ui/Field.svelte";
-  import Lov from "../ui/Lov.svelte";
+  import Field from "../Field.svelte";
+  import Lov from "../Lov.svelte";
 
   // Reproduksi persis alur ProviderSettings: `value` + `onchange` + error
   // dibersihkan lewat `oninput`. Kalau wiring putus, "Nama wajib diisi."

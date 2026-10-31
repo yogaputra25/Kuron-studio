@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 //
 // Pengecualian yang disengaja ada di ALLOWLIST dengan alasannya.
 
-const SRC = fileURLToPath(new URL("..", import.meta.url));
+const SRC = fileURLToPath(new URL("../..", import.meta.url));
 
 const ALLOWLIST: Record<string, string> = {
   // Kosong saat ini. Latar kanvas tetap gelap via `bg-black`, tapi itu bukan

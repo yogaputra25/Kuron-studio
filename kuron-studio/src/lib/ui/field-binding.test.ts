@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const SRC = fileURLToPath(new URL("..", import.meta.url));
+const SRC = fileURLToPath(new URL("../..", import.meta.url));
 
 // Regresi: `Field` menerima `value = $bindable()` tapi tidak mengikatnya dua
 // arah ke <input>. Dua kegagalan yang pernah terjadi, dua-duanya bikin input
