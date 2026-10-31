@@ -248,3 +248,10 @@ menyentuh baris lama).
 - Hasil: `diagrams/provider-list-models-draft.mmd` + `diagrams/provider-validate.mmd`, lolos `mmdc`; versi cetak `*.pdf` satu halaman ukuran natural (`--size 2100`); ARCHITECTURE.md bagian `translate` mereferensikan keduanya.
 - Keputusan: taruh di `diagrams/` root, bukan `openspec/specs/.../diagrams/` - `/openspec/` di-gitignore (lokal), jadi referensi dari dokumen tracked akan menggantung.
 - Lanjut: spec provider di `openspec/specs/kuron-studio/spec.md` masih drift (9 tipe + `store.json` + `validate_provider(config)`); kandidat change `sync-provider-spec`.
+
+## 2026-10-31 - app-shell-components: 8/9 (3.2 smoke manual menunggu user)
+
+- 7 komponen shell di lib/app/shell/: AlertBanners, ProjectCard (dedup row/card), FolderBar (chipSpecs + satu {#each}), KanbanBar (+SortKey/PageView/KanbanFilter ke library), ProjectSwitcher (self-contained), AppHeader (~19 prop eksplisit, deviasi tercatat), OverlayHost (28 prop eksplisit).
+- App.svelte 1198->679 baris; target <350 tak tercapai (sisa script orkestrasi + markup dashboard/grid) -> ranah FE-4/FE-5/FE-11.
+- Gates: pnpm test 480, svelte-check 0. Rust tak tersentuh.
+- Sisa: 3.2 smoke manual (user).

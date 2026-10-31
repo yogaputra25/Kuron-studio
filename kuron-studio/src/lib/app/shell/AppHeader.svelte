@@ -2,7 +2,7 @@
   Presentasional: state baca dari props/store baca-saja
   (theme/lang/isMobile), aksi lewat callback. showImportMenu lokal. -->
 <script lang="ts">
-  import iconUrl from "../../icon.svg";
+  import iconUrl from "../../../../icon.svg";
   import { isMobile } from "../../app/device";
   import { lang, t, theme, type Lang, type Theme } from "../../app/i18n";
   import Button from "../../ui/Button.svelte";
