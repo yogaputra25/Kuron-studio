@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import appSrc from "../../App.svelte?raw";
+
 import barSrc from "./shell/KanbanBar.svelte?raw";
 import gridSrc from "../library/PageGrid.svelte?raw";
+import switchSrc from "./shell/ProjectSwitcher.svelte?raw";
 import moveSrc from "../library/MoveDialog.svelte?raw";
 import onbSrc from "./Onboarding.svelte?raw";
 import panelSrc from "../ui/Panel.svelte?raw";
@@ -30,7 +31,7 @@ describe("motion pass", () => {
   });
 
   it("dropdown project dan bar seleksi beranimasi", () => {
-    expect(appSrc).toContain("transition:scale={{ duration: 140");
+    expect(switchSrc).toContain("transition:scale={{ duration: 140");
     expect(barSrc).toContain('role="status" transition:fly={{ y: -8, duration: 180 }}');
   });
 

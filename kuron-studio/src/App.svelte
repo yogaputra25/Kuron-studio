@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { tick } from "svelte";
-  import { scale } from "svelte/transition";
   import { open } from "@tauri-apps/plugin-dialog";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
 
@@ -31,6 +30,7 @@
   import FolderBar from "./lib/app/shell/FolderBar.svelte";
   import KanbanBar from "./lib/app/shell/KanbanBar.svelte";
   import ProjectCard from "./lib/app/shell/ProjectCard.svelte";
+  import ProjectSwitcher from "./lib/app/shell/ProjectSwitcher.svelte";
   import DetectProgress from "./lib/detection/DetectProgress.svelte";
   import { createDetectRun } from "./lib/detection/detectRun.svelte.ts";
   import DiagnosticsPanel from "./lib/app/DiagnosticsPanel.svelte";
@@ -51,10 +51,8 @@
   /** Seleksi multi-halaman: state milik modul, App hanya merangkai. */
   const selection = createSelection();
   let showMove = $state(false);
-  let showProjMenu = $state(false);
   // detect-ux-pack 3.1: satu tombol Import + menu pola switcher.
   let showImportMenu = $state(false);
-  let projQuery = $state("");
   let fullUrls = $state<Record<string, string>>({});
   /** Antrean thumbnail: state milik modul, App hanya merangkai. */
   const queue = createThumbnailQueue();
@@ -155,11 +153,6 @@
   const selectedPage = $derived(allPages(current ?? { id: "", name: "", folders: [] } as Project).find((p) => p.id === selectedId) ?? null);
   /** Halaman yang preview-nya gagal → jumlah tombol "Bersihkan". */
   const brokenCount = $derived(Object.keys(queue.broken).length);
-  const filteredProjects = $derived(
-    projQuery.trim()
-      ? projects.filter((p) => p.name.toLowerCase().includes(projQuery.trim().toLowerCase()))
-      : projects,
-  );
 
   async function refresh() {
     try {
@@ -276,12 +269,6 @@
     } finally {
       busy = false;
     }
-  }
-
-  function pickProject(id: string) {
-    showProjMenu = false;
-    projQuery = "";
-    openProject(id);
   }
 
   async function doImport(paths: string[]) {
@@ -496,64 +483,7 @@
     </div>
     <div class="flex flex-wrap items-center gap-2 px-4 py-2">
     {#if projects.length > 0}
-      {@const cur = current}
-      {@const curSt = cur ? projectStats(cur) : null}
-      <div
-        class="relative"
-        onfocusout={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) showProjMenu = false; }}
-      >
-        <button
-          class="flex h-8 max-w-64 items-center gap-2 rounded-md border border-line bg-surface-2 px-2.5 text-sm text-ink
-                 outline-none transition-colors hover:border-line-strong focus:border-accent"
-          aria-haspopup="listbox"
-          aria-expanded={showProjMenu}
-          aria-label={$t("selectProject")}
-          onclick={() => (showProjMenu = !showProjMenu)}
-          onkeydown={(e) => { if (e.key === "Escape") showProjMenu = false; }}
-        >
-          <span class="min-w-0 flex-1 truncate text-left">{cur?.name ?? "—"}</span>
-          {#if curSt}
-            <span class="tnum shrink-0 text-[11px] text-ink-3">{curSt.done}/{curSt.total}</span>
-            <span class="h-1 w-12 shrink-0 overflow-hidden rounded bg-raised" aria-hidden="true">
-              <span class="block h-full rounded bg-accent" style="width: {Math.round(curSt.progress * 100)}%"></span>
-            </span>
-          {/if}
-          <span class="shrink-0 text-[10px] text-ink-3" aria-hidden="true">{showProjMenu ? "▴" : "▾"}</span>
-        </button>
-        {#if showProjMenu}
-          <div
-            class="absolute left-0 top-full z-50 mt-1 w-72 overflow-hidden rounded-md border border-line-strong bg-surface-2 py-1"
-            transition:scale={{ duration: 140, start: 0.96 }}
-            style="transform-origin: top left;"
-            role="listbox"
-            aria-label={$t("projectList")}
-          >
-            <div class="px-1 pb-1">
-              <input
-                class="h-8 w-full rounded border border-line bg-surface px-2 text-xs text-ink
-                       placeholder:text-ink-3 outline-none focus:border-accent"
-                placeholder={$t("searchProject")}
-                aria-label={$t("searchProject")}
-                bind:value={projQuery}
-                onkeydown={(e) => { if (e.key === "Escape") showProjMenu = false; }}
-              />
-            </div>
-            <div class="max-h-64 overflow-y-auto py-0.5">
-              {#each filteredProjects as p (p.id)}
-                <ProjectCard
-                  project={p}
-                  selected={p.id === projectStore.currentId}
-                  variant="row"
-                  onOpen={(id) => pickProject(id)}
-                />
-              {:else}
-                <p class="px-2.5 py-2 text-xs text-ink-3">{$t("noProjectMatch")}</p>
-              {/each}
-            </div>
-          </div>
-        {/if}
-      </div>
-      <span class="tnum text-xs text-ink-3">{curSt ? curSt.total : 0} {$t("pages")}</span>
+      <ProjectSwitcher current={current} {projects} onPick={(id) => openProject(id)} />
     {/if}
 
     <div class="ml-auto flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto sm:flex-none sm:flex-wrap sm:overflow-visible">
