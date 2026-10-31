@@ -5,6 +5,7 @@
   import { pickFiles, pickFolder } from "./lib/app/dialogs";
 
   import { isMobile } from "./lib/app/device";
+  import { read, STORAGE_KEYS, write } from "./lib/app/storage";
   import { api } from "./lib/contracts/api";
   import AlertBanners from "./lib/app/shell/AlertBanners.svelte";
   import AppHeader from "./lib/app/shell/AppHeader.svelte";
@@ -52,12 +53,10 @@
   const detectRun = createDetectRun();
   let pendingDetectCancel: (() => void) | null = null;
   // page-list-view D4/D5: mode Grid/List + pref + scroll per mode.
+  // Persist via app/storage (FE-8): string mentah, guard grid|list.
   function loadPageView(): "grid" | "list" {
-    try {
-      return localStorage.getItem("kuron-page-view") === "list" ? "list" : "grid";
-    } catch {
-      return "grid";
-    }
+    const v = read(STORAGE_KEYS.pageView, "grid");
+    return v === "grid" || v === "list" ? v : "grid";
   }
   let pageView = $state<PageView>(loadPageView());
   let scrollByView: Record<PageView, number> = { grid: 0, list: 0 };
@@ -67,11 +66,7 @@
     if (v === pageView) return;
     scrollByView[pageView] = window.scrollY;
     pageView = v;
-    try {
-      localStorage.setItem("kuron-page-view", v);
-    } catch {
-      /* private mode: sesi ini saja */
-    }
+    write(STORAGE_KEYS.pageView, v);
     await tick();
     window.scrollTo(0, scrollByView[v] ?? 0);
   }

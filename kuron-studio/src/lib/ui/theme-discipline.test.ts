@@ -53,6 +53,40 @@ describe("no raw Tailwind palette in Svelte (theme-token discipline)", () => {
   }
 });
 
+const HEX_ALLOWLIST: Record<string, string> = {
+  // Kosong saat ini: Onboarding + CanvasEditor sudah bersih dari literal hex
+  // (warna ilustrasi lewat token --ks-illust-*). Tambahkan entri hanya bila
+  // ada literal hex/rgba yang benar-benar disengaja, dengan alasan di value-nya.
+};
+
+describe("no hex/rgba literals in Svelte (illustration tokens only)", () => {
+  const files = svelteFiles(SRC);
+  const HEX = /#[0-9a-fA-F]{3,8}\b/g;
+  const RGB_FN = /\brgba?\(/g;
+  for (const file of files) {
+    const name = file.split("/").pop()!;
+    if (HEX_ALLOWLIST[name] ?? ALLOWLIST[name]) continue;
+    it(`${name} has no hex/rgba literals`, () => {
+      const src = readFileSync(file, "utf8");
+      const lines = src.split("\n");
+      const hits: string[] = [];
+      lines.forEach((line, i) => {
+        for (const m of line.matchAll(HEX)) hits.push(`${name}:${i + 1}: ${m[0]}`);
+        for (const m of line.matchAll(RGB_FN)) hits.push(`${name}:${i + 1}: ${m[0]}`);
+      });
+      expect(
+        hits,
+        `${name} pakai literal hex/rgba — ganti dengan token app.css (var(--ks-*))`,
+      ).toEqual([]);
+    });
+  }
+  it("no stale hex allowlist entries", () => {
+    const files = svelteFiles(SRC).map((f) => f.split("/").pop()!);
+    const stale = Object.keys(HEX_ALLOWLIST).filter((n) => !files.includes(n));
+    expect(stale, "hex allowlist sudah tidak relevan — hapus").toEqual([]);
+  });
+});
+
 describe("every allowlist entry is still justified", () => {
   it("no stale allowlist entries (file tidak boleh hilang / sudah rapi)", () => {
     const files = svelteFiles(SRC).map((f) => f.split("/").pop()!);

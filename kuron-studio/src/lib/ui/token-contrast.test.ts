@@ -96,6 +96,10 @@ const PAIRS: [string, string, number][] = [
 
   // State hover tombol: `Button` variant danger jadi bg solid + accent-fg.
   ["--ks-accent-fg", "--ks-danger", 4.5],
+
+  // Ilustrasi: token konstan, identik di kedua tema.
+  ["--ks-illust-on-solid", "--ks-illust-solid", 4.5],
+  ["--ks-illust-on-solid-muted", "--ks-illust-solid", 3.0],
 ];
 
 describe("token contrast (WCAG)", () => {
