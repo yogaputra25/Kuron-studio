@@ -36,13 +36,13 @@
       <h2 class="font-display mt-1 text-xl font-semibold tracking-tight">{$t("onboardChoiceT")}</h2>
       <p class="mx-auto mt-1 max-w-md text-xs leading-relaxed text-ink-2">{$t("onboardChoiceD")}</p>
       <svg class="mx-auto mt-4 block" width="280" height="104" viewBox="0 0 280 104" aria-hidden="true">
-        <rect x="14" y="12" width="72" height="84" rx="6" fill="#fffdf9" stroke="#c9bfae" transform="rotate(-6 50 54)" />
-        <ellipse cx="50" cy="50" rx="19" ry="12" fill="#fff" stroke="#8a8478" transform="rotate(-6 50 54)" />
-        <rect x="104" y="12" width="72" height="84" rx="6" fill="#fffdf9" stroke="#c2543f" stroke-width="2" />
-        <ellipse cx="140" cy="50" rx="19" ry="12" fill="#fff" stroke="#c2543f" stroke-width="2" />
-        <circle cx="164" cy="38" r="10" fill="#c2543f" /><text x="164" y="42" font-size="10" text-anchor="middle" fill="#fff8f4">✓</text>
-        <rect x="194" y="12" width="72" height="84" rx="6" fill="#221f1b" transform="rotate(6 230 54)" />
-        <text x="212" y="56" font-size="11" fill="#fffdf9">Anu…</text>
+        <rect x="14" y="12" width="72" height="84" rx="6" style="fill:var(--ks-surface);stroke:var(--ks-line-strong)" transform="rotate(-6 50 54)" />
+        <ellipse cx="50" cy="50" rx="19" ry="12" style="fill:var(--ks-bg);stroke:var(--ks-text-3)" transform="rotate(-6 50 54)" />
+        <rect x="104" y="12" width="72" height="84" rx="6" style="fill:var(--ks-surface);stroke:var(--ks-accent)" stroke-width="2" />
+        <ellipse cx="140" cy="50" rx="19" ry="12" style="fill:var(--ks-bg);stroke:var(--ks-accent)" stroke-width="2" />
+        <circle cx="164" cy="38" r="10" style="fill:var(--ks-accent)" /><text x="164" y="42" font-size="10" text-anchor="middle" style="fill:var(--ks-accent-fg)">✓</text>
+        <rect x="194" y="12" width="72" height="84" rx="6" style="fill:var(--ks-illust-solid)" transform="rotate(6 230 54)" />
+        <text x="212" y="56" font-size="11" style="fill:var(--ks-illust-on-solid)">Anu…</text>
       </svg>
       <div class="mt-5 grid gap-3 text-left sm:grid-cols-2">
         <div class="flex flex-col gap-2 rounded-xl border border-line bg-surface p-4 transition-all duration-150 hover:-translate-y-0.5 hover:border-line-strong hover:shadow-lg">
@@ -75,35 +75,35 @@
       <div class="mt-4 flex h-36 items-center justify-center rounded-xl border border-line bg-surface-2" aria-hidden="true" in:fly={{ x: 14, duration: 180 }}>
         {#if wstep === 0}
           <svg width="190" height="112" viewBox="0 0 190 112">
-            <rect x="50" y="6" width="90" height="100" rx="6" fill="#fffdf9" stroke="#c9bfae" />
-            <rect x="60" y="16" width="70" height="38" rx="3" fill="#e8e0d0" />
-            <rect x="60" y="60" width="70" height="28" rx="3" fill="#e8e0d0" />
-            <ellipse cx="95" cy="35" rx="23" ry="13" fill="#fff" stroke="#8a8478" />
-            <text x="150" y="62" font-size="20" fill="#c2543f">⤵</text>
+            <rect x="50" y="6" width="90" height="100" rx="6" style="fill:var(--ks-surface);stroke:var(--ks-line-strong)" />
+            <rect x="60" y="16" width="70" height="38" rx="3" style="fill:var(--ks-raised)" />
+            <rect x="60" y="60" width="70" height="28" rx="3" style="fill:var(--ks-raised)" />
+            <ellipse cx="95" cy="35" rx="23" ry="13" style="fill:var(--ks-bg);stroke:var(--ks-text-3)" />
+            <text x="150" y="62" font-size="20" style="fill:var(--ks-accent)">⤵</text>
           </svg>
         {:else if wstep === 1}
           <svg width="190" height="112" viewBox="0 0 190 112">
-            <rect x="50" y="6" width="90" height="100" rx="6" fill="#fffdf9" stroke="#c9bfae" />
-            <ellipse cx="95" cy="50" rx="28" ry="17" fill="#fff" stroke="#c2543f" stroke-width="3" />
-            <circle cx="121" cy="36" r="12" fill="#c2543f" />
-            <text x="121" y="41" font-size="12" text-anchor="middle" fill="#fff8f4">✓</text>
+            <rect x="50" y="6" width="90" height="100" rx="6" style="fill:var(--ks-surface);stroke:var(--ks-line-strong)" />
+            <ellipse cx="95" cy="50" rx="28" ry="17" style="fill:var(--ks-bg);stroke:var(--ks-accent)" stroke-width="3" />
+            <circle cx="121" cy="36" r="12" style="fill:var(--ks-accent)" />
+            <text x="121" y="41" font-size="12" text-anchor="middle" style="fill:var(--ks-accent-fg)">✓</text>
           </svg>
         {:else if wstep === 2}
           <svg width="210" height="112" viewBox="0 0 210 112">
-            <rect x="8" y="26" width="80" height="60" rx="6" fill="#221f1b" />
-            <text x="20" y="62" font-size="13" fill="#b9b2a6">あの…</text>
-            <text x="96" y="62" font-size="18" fill="#c2543f">→</text>
-            <rect x="122" y="26" width="80" height="60" rx="6" fill="#c2543f" />
-            <text x="134" y="62" font-size="13" font-weight="bold" fill="#fff8f4">Anu…</text>
+            <rect x="8" y="26" width="80" height="60" rx="6" style="fill:var(--ks-illust-solid)" />
+            <text x="20" y="62" font-size="13" style="fill:var(--ks-illust-on-solid-muted)">あの…</text>
+            <text x="96" y="62" font-size="18" style="fill:var(--ks-accent)">→</text>
+            <rect x="122" y="26" width="80" height="60" rx="6" style="fill:var(--ks-accent)" />
+            <text x="134" y="62" font-size="13" font-weight="bold" style="fill:var(--ks-accent-fg)">Anu…</text>
           </svg>
         {:else}
           <svg width="190" height="112" viewBox="0 0 190 112">
-            <rect x="55" y="10" width="80" height="58" rx="6" fill="#fffdf9" stroke="#c9bfae" />
-            <rect x="63" y="18" width="64" height="8" rx="4" fill="#c2543f" />
-            <rect x="63" y="30" width="64" height="8" rx="4" fill="#e8e0d0" />
-            <rect x="63" y="42" width="40" height="8" rx="4" fill="#e8e0d0" />
-            <rect x="55" y="76" width="80" height="22" rx="6" fill="#221f1b" />
-            <text x="95" y="91" font-size="11" text-anchor="middle" fill="#fffdf9">Ekspor ✓</text>
+            <rect x="55" y="10" width="80" height="58" rx="6" style="fill:var(--ks-surface);stroke:var(--ks-line-strong)" />
+            <rect x="63" y="18" width="64" height="8" rx="4" style="fill:var(--ks-accent)" />
+            <rect x="63" y="30" width="64" height="8" rx="4" style="fill:var(--ks-raised)" />
+            <rect x="63" y="42" width="40" height="8" rx="4" style="fill:var(--ks-raised)" />
+            <rect x="55" y="76" width="80" height="22" rx="6" style="fill:var(--ks-illust-solid)" />
+            <text x="95" y="91" font-size="11" text-anchor="middle" style="fill:var(--ks-illust-on-solid)">Ekspor ✓</text>
           </svg>
         {/if}
       </div>

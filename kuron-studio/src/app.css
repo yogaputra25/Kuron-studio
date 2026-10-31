@@ -85,6 +85,10 @@
   --ks-danger-soft: #2e1416;
   --ks-info: #6ba6ff;
   --ks-info-soft: #111e33;
+
+  --ks-illust-solid: #221f1b;
+  --ks-illust-on-solid: #fffdf9;
+  --ks-illust-on-solid-muted: #b9b2a6;
 }
 
 /* --- Light --- */
@@ -119,6 +123,10 @@
   --ks-danger-soft: #fde8e6;
   --ks-info: #1f5fbf;
   --ks-info-soft: #e5eefb;
+
+  --ks-illust-solid: #221f1b;
+  --ks-illust-on-solid: #fffdf9;
+  --ks-illust-on-solid-muted: #b9b2a6;
 }
 
 html,
