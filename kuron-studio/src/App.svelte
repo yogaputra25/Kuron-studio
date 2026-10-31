@@ -32,10 +32,10 @@
   import type { DetectProgress as DetectProgressEv } from "./lib/contracts/types";
   import DiagnosticsPanel from "./lib/app/DiagnosticsPanel.svelte";
   import { onInvoke } from "./lib/contracts/log";
-  import { PREFETCH_MARGIN, PREVIEW_CONCURRENCY, pickNext } from "./lib/previews/previewQueue";
-  import { summarizePreviews, type PreviewSample } from "./lib/previews/previewMetrics";
   import { createProjectStore } from "./lib/library/projectStore.svelte.ts";
+
   import { createSelection, orderIds } from "./lib/library/selection.svelte.ts";
+  import { createThumbnailQueue } from "./lib/previews/thumbnailQueue.svelte.ts";
 
   const projectStore = createProjectStore();
   const projects = $derived(projectStore.projects);
@@ -52,28 +52,13 @@
   // detect-ux-pack 3.1: satu tombol Import + menu pola switcher.
   let showImportMenu = $state(false);
   let projQuery = $state("");
-  let thumbs = $state<Record<string, string>>({});
   let fullUrls = $state<Record<string, string>>({});
   let selectedId = $state<string | null>(null);
   let readingDir = $state<ReadingDirection>("rtl");
   let error = $state("");
   let info = $state("");
-  /** pageId → alasan preview gagal (file hilang / tidak bisa di-decode). */
-  let broken = $state<Record<string, string>>({});
-  // grid-preview-perf D1-D3: antrean thumbnail berprioritas viewport.
-  // `loadGen` guard generasi — ganti project membuang hasil basi.
-  let loadGen = 0;
-  let thumbPending: string[] = [];
-  let thumbInflight = new Set<string>();
-  let thumbActive = 0;
-  let thumbByPath = new Map<string, string>();
-  let visibleIds = new Set<string>();
-  let thumbTotal = $state(0);
-  let thumbDone = $state(0);
-  let thumbFailed = $state(0);
-  let thumbT0 = 0;
-  let thumbFirstAt = 0;
-  let thumbSamples: PreviewSample[] = [];
+  /** Antrean thumbnail: state milik modul, App hanya merangkai. */
+  const queue = createThumbnailQueue();
   // detect-ux-pack D1: overlay progres non-blocking + guard generasi.
   let detectState = $state<DetectState | null>(null);
   let detectHidden = $state(false);
@@ -168,7 +153,7 @@
   );
   const selectedPage = $derived(allPages(current ?? { id: "", name: "", folders: [] } as Project).find((p) => p.id === selectedId) ?? null);
   /** Halaman yang preview-nya gagal → jumlah tombol "Bersihkan". */
-  const brokenCount = $derived(Object.keys(broken).length);
+  const brokenCount = $derived(Object.keys(queue.broken).length);
   const filteredProjects = $derived(
     projQuery.trim()
       ? projects.filter((p) => p.name.toLowerCase().includes(projQuery.trim().toLowerCase()))
@@ -194,101 +179,17 @@
     lang.update((v: Lang) => (v === "id" ? "en" : v === "en" ? "zh" : "id"));
   };
 
-  // grid-preview-perf D1-D3: antrean konkurensi-4 + prioritas viewport +
-  // guard generasi. Ganti `Promise.allSettled` semua-halaman (isu #11: N
-  // decode paralel + N payload IPC satu gelombang).
+  // Antrean thumbnail milik modul previews/thumbnailQueue (FE-2).
   function loadThumbs(projectId: string) {
     const proj = projects.find((p) => p.id === projectId);
     if (!proj) return;
-    const myGen = ++loadGen;
-    visibleIds = new Set<string>();
-    thumbInflight = new Set<string>();
-    thumbActive = 0;
-    thumbByPath = new Map(allPages(proj).map((pg) => [pg.id, pg.path]));
-    // Skip yang sudah broken: retry file sidecar tiap ganti project mahal.
-    // `cleanPages`/retry yang membersihkan peta ini sebagai jalur recovery.
-    thumbPending = sortPagesByName(allPages(proj))
-      .filter((pg) => !thumbs[pg.id] && !broken[pg.id])
-      .map((pg) => pg.id);
-    thumbTotal = thumbPending.length;
-    thumbDone = 0;
-    thumbFailed = 0;
-    thumbT0 = performance.now();
-    thumbFirstAt = 0;
-    thumbSamples = [];
-    pumpThumbs(myGen);
-  }
-
-  /** Ambil id berikutnya: terlihat dulu, lalu prefetch awal antrean. */
-  function nextThumbId(): string | null {
-    const done = (id: string) => !!thumbs[id] || !!broken[id];
-    return pickNext(thumbPending, visibleIds, thumbInflight, done, PREFETCH_MARGIN);
-  }
-
-  /** Pompa worker sampai batas konkurensi; hasil basi (gen beda) dibuang. */
-  function pumpThumbs(myGen: number) {
-    while (thumbActive < PREVIEW_CONCURRENCY && myGen === loadGen) {
-      const id = nextThumbId();
-      if (!id) return; // tunggu intersection berikutnya
-      thumbInflight.add(id);
-      thumbActive++;
-      const path = thumbByPath.get(id) ?? "";
-      const t = performance.now();
-      void api
-        .getImagePreview(path)
-        .then((url) => {
-          if (myGen !== loadGen) return;
-          thumbSamples.push({ ms: performance.now() - t, bytes: url.length });
-          thumbs = { ...thumbs, [id]: url };
-          if (!thumbFirstAt) thumbFirstAt = performance.now();
-          thumbDone++;
-        })
-        .catch((e) => {
-          if (myGen !== loadGen) return;
-          broken = { ...broken, [id]: String(e) };
-          thumbFailed++;
-          thumbDone++;
-        })
-        .finally(() => {
-          thumbInflight.delete(id);
-          thumbActive--;
-          if (myGen !== loadGen) return;
-          if (thumbTotal > 0 && thumbDone >= thumbTotal) {
-            console.info(`[preview] ${JSON.stringify(summarizePreviews(thumbSamples, thumbFirstAt - thumbT0))}`);
-          }
-          pumpThumbs(myGen);
-        });
-    }
+    queue.loadThumbs(allPages(proj));
   }
 
   /** Coba lagi thumbnail yang gagal di project aktif. */
   function retryThumbs() {
-    if (!projectStore.currentId || !current) return;
-    const live = new Set(allPages(current).map((pg) => pg.id));
-    for (const id of Object.keys(broken)) if (live.has(id)) delete broken[id];
-    broken = { ...broken };
-    void loadThumbs(projectStore.currentId);
-  }
-
-  /** Action kartu grid: laporkan keterlihatan ke antrean (D2). */
-  function observeCard(node: HTMLElement, id: string) {
-    const io = new IntersectionObserver(
-      (es) => {
-        for (const e of es) {
-          if (e.isIntersecting) {
-            visibleIds.add(id);
-            pumpThumbs(loadGen);
-          }
-        }
-      },
-      { rootMargin: "400px 0px" },
-    );
-    io.observe(node);
-    return {
-      destroy() {
-        io.disconnect();
-      },
-    };
+    if (!current) return;
+    queue.retryThumbs(allPages(current));
   }
 
   async function cleanPages() {
@@ -302,13 +203,10 @@
       projectStore.replaceProject(currentId, updated);
       // Halaman hilang dari store — buang juga thumbnail-nya.
       const live = new Set(allPages(updated).map((pg) => pg.id));
-      for (const id of Object.keys(thumbs)) if (!live.has(id)) delete thumbs[id];
+      queue.pruneThumbs(live);
       for (const id of Object.keys(fullUrls)) if (!live.has(id)) delete fullUrls[id];
-      for (const id of Object.keys(broken)) if (!live.has(id)) delete broken[id];
       selectedId = live.has(selectedId ?? "") ? selectedId : null;
-      thumbs = { ...thumbs };
       fullUrls = { ...fullUrls };
-      broken = { ...broken };
       info =
         res.removed === 0
           ? $t("nothingToClean")
@@ -331,9 +229,8 @@
     const gone = currentId;
     try {
       await api.deleteProject(gone);
-      thumbs = {};
+      queue.resetThumbs();
       fullUrls = {};
-      broken = {};
       selectedId = null;
       closeEditor();
       projectStore.removeProject(gone);
@@ -1006,21 +903,21 @@
         <Button variant="ghost" size="sm" onclick={() => selection.reset()}>{$t("clearSelection")}</Button>
       </div>
     {/if}
-    {#if thumbTotal > 0 && thumbDone < thumbTotal}
+    {#if queue.total > 0 && queue.done < queue.total}
       <p role="status" class="tnum border-b border-line bg-surface-2 px-5 py-1.5 text-xs text-ink-2">
-        {$t("loadingPreviews").replace("{done}", String(thumbDone)).replace("{total}", String(thumbTotal))}
+        {$t("loadingPreviews").replace("{done}", String(queue.done)).replace("{total}", String(queue.total))}
       </p>
-    {:else if thumbFailed > 0}
+    {:else if queue.failed > 0}
       <p role="status" class="flex items-center gap-2 border-b border-line bg-surface-2 px-5 py-1.5 text-xs text-ink-2">
-        <span class="tnum">{$t("loadingPreviews").replace("{done}", String(thumbDone)).replace("{total}", String(thumbTotal))} · {$t("previewsFailed").replace("{n}", String(thumbFailed))}</span>
+        <span class="tnum">{$t("loadingPreviews").replace("{done}", String(queue.done)).replace("{total}", String(queue.total))} · {$t("previewsFailed").replace("{n}", String(queue.failed))}</span>
         <Button variant="ghost" size="sm" onclick={retryThumbs}>{$t("retryThumbs")}</Button>
       </p>
     {/if}
     {#if pageView === "grid"}
       <PageGrid
         pages={orderedPages}
-        {thumbs}
-        {broken}
+        thumbs={queue.thumbs}
+        broken={queue.broken}
         selectedIds={selection.selectedIds}
         selectMode={selection.selectMode}
         {dragging}
@@ -1028,19 +925,19 @@
         onCardPress={(pg) => selection.press(pg)}
         onRelease={() => selection.cancelHold()}
         onToggleSelect={(id) => selection.toggleSelect(id)}
-        observeCard={observeCard}
+        observeCard={queue.observeCard}
       />
     {:else}
       <PageList
         pages={orderedPages}
-        {thumbs}
-        {broken}
+        thumbs={queue.thumbs}
+        broken={queue.broken}
         selectedIds={selection.selectedIds}
         selectMode={selection.selectMode}
         onCardClick={(e, pg) => onCardClick(e, pg)}
         onOpen={(pg) => openEditor(pg)}
         onToggleSelect={(id) => selection.toggleSelect(id)}
-        observeCard={observeCard}
+        observeCard={queue.observeCard}
       />
     {/if}
     {#if scopedPages.length === 0}
@@ -1058,8 +955,8 @@
         <EditorPanel
           projectId={projectStore.currentId}
           page={selectedPage}
-          fullImageUrl={fullUrls[selectedPage.id] ?? thumbs[selectedPage.id] ?? ""}
-          fallbackUrl={thumbs[selectedPage.id] ?? ""}
+        fullImageUrl={fullUrls[selectedPage.id] ?? queue.thumbs[selectedPage.id] ?? ""}
+        fallbackUrl={queue.thumbs[selectedPage.id] ?? ""}
           openError={openError}
           {readingDir}
           onClose={closeEditor}
@@ -1104,13 +1001,10 @@
           projectStore.replaceProject(cid, updated);
           // Seleksi + thumbnail basi dibuang: halaman sudah pindah folder.
           const live = new Set(allPages(updated).map((pg) => pg.id));
-          for (const id of Object.keys(thumbs)) if (!live.has(id)) delete thumbs[id];
+          queue.pruneThumbs(live);
           for (const id of Object.keys(fullUrls)) if (!live.has(id)) delete fullUrls[id];
-          for (const id of Object.keys(broken)) if (!live.has(id)) delete broken[id];
           selection.reset();
-          thumbs = { ...thumbs };
           fullUrls = { ...fullUrls };
-          broken = { ...broken };
           info = $t("moveDone").replace("{n}", String(res.moved)).replace("{d}", destName)
             + (res.skipped > 0 ? ` (${$t("skippedCount").replace("{n}", String(res.skipped))})` : "");
         })();

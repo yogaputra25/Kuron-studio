@@ -46,7 +46,7 @@ describe("preview transport (fix-preview-hang §2 progressive open)", () => {
   });
 
   it("App teruskan thumb sebagai fallbackUrl ke EditorPanel", () => {
-    expect(appSrc).toContain("fallbackUrl={thumbs[selectedPage.id] ??");
+    expect(appSrc).toContain("fallbackUrl={queue.thumbs[selectedPage.id] ??");
     expect(panelSrc).toContain("fallbackUrl={fallbackUrl}");
   });
 });
