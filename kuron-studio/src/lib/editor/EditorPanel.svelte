@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { listen } from "@tauri-apps/api/event";
   import { getVersion } from "@tauri-apps/api/app";
   import { onDestroy, onMount } from "svelte";
   import { api } from "../contracts/api";
@@ -515,7 +514,6 @@ function setBubbleFontSize(v: number | null) {
     } catch {
       detectEngine = "offline";
     }
-    await listen<{ page_id: string; done: number; total: number }>("detect_progress", () => {});
   });
 </script>
 

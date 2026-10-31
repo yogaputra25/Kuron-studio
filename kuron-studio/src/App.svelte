@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { tick } from "svelte";
-  import { open } from "@tauri-apps/plugin-dialog";
-  import { getCurrentWebview } from "@tauri-apps/api/webview";
+  import { onDragDrop } from "./lib/app/events";
+  import { pickFiles, pickFolder } from "./lib/app/dialogs";
 
   import { isMobile } from "./lib/app/device";
   import { api } from "./lib/contracts/api";
@@ -14,7 +14,6 @@
   import { t, theme } from "./lib/app/i18n";
   import type { Page, Project, ReadingDirection } from "./lib/contracts/types";
   import type { TranslateOpts } from "./lib/provider/translateOpts";
-  import { ARCHIVE_EXTS, IMAGE_EXTS, PDF_EXTS } from "./lib/contracts/types";
   import { allPages, childrenOf, folderPath, groupKanban, hasNesting, projectStats, subtreePages } from "./lib/library/library";
   import type { KanbanFilter, PageView, SortKey } from "./lib/library/library";
   import Button from "./lib/ui/Button.svelte";
@@ -430,24 +429,13 @@
   }
 
   async function importFolder() {
-    const dir = await open({ directory: true });
-    if (typeof dir === "string") await doImport([dir]);
+    const dir = await pickFolder();
+    if (dir) await doImport([dir]);
   }
 
   async function importFiles() {
-    const files = await open({
-      multiple: true,
-      // iOS: salin pilihan ke sandbox app (default pun copy, ditulis eksplisit
-      // supaya tidak tergantung default plugin). Folder picker tak ada di iOS.
-      fileAccessMode: "copy",
-      filters: [
-        { name: "Images", extensions: [...IMAGE_EXTS] },
-        { name: "Archives", extensions: [...ARCHIVE_EXTS] },
-        { name: "PDF documents", extensions: [...PDF_EXTS] },
-      ],
-    });
-    if (Array.isArray(files)) await doImport(files);
-    else if (typeof files === "string") await doImport([files]);
+    const files = await pickFiles();
+    if (files.length > 0) await doImport(files);
   }
 
   onMount(() => {
@@ -457,7 +445,7 @@
       lastInvokeError = m.ok ? null : { command: m.command, error: m.error ?? "?" };
     });
     void refresh();
-    void getCurrentWebview().onDragDropEvent((event) => {
+    const offDragDrop = onDragDrop((event) => {
       if (event.payload.type === "over") dragging = true;
       else if (event.payload.type === "leave") dragging = false;
       else if (event.payload.type === "drop") {
@@ -468,6 +456,7 @@
     // onMount tidak boleh async di Svelte 5 — return cleanup langsung.
     return () => {
       offInvoke();
+      offDragDrop();
       selection.dispose();
     };
   });

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { open, save } from "@tauri-apps/plugin-dialog";
+  import { pickFolder, saveAs } from "../app/dialogs";
   import { api } from "../contracts/api";
   import { toBatchInput, toRetryBubbleInput } from "../provider/translateOpts";
   import { t } from "../app/i18n";
@@ -77,13 +77,10 @@
     try {
       let path: string | null;
       if (format === "png" || format === "psd") {
-        path = await open({ directory: true, title: format === "png" ? "Folder PNG overlay" : "Folder PSD layers" });
+        path = await pickFolder(format === "png" ? "Folder PNG overlay" : "Folder PSD layers");
       } else {
         const ext = format === "json" ? "json" : "cbz";
-        path = await save({
-          defaultPath: `${project.name}.${ext}`,
-          filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
-        });
+        path = await saveAs(`${project.name}.${ext}`, ext.toUpperCase(), [ext]);
       }
       if (!path) return;
       const scopeFolder = exportScope === "folder" && folderFilter !== "all" ? folderFilter : null;
@@ -114,10 +111,7 @@
   async function shareZip() {
     busy = true; error = ""; info = "";
     try {
-      const path = await save({
-        defaultPath: `${project.name}.zip`,
-        filters: [{ name: "ZIP", extensions: ["zip"] }],
-      });
+      const path = await saveAs(`${project.name}.zip`, "ZIP", ["zip"]);
       if (!path) return;
       const out = await api.shareProject(project.id, path);
       info = `Tersimpan: ${out}`;

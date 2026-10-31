@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import projectRs from "../../../src-tauri/src/commands/project.rs?raw";
 import { ARCHIVE_EXTS, IMAGE_EXTS, PDF_EXTS } from "./types";
-import appSrc from "../../App.svelte?raw";
+import dialogsSrc from "../app/dialogs.ts?raw";
 
 // Cegah dialog picker dan backend_import menerima daftar format berbeda.
 // Kalau melebar, user bisa pilih file yang import-nya ditolak diam-diam;
@@ -48,7 +48,7 @@ describe("image/archive extension contract (TS picker == Rust import filter)", (
     // TS: PDF_EXTS terpisah, tak masuk IMAGE_EXTS (output-nya yang gambar).
     expect([...PDF_EXTS]).toEqual(["pdf"]);
     expect([...IMAGE_EXTS]).not.toContain("pdf");
-    // Dialog tawarkan filter PDF documents.
-    expect(appSrc).toContain("PDF documents");
+    // Dialog tawarkan filter PDF documents (sejak FE-7: di dialogs.ts).
+    expect(dialogsSrc).toContain("PDF documents");
   });
 });
