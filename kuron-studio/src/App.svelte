@@ -34,12 +34,13 @@
   import { onInvoke } from "./lib/contracts/log";
   import { PREFETCH_MARGIN, PREVIEW_CONCURRENCY, pickNext } from "./lib/previews/previewQueue";
   import { summarizePreviews, type PreviewSample } from "./lib/previews/previewMetrics";
+  import { createProjectStore } from "./lib/library/projectStore.svelte.ts";
 
-  let projects = $state<Project[]>([]);
-  /** false sampai daftar project pertama selesai dimuat (cegah flash onboarding). */
-  let loaded = $state(false);
-  let currentId = $state<string | null>(null);
+  const projectStore = createProjectStore();
+  const projects = $derived(projectStore.projects);
+  const current = $derived(projectStore.current);
   let name = $state("");
+  /** false sampai daftar project pertama selesai dimuat (cegah flash onboarding). */
   let folderId = $state<string | "all">("all");
   let kanban = $state<"all" | "todo" | "doing" | "done" | "failed">("all");
   let folderName = $state("");
@@ -149,11 +150,9 @@
   let batchOpts = $state<BatchOpts | null>(null);
 
   async function refreshProject(id: string) {
-    const updated = await api.getProject(id);
-    projects = projects.map((p) => (p.id === id ? updated : p));
+    await projectStore.refreshProject(id);
   }
 
-  const current = $derived(projects.find((p) => p.id === currentId) ?? null);
   const currentFolder = $derived(
     current && folderId !== "all" ? (current.folders.find((f) => f.id === folderId) ?? null) : null,
   );
@@ -182,16 +181,13 @@
 
   async function refresh() {
     try {
-      projects = await api.listProjects();
-      if (!currentId && projects.length > 0) currentId = projects[0].id;
+      await projectStore.refresh();
     } catch (e) {
       // Hanya `list_projects` yang gagal di sini. Label "Backend
       // unreachable" hanya sah kalau invoke-nya sendiri yang tidak jalan.
       error = `Backend unreachable (jalankan via 'pnpm tauri dev'): ${e}`;
-    } finally {
-      loaded = true;
     }
-    if (currentId) await loadThumbs(currentId);
+    if (projectStore.currentId) await loadThumbs(projectStore.currentId);
   }
 
   // M4-6: apply persisted theme before first paint of the shell.
@@ -271,11 +267,11 @@
 
   /** Coba lagi thumbnail yang gagal di project aktif. */
   function retryThumbs() {
-    if (!currentId || !current) return;
+    if (!projectStore.currentId || !current) return;
     const live = new Set(allPages(current).map((pg) => pg.id));
     for (const id of Object.keys(broken)) if (live.has(id)) delete broken[id];
     broken = { ...broken };
-    void loadThumbs(currentId);
+    void loadThumbs(projectStore.currentId);
   }
 
   /** Action kartu grid: laporkan keterlihatan ke antrean (D2). */
@@ -300,14 +296,14 @@
   }
 
   async function cleanPages() {
+    const currentId = projectStore.currentId;
     if (!currentId) return;
-    if (!confirm($t("confirmClean"))) return;
     busy = true;
     error = "";
     try {
       const res = await api.cleanPages(currentId, folderId === "all" ? null : folderId);
       const updated = await api.getProject(currentId);
-      projects = projects.map((p) => (p.id === currentId ? updated : p));
+      projectStore.replaceProject(currentId, updated);
       // Halaman hilang dari store — buang juga thumbnail-nya.
       const live = new Set(allPages(updated).map((pg) => pg.id));
       for (const id of Object.keys(thumbs)) if (!live.has(id)) delete thumbs[id];
@@ -331,6 +327,7 @@
   }
 
   async function deleteProject() {
+    const currentId = projectStore.currentId;
     if (!currentId || !current) return;
     if (!confirm($t("confirmDeleteProject"))) return;
     busy = true;
@@ -343,9 +340,8 @@
       broken = {};
       selectedId = null;
       closeEditor();
-      projects = projects.filter((p) => p.id !== gone);
-      currentId = projects[0]?.id ?? null;
-      if (currentId) await loadThumbs(currentId);
+      projectStore.removeProject(gone);
+      if (projectStore.currentId) await loadThumbs(projectStore.currentId);
     } catch (e) {
       error = String(e);
     } finally {
@@ -361,8 +357,7 @@
     try {
       const p = await api.createProject(n);
       name = "";
-      projects = [...projects, p];
-      currentId = p.id;
+      projectStore.addProject(p);
       folderId = "all";
       kanban = "all";
       selectedId = null;
@@ -380,7 +375,7 @@
     error = "";
     try {
       const p = await api.createSample($t("onboardSample"));
-      projects = [...projects, p];
+      projectStore.addProject(p);
       openProject(p.id);
     } catch (e) {
       error = String(e);
@@ -396,13 +391,14 @@
   }
 
   async function doImport(paths: string[]) {
+    const currentId = projectStore.currentId;
     if (!currentId || paths.length === 0) return;
     busy = true;
     try {
       const target = folderId === "all" ? null : folderId;
       const res = await api.importPages(currentId, paths, target);
       const updated = await api.getProject(currentId);
-      projects = projects.map((p) => (p.id === currentId ? updated : p));
+      projectStore.replaceProject(currentId, updated);
       await loadThumbs(currentId);
       if (res.skipped > 0) error = `${res.skipped} file non-image dilewati.`;
     } catch (e) {
@@ -441,7 +437,7 @@
 
   /** Seleksi ikut konteks: ganti project/folder = mulai dari kosong. */
   $effect(() => {
-    const _scope = currentId + "|" + folderId;
+    const _scope = projectStore.currentId + "|" + folderId;
     void _scope;
     selectedIds = [];
     selAnchor = null;
@@ -506,25 +502,28 @@
   }
 
   function onSaved(updated: Page) {
-    if (!currentId) return;
-    projects = projects.map((p) =>
-      p.id === currentId
-        ? { ...p, folders: p.folders.map((f) => ({ ...f, pages: f.pages.map((pg) => (pg.id === updated.id ? updated : pg)) })) }
-        : p,
-    );
+    const currentId = projectStore.currentId;
+    const cur = projectStore.current;
+    if (!currentId || !cur) return;
+    projectStore.replaceProject(currentId, {
+      ...cur,
+      folders: cur.folders.map((f) => ({ ...f, pages: f.pages.map((pg) => (pg.id === updated.id ? updated : pg)) })),
+    });
   }
 
   function openProject(id: string) {
-    currentId = id;
+    projectStore.setCurrent(id);
     folderId = "all";
     kanban = "all";
     selectedId = null;
     void loadThumbs(id);
   }
+
+
   /** Buka Hasil & Ekspor untuk satu kartu dashboard (pintu-ekspor D2). */
   async function openResults(id: string) {
     if (busy) return;
-    if (id !== currentId) {
+    if (id !== projectStore.currentId) {
       openProject(id);
       try {
         await refreshProject(id);
@@ -537,6 +536,7 @@
   }
 
   async function createFolder() {
+    const currentId = projectStore.currentId;
     if (!currentId) return;
     const n = folderName.trim();
     if (!n) return;
@@ -547,7 +547,7 @@
       const f = await api.createFolder(currentId, n, parent);
       folderName = "";
       const updated = await api.getProject(currentId);
-      projects = projects.map((p) => (p.id === currentId ? updated : p));
+      projectStore.replaceProject(currentId, updated);
       folderId = f.id;
     } catch (e) {
       error = String(e);
@@ -557,6 +557,7 @@
   }
 
   async function deleteFolder(id: string) {
+    const currentId = projectStore.currentId;
     if (!currentId) return;
     if (!confirm($t("confirmDeleteFolder"))) return;
     busy = true;
@@ -564,7 +565,7 @@
     try {
       await api.deleteFolder(currentId, id);
       const updated = await api.getProject(currentId);
-      projects = projects.map((p) => (p.id === currentId ? updated : p));
+      projectStore.replaceProject(currentId, updated);
       if (folderId === id) folderId = "all";
       selectedId = null;
       await loadThumbs(currentId);
@@ -595,7 +596,7 @@
       await api.detectBatch(ids);
       const updated = await api.getProject(current.id);
       if (myGen !== detectGen) return;
-      projects = projects.map((p) => (p.id === current.id ? updated : p));
+      projectStore.replaceProject(current.id, updated);
     } catch (e) {
       if (myGen === detectGen) error = String(e);
     } finally {
@@ -652,7 +653,7 @@
 </script>
 
 <main class="flex min-h-screen flex-col bg-bg text-ink" data-theme={$theme}>
-  {#if loaded && projects.length > 0}
+  {#if projectStore.loaded && projects.length > 0}
   <header class="sticky top-0 z-30 border-b border-line bg-surface/80 backdrop-blur-md">
     <div class="flex items-center gap-2 px-4 pt-2">
       <img src={iconUrl} alt="Kuron Studio" class="size-6 shrink-0" />
@@ -707,13 +708,13 @@
               {#each filteredProjects as p (p.id)}
                 {@const st = projectStats(p)}
                 <button
-                  class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-raised {p.id === currentId ? 'bg-accent/10' : ''}"
+                  class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-raised {p.id === projectStore.currentId ? 'bg-accent/10' : ''}"
                   role="option"
-                  aria-selected={p.id === currentId}
+                  aria-selected={p.id === projectStore.currentId}
                   onclick={() => pickProject(p.id)}
                   title="{p.name} · {st.done}/{st.total}"
                 >
-                  <span class="min-w-0 flex-1 truncate {p.id === currentId ? 'font-semibold' : ''}">{p.name}</span>
+                  <span class="min-w-0 flex-1 truncate {p.id === projectStore.currentId ? 'font-semibold' : ''}">{p.name}</span>
                   <span class="tnum shrink-0 text-[11px] {st.failed > 0 ? 'text-danger' : 'text-ink-3'}">{st.done}/{st.total}</span>
                 </button>
               {:else}
@@ -869,7 +870,7 @@
     {/key}
   {/if}
 
-  {#if !loaded}
+  {#if !projectStore.loaded}
     <div class="flex flex-1 items-center justify-center p-10" aria-hidden="true">
       <div class="h-10 w-10 animate-pulse rounded-full bg-raised"></div>
     </div>
@@ -898,7 +899,7 @@
           {@const pct = Math.round(st.progress * 100)}
         <div class="relative w-36 shrink-0 self-center">
           <button
-            class="block w-full overflow-hidden rounded-md border px-2.5 pt-1.5 pb-2.5 text-left transition-colors {p.id === currentId ? 'border-accent bg-accent/10' : 'border-line bg-surface hover:border-accent/60'}"
+            class="block w-full overflow-hidden rounded-md border px-2.5 pt-1.5 pb-2.5 text-left transition-colors {p.id === projectStore.currentId ? 'border-accent bg-accent/10' : 'border-line bg-surface hover:border-accent/60'}"
             onclick={() => openProject(p.id)}
             title="{p.name} · {st.done}/{st.total} · {st.failed} {$t('kanbanFailed')}"
           >
@@ -947,7 +948,7 @@
             {busy}
             onSelect={(id) => (folderId = id)}
             onDelete={(id) => void deleteFolder(id)}
-            onRenamed={() => currentId && void refreshProject(currentId)}
+            onRenamed={() => projectStore.currentId && void refreshProject(projectStore.currentId)}
             onError={(msg) => (error = msg)}
           />
         {/each}
@@ -965,7 +966,7 @@
               {busy}
               onSelect={(id) => (folderId = id)}
               onDelete={(id) => void deleteFolder(id)}
-              onRenamed={() => currentId && void refreshProject(currentId)}
+              onRenamed={() => projectStore.currentId && void refreshProject(projectStore.currentId)}
               onError={(msg) => (error = msg)}
             />
           {/each}
@@ -982,7 +983,7 @@
             {busy}
             onSelect={(id) => (folderId = id)}
             onDelete={(id) => void deleteFolder(id)}
-            onRenamed={() => currentId && void refreshProject(currentId)}
+            onRenamed={() => projectStore.currentId && void refreshProject(projectStore.currentId)}
             onError={(msg) => (error = msg)}
           />
         {/each}
@@ -1107,11 +1108,11 @@
     {/if}
   {/if}
 
-  {#if selectedPage && currentId}
+  {#if selectedPage && projectStore.currentId}
     <div class="fixed inset-0 z-50 flex flex-col bg-bg">
       {#key selectedPage.id}
         <EditorPanel
-          projectId={currentId}
+          projectId={projectStore.currentId}
           page={selectedPage}
           fullImageUrl={fullUrls[selectedPage.id] ?? thumbs[selectedPage.id] ?? ""}
           fallbackUrl={thumbs[selectedPage.id] ?? ""}
@@ -1142,9 +1143,9 @@
     <GlossaryPanel onClose={() => (showGlossary = false)} />
   {/if}
 
-  {#if showMove && current && currentId}
+  {#if showMove && current && projectStore.currentId}
     {@const cur = current}
-    {@const cid = currentId}
+    {@const cid = projectStore.currentId}
     <MoveDialog
       project={cur}
       fromFolderId={folderId}
@@ -1156,7 +1157,7 @@
         // Dialog tetap terbuka: tampilkan layar sukses, user yang menutup.
         void (async () => {
           const updated = await api.getProject(cid);
-          projects = projects.map((p) => (p.id === cid ? updated : p));
+          projectStore.replaceProject(cid, updated);
           // Seleksi + thumbnail basi dibuang: halaman sudah pindah folder.
           const live = new Set(allPages(updated).map((pg) => pg.id));
           for (const id of Object.keys(thumbs)) if (!live.has(id)) delete thumbs[id];
