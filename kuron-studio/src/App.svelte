@@ -27,6 +27,7 @@
   import MoveDialog from "./lib/library/MoveDialog.svelte";
   import Onboarding from "./lib/app/Onboarding.svelte";
   import AlertBanners from "./lib/app/shell/AlertBanners.svelte";
+  import ProjectCard from "./lib/app/shell/ProjectCard.svelte";
   import DetectProgress from "./lib/detection/DetectProgress.svelte";
   import { createDetectRun } from "./lib/detection/detectRun.svelte.ts";
   import DiagnosticsPanel from "./lib/app/DiagnosticsPanel.svelte";
@@ -537,17 +538,12 @@
             </div>
             <div class="max-h-64 overflow-y-auto py-0.5">
               {#each filteredProjects as p (p.id)}
-                {@const st = projectStats(p)}
-                <button
-                  class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-raised {p.id === projectStore.currentId ? 'bg-accent/10' : ''}"
-                  role="option"
-                  aria-selected={p.id === projectStore.currentId}
-                  onclick={() => pickProject(p.id)}
-                  title="{p.name} · {st.done}/{st.total}"
-                >
-                  <span class="min-w-0 flex-1 truncate {p.id === projectStore.currentId ? 'font-semibold' : ''}">{p.name}</span>
-                  <span class="tnum shrink-0 text-[11px] {st.failed > 0 ? 'text-danger' : 'text-ink-3'}">{st.done}/{st.total}</span>
-                </button>
+                <ProjectCard
+                  project={p}
+                  selected={p.id === projectStore.currentId}
+                  variant="row"
+                  onOpen={(id) => pickProject(id)}
+                />
               {:else}
                 <p class="px-2.5 py-2 text-xs text-ink-3">{$t("noProjectMatch")}</p>
               {/each}
@@ -710,27 +706,13 @@
       <div class="hidden w-px self-stretch bg-line sm:block" aria-hidden="true"></div>
       <div class="flex min-w-0 flex-1 items-stretch gap-1.5 overflow-x-auto">
         {#each projects as p (p.id)}
-          {@const st = projectStats(p)}
-          {@const pct = Math.round(st.progress * 100)}
-        <div class="relative w-36 shrink-0 self-center">
-          <button
-            class="block w-full overflow-hidden rounded-md border px-2.5 pt-1.5 pb-2.5 text-left transition-colors {p.id === projectStore.currentId ? 'border-accent bg-accent/10' : 'border-line bg-surface hover:border-accent/60'}"
-            onclick={() => openProject(p.id)}
-            title="{p.name} · {st.done}/{st.total} · {st.failed} {$t('kanbanFailed')}"
-          >
-            <div class="truncate pr-5 text-xs font-semibold">{p.name}</div>
-            <div class="tnum mt-0.5 text-[10px] {st.failed > 0 ? 'text-danger' : 'text-ink-3'}">{st.done}/{st.total} · {pct}%{st.failed > 0 ? ` · ${st.failed}` : ""}</div>
-            <div class="absolute inset-x-0 bottom-0 h-0.5 bg-raised">
-              <div class="h-full bg-accent" style="width: {pct}%"></div>
-            </div>
-          </button>
-          <button
-            class="absolute top-1 right-1 rounded bg-surface-2/90 px-1 py-0.5 text-[11px] leading-none text-ink-2 opacity-70 backdrop-blur-sm transition-opacity hover:bg-hover hover:text-ink hover:opacity-100 focus-visible:opacity-100"
-            title={$t("resultsExport")}
-            aria-label="{$t('resultsExport')}: {p.name}"
-            onclick={(e) => { e.stopPropagation(); void openResults(p.id); }}
-          >⧉</button>
-        </div>
+          <ProjectCard
+            project={p}
+            selected={p.id === projectStore.currentId}
+            variant="card"
+            onOpen={(id) => openProject(id)}
+            onResults={(id) => void openResults(id)}
+          />
         {/each}
       </div>
       <div class="hidden w-px self-stretch bg-line sm:block" aria-hidden="true"></div>
