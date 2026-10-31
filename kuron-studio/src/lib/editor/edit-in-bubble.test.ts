@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import panelSrc from "./EditorPanel.svelte?raw";
 import cardSrc from "./TranslationCard.svelte?raw";
 import hookSrc from "./useDraftText.svelte?raw";
+import overlaySrc from "./render/overlay.ts?raw";
+import editorSrc from "./useBubbleEditor.svelte?raw";
 import canvasSrc from "./CanvasEditor.svelte?raw";
 
 // Kontrak change edit-in-bubble, pola-sumber seperti manual-text-split.test.ts:
@@ -9,69 +11,73 @@ import canvasSrc from "./CanvasEditor.svelte?raw";
 // (ponytail: @testing-library/svelte + jsdom + Konva asli saat butuh
 // interaksi nyata; ceiling = dblclick/ketik/Esc beneran, bukan pola string.)
 describe("in-bubble edit (§1 canvas)", () => {
+  // Sejak FE-5 (3.3): mesin di useBubbleEditor, kanvas pasok deps + wiring.
   it("props onEditTranslation opsional, default mati (Before aman)", () => {
     expect(canvasSrc).toContain("onEditTranslation?: (i: number, value: string) => void");
     expect(canvasSrc).toMatch(/onEditTranslation, onDrawHint, onToolDone \}: Props/);
     // Editor hanya dibuka bila kabel dipasang.
-    expect(canvasSrc).toMatch(/if \(!showTranslation \|\| !onEditTranslation\) return;/);
+    expect(editorSrc).toMatch(/if \(!deps\.getShowTranslation\(\) \|\| !deps\.getOnEditTranslation\(\)\) return;/);
+    expect(canvasSrc).toContain("getOnEditTranslation: () => onEditTranslation,");
   });
 
   it("dblclick pada group → openEditor, hanya saat showTranslation + kabel", () => {
     expect(canvasSrc).toContain('group.on("dblclick"');
     expect(canvasSrc).toMatch(/if \(showTranslation && onEditTranslation\) \{\s*group\.on\("dblclick"/);
-    expect(canvasSrc).toContain("openEditor(i)");
+    expect(canvasSrc).toContain("be.openEditor(i)");
   });
 
   it("openEditor prefill dari tr.translated + posisi × scale", () => {
-    expect(canvasSrc).toContain("editingValue = tr?.translated ?? \"\"");
-    expect(canvasSrc).toMatch(/left: b\.x \* s/);
-    expect(canvasSrc).toMatch(/top: b\.y \* s/);
-    expect(canvasSrc).toMatch(/width: Math\.max\(60, b\.w \* s\)/);
+    expect(editorSrc).toContain('deps.setEditingValue(tr?.translated ?? "")');
+    expect(editorSrc).toMatch(/left: b\.x \* s/);
+    expect(editorSrc).toMatch(/top: b\.y \* s/);
+    expect(editorSrc).toMatch(/width: Math\.max\(60, b\.w \* s\)/);
   });
 
   it("ketikan lokal: bind:value ke editingValue, overlay disembunyikan saat edit", () => {
     expect(canvasSrc).toContain("bind:value={editingValue}");
-    // Satu titik commit: onEditTranslation hanya dipanggil di commitEditor.
-    const commits = canvasSrc.match(/onEditTranslation\(i, editingValue\)/g) ?? [];
+    // Satu titik commit: onEditTranslation hanya dipanggil di commitEditor hook.
+    const commits = editorSrc.match(/getOnEditTranslation\(\)!\(i,/g) ?? [];
     expect(commits.length).toBe(1);
-    expect(canvasSrc).toContain("if (tr?.translated && editingIdx !== i) {");
+    // Sejak FE-5 (2.2): guard di appendOverlay, kanvas pasok editing flag.
+    expect(overlaySrc).toContain("if (!tr?.translated || o.editing) return;");
+    expect(canvasSrc).toContain("editing: be.editingIdx === i,");
   });
 
   it("commit via blur/Ctrl+Enter → onEditTranslation; Esc batal tanpa tulis", () => {
-    expect(canvasSrc).toContain("onblur={commitEditor}");
-    expect(canvasSrc).toMatch(/e\.key === "Enter" && \(e\.ctrlKey \|\| e\.metaKey\)/);
-    expect(canvasSrc).toContain("onEditTranslation(i, editingValue)");
-    const cancel = canvasSrc.slice(canvasSrc.indexOf("function cancelEditor"), canvasSrc.indexOf("function cancelEditor") + 120);
+    expect(canvasSrc).toContain("onblur={() => be.commitEditor()}");
+    expect(canvasSrc).toContain("onkeydown={(e) => be.onEditorKey(e)}");
+    expect(editorSrc).toMatch(/e\.key === "Enter" && \(e\.ctrlKey \|\| e\.metaKey\)/);
+    expect(editorSrc).toMatch(/if \(cur !== deps\.getEditingValue\(\)\) deps\.getOnEditTranslation/);
+    const cancel = editorSrc.slice(editorSrc.indexOf("function cancelEditor"), editorSrc.indexOf("function cancelEditor") + 120);
     expect(cancel).not.toContain("onEditTranslation");
   });
 
   it("pindah bubble saat editor terbuka → commit otomatis", () => {
-    expect(canvasSrc).toMatch(/if \(editingIdx !== null && selectedIdx !== null && selectedIdx !== editingIdx\) \{\s*commitEditor\(\);/);
+    expect(canvasSrc).toMatch(/if \(be\.editingIdx !== null && selectedIdx !== null && selectedIdx !== be\.editingIdx\) \{\s*be\.commitEditor\(\);/);
   });
 
   it("openEditor kunci seleksi baru dulu (anti-yank saat pindah bubble)", () => {
-    const fn = canvasSrc.slice(canvasSrc.indexOf("function openEditor"), canvasSrc.indexOf("function openEditor") + 700);
-    // Urutan: select baru → forward → commit lama. Commit lama (editTr) tak
+    const fn = editorSrc.slice(editorSrc.indexOf("function openEditor"), editorSrc.indexOf("function openEditor") + 700);
+    // Urutan: select baru → commit lama. Commit lama (editTr) tak
     // boleh menarik manualSel balik ke bubble lama.
-    expect(fn.indexOf("selectedIdx = i;")).toBeGreaterThan(-1);
-    expect(fn.indexOf("onSelectForward(i)")).toBeGreaterThan(fn.indexOf("selectedIdx = i;"));
-    expect(fn.indexOf("commitEditor()")).toBeGreaterThan(fn.indexOf("onSelectForward(i)"));
+    expect(fn.indexOf("deps.selectBubble(i);")).toBeGreaterThan(-1);
+    expect(fn.indexOf("commitEditor()")).toBeGreaterThan(fn.indexOf("deps.selectBubble(i);"));
   });
 
   it("commit tanpa perubahan tak tulis (tak tandai edited/antre save)", () => {
-    const fn = canvasSrc.slice(canvasSrc.indexOf("function commitEditor"), canvasSrc.indexOf("function commitEditor") + 500);
-    expect(fn).toContain("if (cur !== editingValue) onEditTranslation(i, editingValue);");
+    const fn = editorSrc.slice(editorSrc.indexOf("function commitEditor"), editorSrc.indexOf("function commitEditor") + 500);
+    expect(fn).toContain("if (cur !== deps.getEditingValue())");
   });
 
   it("textarea WYSIWYG: font ikut rumus fs overlay, tema ikut needsWhitePatch", () => {
     // Editor in-bubble memakai layout yang SAMA dengan overlay, bukan rumus
     // sendiri (dulu `overlayFontSize`) — kalau tidak, yang diketik tampak
     // beda dari hasilnya.
-    expect(canvasSrc).not.toContain("const overlayFontSize");
-    expect(canvasSrc).toContain("fontSize: lay.fontSize * s");
-    expect(canvasSrc).toContain("lineHeight: lay.lineHeight");
-    expect(canvasSrc).toContain("dark: !(tr?.needsWhitePatch ?? false)");
-    expect(canvasSrc).toContain("min-height:{editBox.minH}px");
+    expect(editorSrc).not.toContain("const overlayFontSize");
+    expect(editorSrc).toContain("fontSize: lay.fontSize * s");
+    expect(editorSrc).toContain("lineHeight: lay.lineHeight");
+    expect(editorSrc).toContain("dark: !(tr?.needsWhitePatch ?? false)");
+    expect(canvasSrc).toContain("min-height:{be.editBox.minH}px");
   });
 });
 

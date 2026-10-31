@@ -4,6 +4,8 @@ import cardSrc from "./TranslationCard.svelte?raw";
 import hookSrc from "./useDraftText.svelte?raw";
 import toolbarSrc from "./EditorToolbar.svelte?raw";
 import panesSrc from "./EditorPanes.svelte?raw";
+import handlesSrc from "./render/handles.ts?raw";
+import toolsSrc from "./drawingTools.ts?raw";
 import canvasSrc from "./CanvasEditor.svelte?raw";
 
 // Kontrak change manual-text-before-after, diverifikasi statis dari sumber
@@ -117,10 +119,11 @@ describe("before|split|after (3.1–3.4)", () => {
     expect(canvasSrc).toContain("if (onSelectForward) onSelectForward(i);");
     expect(canvasSrc).not.toContain("if (!editable && onSelectForward)");
     // D1: gerbang menggambar pakai canDraw (Before-only), bukan editable.
-    // \r? — file bisa CRLF di Windows, pola harus toleran.
-    expect(canvasSrc).toMatch(/function onStageDown\(\) \{\r?\n    if \(!canDraw\) \{/);
-    // D3: handle resize hanya bubble terpilih.
-    expect(canvasSrc).toContain("if (!b.shape && editable && i === selectedIdx && tool === \"select\") {");
+    // Sejak FE-5 (3.2): gate di drawingTools.down, kanvas pasok flag.
+    expect(toolsSrc).toContain("if (!deps.getCanDraw()) {");
+    expect(canvasSrc).toContain("getCanDraw: () => canDraw,");
+    // D3: handle resize hanya bubble terpilih (guard di modul sejak FE-5 3.1).
+    expect(handlesSrc).toContain("if (!(!b.shape && editable && selected && tool");
     // Canvas tetap jaga jalur non-editable (prop publik, default true).
     const drag = canvasSrc.slice(canvasSrc.indexOf('group.on("dragend"'), canvasSrc.indexOf('group.on("dragend"') + 250);
     expect(drag).toContain("if (!editable) { redraw(); return; }");
