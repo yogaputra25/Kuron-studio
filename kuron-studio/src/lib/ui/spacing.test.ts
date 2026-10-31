@@ -91,19 +91,19 @@ describe("sidebar forms have breathing room", () => {
   it("EditorPanel sidebar default lebih lebar dari 256px (resizable full-range)", () => {
     // Revisi full-drag: MIN 192 (12rem) agar bisa ditarik sempit; default
     // tetap 304 (>256) supaya kesan lega tidak berubah saat pertama dibuka.
-    const panel = readFileSync(join(SRC, "lib/panel.ts"), "utf8");
+    const panel = readFileSync(join(SRC, "lib/editor/panel.ts"), "utf8");
     const def = Number(/SIDEBAR_DEFAULT = (\d+)/.exec(panel)?.[1]);
     const min = Number(/SIDEBAR_MIN = (\d+)/.exec(panel)?.[1]);
     const max = Number(/SIDEBAR_MAX = (\d+)/.exec(panel)?.[1]);
     expect(def, "SIDEBAR_DEFAULT hilang dari panel.ts").toBeGreaterThan(256);
     expect(min, "clamp bawah full-drag = 192").toBeGreaterThanOrEqual(192);
     expect(max, "clamp atas harus di atas default").toBeGreaterThan(def);
-    const src = readFileSync(join(SRC, "lib/EditorPanel.svelte"), "utf8");
+    const src = readFileSync(join(SRC, "lib/editor/EditorPanel.svelte"), "utf8");
     expect(src, "aside tidak lagi memakai lebar tampil dari state").toContain("displayW");
   });
 
   it("EditorPanel sidebar uses space-y between sections", () => {
-    const src = readFileSync(join(SRC, "lib/EditorPanel.svelte"), "utf8");
+    const src = readFileSync(join(SRC, "lib/editor/EditorPanel.svelte"), "utf8");
     const aside = src.slice(src.indexOf("<aside"), src.indexOf("</aside>"));
     // Spacing antar section harus dari wrapper, bukan margin per-section.
     expect(aside).toContain("space-y-");

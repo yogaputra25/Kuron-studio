@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { statusAfterBubbleSave, statusAfterTranslationSave, translationComplete } from "./status";
-import panelSrc from "../EditorPanel.svelte?raw";
+import panelSrc from "../editor/EditorPanel.svelte?raw";
 import apiSrc from "../contracts/api.ts?raw";
 
 // page-status-truth: status turunan data, bukan last-write-wins.

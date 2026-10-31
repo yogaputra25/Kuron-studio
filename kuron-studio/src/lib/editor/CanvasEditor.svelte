@@ -6,14 +6,14 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import Konva from "konva";
-  import type { BubbleBox, BubbleTranslation, ReadingDirection, Tool } from "../lib/contracts/types";
-  import { chipNumbers, clampBubble } from "../lib/bubble";
-  import { computeTextLayout, lineBands } from "../lib/textLayout";
+  import type { BubbleBox, BubbleTranslation, ReadingDirection, Tool } from "../contracts/types";
+  import { chipNumbers, clampBubble } from "./bubble";
+  import { computeTextLayout, lineBands } from "./text/textLayout";
   /** Shape absolut (px halaman) -> relatif bubble untuk layout teks. */
   const relShape = (b: BubbleBox): Array<[number, number]> | null =>
     b.shape && b.shape.length >= 3 ? b.shape.map(([px, py]) => [px - b.x, py - b.y]) : null;
-  import { OVERLAY_FONT_STYLE, overlayFontFamily, textMeasure } from "../lib/textMeasure";
-  import Button from "./ui/Button.svelte";
+  import { OVERLAY_FONT_STYLE, overlayFontFamily, textMeasure } from "./text/textMeasure";
+  import Button from "../ui/Button.svelte";
 
   interface Props {
     imageUrl: string;

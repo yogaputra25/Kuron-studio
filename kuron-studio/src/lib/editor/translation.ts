@@ -1,6 +1,6 @@
-import type { BubbleBox, BubbleTranslation } from "./contracts/types";
+import type { BubbleBox, BubbleTranslation } from "../contracts/types";
 import { needsWhitePatch } from "./bubble";
-import type { TextLayout } from "./textLayout";
+import type { TextLayout } from "./text/textLayout";
 
 /** Gabung hasil translate baru dengan edit manual user (match by index). */
 export function mergeUserEdits(

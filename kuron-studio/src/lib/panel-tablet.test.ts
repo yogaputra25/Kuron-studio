@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import panelSrc from "./EditorPanel.svelte?raw";
+import panelSrc from "./editor/EditorPanel.svelte?raw";
 import deviceSrc from "./app/device?raw";
 
 import gridSrc from "./library/PageGrid.svelte?raw";
@@ -8,7 +8,7 @@ import gridSrc from "./library/PageGrid.svelte?raw";
 // terpusat (device.ts + panel.ts), bukan angka/UA-sniff tersebar.
 describe("resizable panel + tablet mode wiring", () => {
   it("EditorPanel memakai device.ts terpusat", () => {
-    expect(panelSrc).toContain('from "./app/device"');
+    expect(panelSrc).toContain('from "../app/device"');
     expect(panelSrc).toContain("isNarrow");
     expect(panelSrc).toContain("watchViewport");
     expect(panelSrc).toContain("loadSidebarW");

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mergeUserEdits, syncGeometryToTranslation } from "./translation";
-import type { BubbleBox, BubbleTranslation } from "./contracts/types";
+import type { BubbleBox, BubbleTranslation } from "../contracts/types";
 
 const mk = (index: number, translated: string, isUserEdited = false, original?: string, reading?: string): BubbleTranslation => ({
   index, x: 0, y: 0, w: 10, h: 10, original: original ?? `o${index}`, reading: reading ?? "",

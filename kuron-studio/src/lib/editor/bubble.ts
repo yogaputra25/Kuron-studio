@@ -1,4 +1,4 @@
-import type { BubbleBox, ReadingDirection } from "./contracts/types";
+import type { BubbleBox, ReadingDirection } from "../contracts/types";
 
 /** Urutan baca: RTL (manga) kanan→kiri, LTR (manhwa) kiri→kanan, atas→bawah. */
 export function readingOrder(

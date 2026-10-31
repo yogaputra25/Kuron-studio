@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import canvasSrc from "./CanvasEditor.svelte?raw";
-import appSrc from "../App.svelte?raw";
+import appSrc from "../../App.svelte?raw";
 import panelSrc from "./EditorPanel.svelte?raw";
 
 // Kontrak fix-preview-hang §2 + §3, diverifikasi statis dari sumber.

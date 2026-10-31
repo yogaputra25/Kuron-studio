@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import src from "./CanvasEditor.svelte?raw";
 import panelSrc from "./EditorPanel.svelte?raw";
-import measureSrc from "./textMeasure?raw";
+import measureSrc from "./text/textMeasure?raw";
 
 // Kontrak D3 change fix-editor-blank-canvas (§2), diverifikasi statis dari
 // sumber komponen. Alasan: komponen terikat Konva + DOM + Svelte runtime

@@ -7,8 +7,8 @@ import {
   LAYOUT_MAX_FONT,
   LAYOUT_MIN_FONT,
   LAYOUT_PADDING,
-} from "../textLayout";
-import { OVERLAY_FONT_STACK, OVERLAY_FONT_STYLE } from "../textMeasure";
+} from "../editor/text/textLayout";
+import { OVERLAY_FONT_STACK, OVERLAY_FONT_STYLE } from "../editor/text/textMeasure";
 
 // Rumus layout hidup di dua bahasa: `textLayout.ts` (kanvas memutuskan) dan
 // `export.rs` (jalur fallback saat `layout` belum tersimpan). Begitu angkanya

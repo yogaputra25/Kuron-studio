@@ -2,22 +2,22 @@
   import { listen } from "@tauri-apps/api/event";
   import { getVersion } from "@tauri-apps/api/app";
   import { onDestroy, onMount } from "svelte";
-  import { api } from "../lib/contracts/api";
-  import CanvasEditor from "../lib/CanvasEditor.svelte";
-  import TranslatePanel from "../lib/TranslatePanel.svelte";
-  import type { TranslateOpts } from "../lib/TranslatePanel.svelte";
-  import { chipNumbers, clampBubble } from "../lib/bubble";
-  import { mergeUserEdits, syncGeometryToTranslation } from "../lib/translation";
-  import { computeTextLayout } from "../lib/textLayout";
-  import { textMeasure } from "../lib/textMeasure";
-  import type { BubbleBox, Page, PageTranslation, ReadingDirection, Tool } from "../lib/contracts/types";
-  import { TARGET_LANGS } from "../lib/contracts/types";
-  import { allPages } from "./library/library";
-  import { t } from "./app/i18n";
-  import { statusAfterBubbleSave, statusAfterTranslationSave, translationComplete } from "./library/status";
-  import Button from "./ui/Button.svelte";
-  import StatusBadge from "./ui/StatusBadge.svelte";
-  import { isNarrow, isTablet, loadSidebarW, saveSidebarW, watchViewport } from "./app/device";
+  import { api } from "../contracts/api";
+  import CanvasEditor from "./CanvasEditor.svelte";
+  import TranslatePanel from "../TranslatePanel.svelte";
+  import type { TranslateOpts } from "../TranslatePanel.svelte";
+  import { chipNumbers, clampBubble } from "./bubble";
+  import { mergeUserEdits, syncGeometryToTranslation } from "./translation";
+  import { computeTextLayout } from "./text/textLayout";
+  import { textMeasure } from "./text/textMeasure";
+  import type { BubbleBox, Page, PageTranslation, ReadingDirection, Tool } from "../contracts/types";
+  import { TARGET_LANGS } from "../contracts/types";
+  import { allPages } from "../library/library";
+  import { t } from "../app/i18n";
+  import { statusAfterBubbleSave, statusAfterTranslationSave, translationComplete } from "../library/status";
+  import Button from "../ui/Button.svelte";
+  import StatusBadge from "../ui/StatusBadge.svelte";
+  import { isNarrow, isTablet, loadSidebarW, saveSidebarW, watchViewport } from "../app/device";
   import { SIDEBAR_DEFAULT, SIDEBAR_MIN, SNAP_DEFAULT, COLLAPSE_THRESHOLD, clampWidth, nearestSnap, sheetHeightPct, sidebarMax } from "./panel";
 
   /** Toolbar tool. Label Bahasa Indonesia, nilai = Tool di types.ts. */

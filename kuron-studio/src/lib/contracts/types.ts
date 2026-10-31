@@ -1,4 +1,4 @@
-import type { TextLayout } from "../textLayout";
+import type { TextLayout } from "../editor/text/textLayout";
 
 export type { TextLayout };
 
