@@ -14,9 +14,8 @@
   import DiagnosticsPanel from "../../app/DiagnosticsPanel.svelte";
   import type { Page } from "../../contracts/types";
   import type { Project } from "../../contracts/types";
-  import type { BatchOpts } from "../../contracts/types";
   import type { ReadingDirection } from "../../contracts/types";
-  import type { TranslateOpts } from "../../provider/TranslatePanel.svelte";
+  import type { TranslateOpts } from "../../provider/translateOpts";
   import type { Selection } from "../../library/selection.svelte.ts";
   import type { ThumbnailQueue } from "../../previews/thumbnailQueue.svelte.ts";
   import type { DetectRun } from "../../detection/detectRun.svelte.ts";
@@ -32,7 +31,8 @@
     openError: string;
     readingDir: ReadingDirection;
     showBatch: boolean;
-    batchOpts: BatchOpts | null;
+    /** Referensi opts milik EditorPanel (bukan salinan merge). */
+    batchReq: { providerId: string; opts: TranslateOpts } | null;
     showGlossary: boolean;
     showMove: boolean;
     folderId: string | "all";
@@ -72,7 +72,7 @@
     openError,
     readingDir,
     showBatch,
-    batchOpts,
+    batchReq,
     showGlossary,
     showMove,
     folderId,
@@ -96,6 +96,11 @@
     onProvidersClose,
     onDiagnosticsClose,
   }: Props = $props();
+  // Derivasi render-time dari referensi tunggal (bukan state tersimpan):
+  // selalu segar dari EditorPanel.opts, tak ada snapshot basi.
+  const batchOpts = $derived(
+    batchReq ? { ...batchReq.opts, providerId: batchReq.providerId, readingDirection: readingDir } : null,
+  );
 </script>
 
 {#if selectedPage && currentId}

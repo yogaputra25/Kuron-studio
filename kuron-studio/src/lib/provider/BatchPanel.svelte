@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import { api } from "../contracts/api";
   import { initialBatchState, reduceProgress } from "./batch";
+  import { toBatchInput } from "./translateOpts";
   import { t } from "../app/i18n";
   import Button from "../ui/Button.svelte";
   import Panel from "../ui/Panel.svelte";
@@ -39,17 +40,7 @@
     error = "";
     batch = initialBatchState(ids.length);
     try {
-      await api.translateBatch({
-        pageIds: ids,
-        providerId: opts.providerId,
-        targetLang: opts.targetLang,
-        style: opts.style,
-        skipSfx: opts.skipSfx,
-        mosaicQuality: opts.mosaicQuality,
-        readingDirection: opts.readingDirection,
-        ...(opts.customPrompt ? { customPrompt: opts.customPrompt } : {}),
-        ...(opts.model ? { model: opts.model } : {}),
-      });
+      await api.translateBatch(toBatchInput(opts, { pageIds: ids, providerId: opts.providerId, readingDirection: opts.readingDirection }));
     } catch (e) {
       error = String(e);
     } finally {

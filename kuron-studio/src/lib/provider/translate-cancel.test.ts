@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import batchSrc from "./BatchPanel.svelte?raw";
 import panelSrc from "./TranslatePanel.svelte?raw";
+import optsSrc from "./translateOpts.ts?raw";
 import reviewSrc from "../export/ReviewGrid.svelte?raw";
 
 // Kontrak change reset-translation §4 cancel (opsi B), diverifikasi statis
@@ -39,8 +40,10 @@ describe("translate model per-run (LOV sesi-saja)", () => {
   });
 
   it("model masuk opts + dikirim sebagai override", () => {
-    expect(panelSrc).toMatch(/interface TranslateOpts \{[\s\S]*?model: string/);
-    expect(panelSrc).toContain("model: model.trim()");
+    // Sejak FE-6: tipe + trim di translateOpts.ts, panel hanya wiring.
+    expect(optsSrc).toMatch(/export interface TranslateOpts \{[\s\S]*?model: string/);
+    expect(optsSrc).toContain("opts.model.trim()");
+    expect(panelSrc).toContain("toTranslateArgs(");
   });
 
   it("pilihan model tak menulis DB (tanpa saveProvider)", () => {
@@ -50,9 +53,11 @@ describe("translate model per-run (LOV sesi-saja)", () => {
 
 describe("translate model per-run (forwarding batch/retry)", () => {
   it("batch + retry teruskan model dari opts", () => {
-    for (const [name, src] of [["BatchPanel", batchSrc], ["ReviewGrid", reviewSrc]] as const) {
-      expect(src, name).toContain("...(opts.model");
-    }
+    // Sejak FE-6: BatchPanel + ReviewGrid lewat konverter; forwarding model
+    // dikunci unit translateOpts.test.ts.
+    expect(batchSrc).toContain("toBatchInput(opts,");
+    expect(reviewSrc).toContain("toBatchInput(opts,");
+    expect(reviewSrc).toContain("toRetryBubbleInput(opts,");
   });
 });
 

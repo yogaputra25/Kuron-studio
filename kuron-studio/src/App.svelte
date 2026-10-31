@@ -12,7 +12,8 @@
   import PageGrid from "./lib/library/PageGrid.svelte";
   import PageList from "./lib/library/PageList.svelte";
   import { t, theme } from "./lib/app/i18n";
-  import type { BatchOpts, Page, Project, ReadingDirection } from "./lib/contracts/types";
+  import type { Page, Project, ReadingDirection } from "./lib/contracts/types";
+  import type { TranslateOpts } from "./lib/provider/translateOpts";
   import { ARCHIVE_EXTS, IMAGE_EXTS, PDF_EXTS } from "./lib/contracts/types";
   import { allPages, childrenOf, folderPath, groupKanban, hasNesting, projectStats, subtreePages } from "./lib/library/library";
   import type { KanbanFilter, PageView, SortKey } from "./lib/library/library";
@@ -114,8 +115,9 @@
   let showDiagnostics = $state(false);
   /** Error invoke terakhir — banner merah di header, selalu terlihat. */
   let lastInvokeError = $state<{ command: string; error: string } | null>(null);
-  // Opts terakhir dari editor (provider+translate opts) — dipakai Batch/Review.
-  let batchOpts = $state<BatchOpts | null>(null);
+  // Opts terakhir dari editor (provider + translate opts) — referensi langsung
+  // milik EditorPanel, BUKAN salinan merge (FE-6): tak ada snapshot basi.
+  let batchReq = $state<{ providerId: string; opts: TranslateOpts } | null>(null);
 
   async function refreshProject(id: string) {
     await projectStore.refreshProject(id);
@@ -483,7 +485,7 @@
       {projects}
       {busy}
       {readingDir}
-      {batchOpts}
+      batchProviderId={batchReq?.providerId ?? null}
       {lastInvokeError}
       brokenCount={queue.failed}
       canDetect={!!current && scopedPages.length > 0}
@@ -649,7 +651,7 @@
     {openError}
     {readingDir}
     {showBatch}
-    {batchOpts}
+    {batchReq}
     {showGlossary}
     {showMove}
     {folderId}
@@ -660,7 +662,7 @@
     scopedPages={visiblePages}
     onCloseEditor={closeEditor}
     {onSaved}
-    onBatchOpts={(o) => (batchOpts = { providerId: o.providerId, ...o.opts, readingDirection: readingDir }) }
+    onBatchOpts={(o) => (batchReq = o)}
     onDetectClose={closeDetectOverlay}
     onBatchDone={handleBatchDone}
     onBatchClose={() => (showBatch = false)}
