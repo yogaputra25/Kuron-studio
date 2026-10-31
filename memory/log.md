@@ -233,3 +233,18 @@ menyentuh baris lama).
 - 10 commit hijau berurutan (df339ea..90c8cb1 + dff18fb docs): tiap folder = git mv + fix import + gate. Deviasi tercatat: test-assertion path string ikut diupdate (mobile-gating, panel-tablet, previewGrid, spacing, lov-dropdown); translate-cancel sementara `../ReviewGrid` lalu final `../export/`; panel-tablet.test ketinggalan di 2.5, menyusul commit sendiri.
 - Gates: pnpm test 448, svelte-check 0, cargo test 153 lib + semua suite, clippy bersih. Root lib/ = 9 folder persis; ARCHITECTURE.md §3 sinkron tree.
 - Lanjut: /opsx:archive frontend-domain-move (FE-1 selesai; FE-2..FE-11 + XC-2 menunggu).
+
+## 2026-10-31 - app-runes-modules: 8/9 (3.2 smoke manual menunggu user)
+
+- Ekstrak 4 subsistem App.svelte -> runes module: library/projectStore (+5 test), library/selection (+8 test, +setSelectMode), previews/thumbnailQueue (+4 test), detection/detectRun (+3 test).
+- Script App 1198->~484 baris; target <350 TAK tercapai (sisa = orkestrasi komposisi, ranah FE-3). Nol $state subsystem, nol assign projects=.
+- Gates: pnpm test 468-472, svelte-check 0. Rust tak tersentuh.
+- Deviasi tercatat: assertion source-pattern diperbarui ke wiring baru; import .svelte.ts wajib eksplisit; gen-guard refresh ditambah di store (lebih ketat dari App lama).
+- Sisa: 3.2 smoke manual (user).
+
+## 2026-10-31 - provider-flow-diagrams: 2 diagram .mmd di root
+
+- Kerja: diagram alur `list_models_draft` (provider belum disimpan) dan `validate_provider` (provider tersimpan) dari kode aktual: ProviderSettings.svelte, commands/provider.rs, provider/{mod,openai,gemini,cohere}.rs, secrets.rs.
+- Hasil: `diagrams/provider-list-models-draft.mmd` + `diagrams/provider-validate.mmd`, lolos `mmdc`; versi cetak `*.pdf` satu halaman ukuran natural (`--size 2100`); ARCHITECTURE.md bagian `translate` mereferensikan keduanya.
+- Keputusan: taruh di `diagrams/` root, bukan `openspec/specs/.../diagrams/` - `/openspec/` di-gitignore (lokal), jadi referensi dari dokumen tracked akan menggantung.
+- Lanjut: spec provider di `openspec/specs/kuron-studio/spec.md` masih drift (9 tipe + `store.json` + `validate_provider(config)`); kandidat change `sync-provider-spec`.

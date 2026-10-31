@@ -17,3 +17,4 @@ kuron-studio/src-tauri/gen/apple/
 .opencode/*
 .agents/*
 .pi/*
+.omp/*
