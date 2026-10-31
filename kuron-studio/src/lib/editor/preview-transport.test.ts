@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import canvasSrc from "./CanvasEditor.svelte?raw";
+import loaderSrc from "./backgroundLoader.svelte?raw";
 import appSrc from "../../App.svelte?raw";
 import panelSrc from "./EditorPanel.svelte?raw";
 import panesSrc from "./EditorPanes.svelte?raw";
@@ -57,35 +58,37 @@ describe("preview transport (fix-preview-hang §2 progressive open)", () => {
 
 describe("preview transport (fix-preview-hang §3 defensive load)", () => {
   it("timeout 15s konstanta bernama + timer dibersihkan saat sukses", () => {
-    expect(canvasSrc).toContain("const BG_LOAD_TIMEOUT_MS = 15_000;");
-    expect(canvasSrc).toContain("bgTimer = setTimeout(");
-    const onload = canvasSrc.slice(canvasSrc.indexOf("img.onload = () => {"));
-    expect(onload).toContain("clearBgTimer();");
+    // Sejak FE-5 (1.2): mesin di useBackgroundLoader, panel hanya wiring.
+    expect(loaderSrc).toContain("export const BG_LOAD_TIMEOUT_MS = 15_000;");
+    expect(loaderSrc).toContain("bgTimer = setTimeout(");
+    const onload = loaderSrc.slice(loaderSrc.indexOf("img.onload = () => {"));
+    expect(onload).toContain("clearTimer();");
   });
 
   it("guard token per-request: onload/onerror/timeout mana duluan menang", () => {
-    expect(canvasSrc).toContain("let bgToken = 0;");
-    expect(canvasSrc).toContain("const my = ++bgToken;");
-    expect(canvasSrc).toContain("if (my !== bgToken || requestedUrl !== url) return;");
-    // onDestroy invalidasi callback telat + clear timer.
-    const destroy = canvasSrc.slice(canvasSrc.indexOf("onDestroy(() => {"));
-    expect(destroy).toContain("bgToken++;");
-    expect(destroy).toContain("clearBgTimer();");
+    expect(loaderSrc).toContain("let bgToken = 0;");
+    expect(loaderSrc).toContain("const my = ++bgToken;");
+    expect(loaderSrc).toContain("if (my !== bgToken || requestedUrl !== url) return;");
+    // onDestroy invalidasi callback telat + clear timer via hook.
+    expect(canvasSrc).toContain("bg.invalidate();");
+    const invalidate = loaderSrc.slice(loaderSrc.indexOf("function invalidate()"));
+    expect(invalidate).toContain("bgToken++;");
+    expect(invalidate).toContain("clearTimer();");
   });
 
   it("gagal/timeout → fallbackUrl sekali sebelum menyerah", () => {
     expect(canvasSrc).toContain("fallbackUrl?: string;");
     expect(canvasSrc).toContain('fallbackUrl = ""');
-    expect(canvasSrc).toContain("function loadBackground(url: string, triedFallback = false)");
-    expect(canvasSrc).toContain("if (!triedFallback && fallbackUrl && fallbackUrl !== url) {");
-    expect(canvasSrc).toContain("loadBackground(fallbackUrl, true);");
+    expect(loaderSrc).toContain("function loadBackground(url: string, triedFallback = false)");
+    expect(loaderSrc).toContain("if (!triedFallback && fb && fb !== url) {");
+    expect(loaderSrc).toContain("loadBackground(fb, true);");
   });
 
   it("terminal failure → imgError + tombol retry tanpa remount", () => {
-    expect(canvasSrc).toContain("function retryLoad()");
-    expect(canvasSrc).toContain("loadBackground(requestedUrl)");
+    expect(loaderSrc).toContain("function retryLoad()");
+    expect(loaderSrc).toContain("loadBackground(requestedUrl)");
     expect(canvasSrc).toContain("Coba lagi");
-    expect(canvasSrc).toContain("onclick={retryLoad}");
+    expect(canvasSrc).toContain("onclick={() => bg.retryLoad()}");
   });
 });
 describe("sharp preview (editor tajam, grid murah)", () => {

@@ -4,6 +4,8 @@ import cardSrc from "./TranslationCard.svelte?raw";
 import geomSrc from "./GeometryControls.svelte?raw";
 import toolbarSrc from "./EditorToolbar.svelte?raw";
 import panesSrc from "./EditorPanes.svelte?raw";
+import handlesSrc from "./render/handles.ts?raw";
+import toolsSrc from "./drawingTools.ts?raw";
 import canvasSrc from "./CanvasEditor.svelte?raw";
 
 // Kontrak change draw-tools-feedback: tool tak-pernah-tampak-rusak.
@@ -28,10 +30,12 @@ describe("draw tools feedback (§1)", () => {
   it("titik tolak bersuara (bukan diam)", () => {
     // fix-draw-tools A1: penolakan "klik area kosong" dibuang — drag di atas
     // bubble lama kini menggambar. Sisa titik tolak + titik baru (B).
-    expect(canvasSrc).not.toContain("Klik area kosong untuk menggambar");
-    expect(canvasSrc).toContain('onDrawHint?.("Pilih bubble dulu, lalu Ekor")');
-    expect(canvasSrc).toContain('onDrawHint?.("Terlalu kecil, drag lebih lebar")');
-    expect(canvasSrc).toContain('onDrawHint?.("Gambar hanya di pane Before")');
+    // Sejak FE-5 (3.2): hint via emitHint di drawingTools, wiring di kanvas.
+    expect(toolsSrc).not.toContain("Klik area kosong untuk menggambar");
+    expect(toolsSrc).toContain('deps.emitHint("Pilih bubble dulu, lalu Ekor")');
+    expect(toolsSrc).toContain('deps.emitHint("Terlalu kecil, drag lebih lebar")');
+    expect(toolsSrc).toContain('deps.emitHint("Gambar hanya di pane Before")');
+    expect(canvasSrc).toContain("emitHint: (m) => onDrawHint?.(m),");
   });
 
   it("hint ringan terpisah dari error (role status, bukan alert)", () => {
@@ -40,14 +44,15 @@ describe("draw tools feedback (§1)", () => {
   });
 
   it("syarat ukuran + geometri tak berubah", () => {
-    expect(canvasSrc).toContain("MIN_BUBBLE_PX");
-    expect(canvasSrc).toContain("if (pts.length < 6)");
+    expect(toolsSrc).toContain("MIN_BUBBLE_PX");
+    expect(toolsSrc).toContain("if (pts.length < 6)");
   });
 
   it("gesture lock: kunci scroll saat drag, buka saat up/destroy", () => {
-    expect(canvasSrc).toContain('holder.style.overflow = "hidden"');
-    expect(canvasSrc).toContain("function unlockScroll()");
-    expect(canvasSrc).toContain('holder.style.overflow = ""');
+    expect(toolsSrc).toContain('getHolder().style.overflow = "hidden"');
+    expect(toolsSrc).toContain("function unlockScroll()");
+    expect(toolsSrc).toContain('getHolder().style.overflow = ""');
+    expect(canvasSrc).toContain("dt.unlockScroll()");
   });
 });
 
@@ -61,9 +66,10 @@ describe("bubble resize full (§1.5)", () => {
   it("vertex polygon draggable + bbox derivasi + tolak degenerat", () => {
     // Repair R1: state lokal curShape (bukan b.shape.forEach) agar drag
     // beruntun tak meleset setelah bbox bergeser (stale-closure fix).
-    expect(canvasSrc).toContain("let curShape:");
-    expect(canvasSrc).toContain("curShape.forEach(");
-    expect(canvasSrc).toContain("Math.min(...xs)");
+    // Sejak FE-5 (3.1): vertex di render/handles.ts.
+    expect(handlesSrc).toContain("let curShape:");
+    expect(handlesSrc).toContain("curShape.forEach(");
+    expect(handlesSrc).toContain("Math.min(...xs)");
   });
 
   it("kontrol angka + skala-dari-pusat + clamp di sidebar", () => {
@@ -83,13 +89,18 @@ describe("kepemilikan canvas oleh mode tool (fix-draw-tools)", () => {
   it("A1: mode gambar mematikan geser, seleksi, dan handle", () => {
     expect(canvasSrc).toContain('const canMoveGroups = (): boolean => editable && tool === "select";');
     expect(canvasSrc).toContain("group.draggable(canMoveGroups());");
-    expect(canvasSrc).toContain('if (!b.shape && editable && i === selectedIdx && tool === "select") {');
     expect(canvasSrc).toContain('if (tool !== "select") return;');
+    // Sejak FE-5 (3.1): guard tampil handle di modul, kanvas pasok flag.
+    expect(handlesSrc).toContain('tool === "select"');
+    expect(canvasSrc).toContain("attachResizeHandle(handleOpts);");
+    expect(canvasSrc).toContain("attachVertexHandles(handleOpts);");
   });
 
   it("A1: guard e.target dibuang dari jalur gambar", () => {
     expect(canvasSrc).not.toContain("e.target !== stage");
-    expect(canvasSrc).toContain("tool gambar aktif = canvas milik gambar");
+    expect(toolsSrc).not.toContain("e.target !== stage");
+    // Sejak FE-5 (3.2): komentar jalur di modul.
+    expect(toolsSrc).toContain("Tool gambar aktif = canvas milik gambar");
   });
 
   it("C: canDraw default literal false, bukan = editable", () => {
@@ -103,7 +114,8 @@ describe("kepemilikan canvas oleh mode tool (fix-draw-tools)", () => {
     expect(panesSrc).toContain("canDraw={true}");
     expect(panesSrc).toContain("canDraw={false}");
     expect(panesSrc).toContain("{...shared}");
-    expect(canvasSrc).toContain('onDrawHint?.("Gambar hanya di pane Before")');
+    // Sejak FE-5 (3.2): hint via emitHint di modul.
+    expect(toolsSrc).toContain('deps.emitHint("Gambar hanya di pane Before")');
   });
 
   it("D: onToolDone dipanggil setelah bubble jadi", () => {

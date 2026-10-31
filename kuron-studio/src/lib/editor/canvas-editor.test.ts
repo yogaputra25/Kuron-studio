@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import src from "./CanvasEditor.svelte?raw";
+import bubbleSrc from "./render/bubble.ts?raw";
+import overlaySrc from "./render/overlay.ts?raw";
+import handlesSrc from "./render/handles.ts?raw";
+import loaderSrc from "./backgroundLoader.svelte?raw";
+import toolsSrc from "./drawingTools.ts?raw";
 import panelSrc from "./EditorPanel.svelte?raw";
 import panesSrc from "./EditorPanes.svelte?raw";
 import measureSrc from "./text/textMeasure?raw";
@@ -25,19 +30,20 @@ describe("canvas-editor blank-canvas contract (D3)", () => {
   });
 
   it("$effect swap background saat imageUrl tiba + guard requestedUrl", () => {
+    // Sejak FE-5 (1.2): effect delegasi ke hook, guard di useBackgroundLoader.
     expect(src).toMatch(/\$effect\(\(\) => \{\s*if \(!imageUrl\) return;/);
-    expect(src).toContain("if (requestedUrl === imageUrl) return;");
-    expect(src).toContain("requestedUrl = imageUrl;");
-    expect(src).toContain("loadBackground(imageUrl);");
+    expect(src).toContain("bg.load(imageUrl);");
+    expect(loaderSrc).toContain("if (!url || requestedUrl === url) return;");
   });
 
   it("load basi diabaikan di onload dan onerror", () => {
-    expect(src).toContain("requestedUrl !== url) return;");
+    expect(loaderSrc).toContain("requestedUrl !== url) return;");
   });
 
   it("hint imgReady/imgError dirender di bawah canvas", () => {
     expect(src).toContain("Memuat gambar…");
-    expect(src).toContain("{imgError}");
+    expect(src).toContain("{bg.imgError}");
+    expect(src).toContain("bg.retryLoad()");
   });
 
   it("redraw() tidak bergantung pada bgImage non-null", () => {
@@ -48,18 +54,18 @@ describe("canvas-editor blank-canvas contract (D3)", () => {
   });
 
   it("loadBackground mengantre via pendingUrl bila stage belum ada, onMount mengonsumsinya", () => {
-    expect(src).toContain("pendingUrl = url;");
-    expect(src).toContain("} else if (pendingUrl) {");
-    // Kedua cabang onMount membersihkan antrean agar tak ada sisa basi.
-    // \r? — file bisa CRLF di Windows, pola harus toleran.
-    expect(src).toMatch(/pendingUrl = null;\r?\n      requestedUrl = imageUrl;/);
+    expect(loaderSrc).toContain("pendingUrl = url;");
+    expect(loaderSrc).toContain("} else if (pendingUrl) {");
+    // consumePending membersihkan antrean di kedua cabang agar tak ada sisa basi.
+    const consume = loaderSrc.slice(loaderSrc.indexOf("function consumePending"));
+    expect(consume.match(/pendingUrl = null;/g)?.length).toBe(2);
   });
 
   it("callback async aman setelah unmount (tidak menyentuh stage yang sudah null)", () => {
-    const onload = src.slice(src.indexOf("img.onload = () => {"));
+    const onload = loaderSrc.slice(loaderSrc.indexOf("img.onload = () => {"));
     expect(onload).toContain("if (!stage || !overlayLayer) return;");
-    const onerror = src.slice(src.indexOf("img.onerror = () => {"));
-    expect(onerror).toContain("if (!stage) return;");
+    const onerror = loaderSrc.slice(loaderSrc.indexOf("img.onerror = () => {"));
+    expect(onerror).toContain("if (!deps.getStage()) return;");
   });
 });
 
@@ -132,8 +138,11 @@ describe("delete autosave (fix-preview-hang §6)", () => {
 // jalan). Destructure 1-elemen = `undefined is not iterable` — semua tool
 // gambar mati karena satu kasus yang/common: klik cepat.
 describe("manual draw tools never throw (regression)", () => {
+  // Sejak FE-5 (3.2): jalur gambar di drawingTools.ts, kanvas hanya wiring.
+  const up = toolsSrc.slice(toolsSrc.indexOf("function up()"));
+  const down = toolsSrc.slice(toolsSrc.indexOf("function down()"));
+
   it("onStageUp guards pts length before destructuring", () => {
-    const up = src.slice(src.indexOf("function onStageUp"));
     const destructureAt = up.indexOf("[[x0, y0], [x1, y1]] = pts");
     expect(destructureAt, "baris destructure tidak ditemukan").toBeGreaterThan(-1);
     const guardAt = up.indexOf("if (pts.length < 2)");
@@ -142,23 +151,21 @@ describe("manual draw tools never throw (regression)", () => {
   });
 
   it("freeform juga punya guard panjang pts", () => {
-    const up = src.slice(src.indexOf("function onStageUp"));
     const ff = up.slice(0, up.indexOf("if (pts.length < 2)"));
     expect(ff).toContain("if (pts.length < 6)");
   });
 
   it("semua tool gambar punya batas minimum yang sama", () => {
-    expect(src).toContain("const MIN_BUBBLE_PX = 8;");
-    const up = src.slice(src.indexOf("function onStageUp"));
-    // Tidak ada literal yang的神色 bypass — semua lewat konstanta.
+    expect(toolsSrc).toContain("export const MIN_BUBBLE_PX = 8;");
+    // Tidak ada literal bypass — semua lewat konstanta.
     expect(up).toContain("if (w < MIN_BUBBLE_PX || h < MIN_BUBBLE_PX)");
     expect(up).toContain("if (bbW < MIN_BUBBLE_PX || bbH < MIN_BUBBLE_PX)");
+    expect(src).toContain("useDrawingTools({");
   });
 
   it("ekor: blok tail mendahului jalur gambar, tanpa guard e.target", () => {
-    const down = src.slice(src.indexOf("function onStageDown"));
     // Blok tail tetap didahulukan agar ekor bisa ditempel pada bubble sendiri.
-    const tailAt = down.indexOf('if (tool === "tail")');
+    const tailAt = down.indexOf('if (deps.getTool() === "tail")');
     expect(tailAt, "blok tool tail tidak ditemukan").toBeGreaterThan(-1);
     // fix-draw-tools A1: guard `e.target` dibuang — mengembalikannya berarti
     // badan bubble jadi zona mati untuk menggambar.
@@ -191,7 +198,8 @@ describe("manual draw tools never throw (regression)", () => {
 //     loop tidak pernah jalan, ukuran font beku di nilai awal untuk semua
 //     bubble. Yang benar: `getHeight()`.
 describe("overlay terjemahan: posisi & ukuran font", () => {
-  const overlay = src.slice(src.indexOf("if (showTranslation) {"));
+  // Sejak FE-5 (2.2): overlay di render/overlay.ts, kanvas hanya memanggil.
+  const overlay = overlaySrc.slice(overlaySrc.indexOf("export function appendOverlay"));
 
   it("mengunci tinggi kotak supaya verticalAlign middle berfungsi", () => {
     expect(
@@ -244,23 +252,26 @@ describe("overlay terjemahan: posisi & ukuran font", () => {
 
 describe("bubble resize repair (R1-R3)", () => {
   it("R2: garis polygon relatif ke origin group (bukan absolut)", () => {
-    expect(src).toContain("points: b.shape.flatMap(([px, py]) => [(px - b.x) * s, (py - b.y) * s])");
-    expect(src).not.toContain("points: b.shape.flatMap(([px, py]) => [px * s, py * s])");
+    // Sejak FE-5 (2.1): node di render/bubble.ts, kanvas hanya memanggil.
+    expect(bubbleSrc).toContain("points: b.shape.flatMap(([px, py]) => [(px - b.x) * s, (py - b.y) * s])");
+    expect(bubbleSrc).not.toContain("points: b.shape.flatMap(([px, py]) => [px * s, py * s])");
+    expect(src).toContain("renderBubbleNode({");
   });
 
   it("R1: dragmove handle update Rect/Ellipse + posisi handle secara live", () => {
-    const dm = src.slice(src.indexOf('handle.on("dragmove"'), src.indexOf('handle.on("dragmove"') + 1200);
+    // Sejak FE-5 (3.1): handle di render/handles.ts.
+    const dm = handlesSrc.slice(handlesSrc.indexOf('handle.on("dragmove"'), handlesSrc.indexOf('handle.on("dragmove"') + 1200);
     expect(dm).toContain('group.findOne("Rect")');
     expect(dm).toContain("setAttrs({ width:");
     expect(dm).toContain("handle.position({");
-    expect(dm).toContain("overlayLayer?.batchDraw()");
+    expect(dm).toContain("batchDraw()");
     expect(dm).not.toContain("redraw()");
   });
 
   it("R1: dragmove vertex pakai state lokal + update garis live", () => {
-    expect(src).toContain("let curShape:");
-    expect(src).toContain("syncVertexNodes()");
-    expect(src).toContain('poly?.setAttrs({ points: curShape.flatMap');
+    expect(handlesSrc).toContain("let curShape:");
+    expect(handlesSrc).toContain("syncVertexNodes()");
+    expect(handlesSrc).toContain('poly?.setAttrs({ points: curShape.flatMap');
   });
 
   it("R3: dragend group translasi shape sebesar delta", () => {
@@ -272,30 +283,31 @@ describe("bubble resize repair (R1-R3)", () => {
 });
 
 describe("bubble resize repair (R6 drag-lock)", () => {
+  // Sejak FE-5 (3.1): handle di render/handles.ts.
   it("handle besar + terlihat (radius 11, stroke putih)", () => {
-    expect(src).toContain("radius: 11,");
-    expect(src).toContain('handle.on("mouseenter"');
-    expect(src).toContain('handle.on("mousedown touchstart"');
-    expect(src).toContain("group.draggable(false)");
-    expect(src).toContain('handle.on("click tap"');
-    expect(src).toContain('handle.on("mouseup"');
+    expect(handlesSrc).toContain("radius: 11,");
+    expect(handlesSrc).toContain('handle.on("mouseenter"');
+    expect(handlesSrc).toContain('handle.on("mousedown touchstart"');
+    expect(handlesSrc).toContain("group.draggable(false)");
+    expect(handlesSrc).toContain('handle.on("click tap"');
+    expect(handlesSrc).toContain('handle.on("mouseup"');
   });
 
   it("vertex besar + terlihat (radius 10, stroke 2)", () => {
-    expect(src).toContain("radius: 10,");
-    expect(src).toContain("strokeWidth: 2,");
-    expect(src).toContain('v.on("mouseenter"');
-    expect(src).toContain('v.on("mousedown touchstart"');
-    expect(src).toContain('v.on("click tap"');
-    expect(src).toContain('v.on("mouseup"');
+    expect(handlesSrc).toContain("radius: 10,");
+    expect(handlesSrc).toContain("strokeWidth: 2,");
+    expect(handlesSrc).toContain('v.on("mouseenter"');
+    expect(handlesSrc).toContain('v.on("mousedown touchstart"');
+    expect(handlesSrc).toContain('v.on("click tap"');
+    expect(handlesSrc).toContain('v.on("mouseup"');
   });
 
   it("dragmove tulis pending lokal, state sekali di dragend", () => {
-    const dm = src.slice(src.indexOf('handle.on("dragmove"'), src.indexOf('handle.on("dragmove"') + 900);
+    const dm = handlesSrc.slice(handlesSrc.indexOf('handle.on("dragmove"'), handlesSrc.indexOf('handle.on("dragmove"') + 900);
     expect(dm).toContain("pendW");
     expect(dm).not.toContain("bubbles[i] = ");
-    const de = src.slice(src.indexOf('handle.on("dragend"'), src.indexOf('handle.on("dragend"') + 300);
-    expect(de).toContain("commit(i, clampBubble(");
+    const de = handlesSrc.slice(handlesSrc.indexOf('handle.on("dragend"'), handlesSrc.indexOf('handle.on("dragend"') + 300);
+    expect(de).toContain("o.commit(i, clampBubble(");
   });
 
   it("klik ulang bubble sama = no-op tanpa redraw", () => {
