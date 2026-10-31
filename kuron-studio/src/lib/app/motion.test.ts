@@ -1,12 +1,12 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import appSrc from "../App.svelte?raw";
-import gridSrc from "./PageGrid.svelte?raw";
-import moveSrc from "./MoveDialog.svelte?raw";
+import appSrc from "../../App.svelte?raw";
+import gridSrc from "../PageGrid.svelte?raw";
+import moveSrc from "../MoveDialog.svelte?raw";
 import onbSrc from "./Onboarding.svelte?raw";
-import panelSrc from "./ui/Panel.svelte?raw";
-import btnSrc from "./ui/Button.svelte?raw";
+import panelSrc from "../ui/Panel.svelte?raw";
+import btnSrc from "../ui/Button.svelte?raw";
 
 // Motion pass: dialog, kartu grid, dropdown, onboarding, dan tombol
 // punya animasi masuk/hover/tekan — bukan spinner, bukan instant-cut.
@@ -46,7 +46,7 @@ describe("motion pass", () => {
   });
 
   it("reduced-motion tetap dijaga", () => {
-    const css = readFileSync(fileURLToPath(new URL("../app.css", import.meta.url)), "utf8");
+    const css = readFileSync(fileURLToPath(new URL("../../app.css", import.meta.url)), "utf8");
     expect(css).toContain("prefers-reduced-motion");
   });
 });

@@ -13,11 +13,11 @@
   import type { BubbleBox, Page, PageTranslation, ReadingDirection, Tool } from "../lib/contracts/types";
   import { TARGET_LANGS } from "../lib/contracts/types";
   import { allPages } from "./library";
-  import { t } from "./i18n";
+  import { t } from "./app/i18n";
   import { statusAfterBubbleSave, statusAfterTranslationSave, translationComplete } from "./status";
   import Button from "./ui/Button.svelte";
   import StatusBadge from "./ui/StatusBadge.svelte";
-  import { isNarrow, isTablet, loadSidebarW, saveSidebarW, watchViewport } from "./device";
+  import { isNarrow, isTablet, loadSidebarW, saveSidebarW, watchViewport } from "./app/device";
   import { SIDEBAR_DEFAULT, SIDEBAR_MIN, SNAP_DEFAULT, COLLAPSE_THRESHOLD, clampWidth, nearestSnap, sheetHeightPct, sidebarMax } from "./panel";
 
   /** Toolbar tool. Label Bahasa Indonesia, nilai = Tool di types.ts. */

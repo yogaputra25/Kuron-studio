@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from "./contracts/api";
-  import { t } from "./i18n";
+  import { t } from "./app/i18n";
   import type { ChapterFolder } from "./contracts/types";
   import { isSiblingNameTaken, type FolderStats } from "./library";
 

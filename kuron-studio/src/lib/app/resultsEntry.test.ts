@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import appSrc from "../App.svelte?raw";
+import appSrc from "../../App.svelte?raw";
 
 // pintu-ekspor: satu pintu per kartu dashboard ke panel yang sama.
 // Pola-sumber (gaya preview-transport.test.ts): App terikat Svelte runtime,

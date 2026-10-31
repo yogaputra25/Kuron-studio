@@ -3,7 +3,7 @@
   import { onMount } from "svelte";
   import { api } from "./contracts/api";
   import { initialBatchState, reduceProgress } from "./batch";
-  import { t } from "./i18n";
+  import { t } from "./app/i18n";
   import Button from "./ui/Button.svelte";
   import Panel from "./ui/Panel.svelte";
   import type { BatchOpts, Page, TranslateProgress } from "./contracts/types";

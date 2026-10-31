@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { api } from "./contracts/api";
-  import { t } from "./i18n";
+  import { t } from "./app/i18n";
   import type { GlossaryEntry } from "./contracts/types";
   import Button from "./ui/Button.svelte";
   import Field from "./ui/Field.svelte";

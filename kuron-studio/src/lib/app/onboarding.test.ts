@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import appSrc from "../App.svelte?raw";
+import appSrc from "../../App.svelte?raw";
 import onbSrc from "./Onboarding.svelte?raw";
 
 // Onboarding: header disembunyikan saat 0 project; layar kosong =

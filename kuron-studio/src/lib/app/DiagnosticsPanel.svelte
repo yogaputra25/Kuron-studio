@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { api, type DiagnosticsInfo } from "./contracts/api";
-  import { onInvoke, type InvokeMeta } from "./contracts/log";
-  import Button from "./ui/Button.svelte";
-  import Field from "./ui/Field.svelte";
-  import Panel from "./ui/Panel.svelte";
+  import { api, type DiagnosticsInfo } from "../contracts/api";
+  import { onInvoke, type InvokeMeta } from "../contracts/log";
+  import Button from "../ui/Button.svelte";
+  import Field from "../ui/Field.svelte";
+  import Panel from "../ui/Panel.svelte";
 
   interface Props {
     onClose: () => void;

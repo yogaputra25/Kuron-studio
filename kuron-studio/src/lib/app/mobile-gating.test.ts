@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import appSrc from "../App.svelte?raw";
-import gridSrc from "./ReviewGrid.svelte?raw";
+import appSrc from "../../App.svelte?raw";
+import gridSrc from "../ReviewGrid.svelte?raw";
 
 // Mobile bukan target penuh — tapi header desktop dilarang bocor ke layar
 // kecil: folder picker iOS tidak ada (dialog plugin throw
@@ -9,7 +9,7 @@ import gridSrc from "./ReviewGrid.svelte?raw";
 // tombol desktop tanpa sadar.
 describe("mobile header gating (iOS/Android)", () => {
   it("App memakai isMobile terpusat dari lib/device", () => {
-    expect(appSrc).toContain('from "./lib/device"');
+    expect(appSrc).toContain('from "./lib/app/device"');
     expect(appSrc).toContain("isMobile");
   });
 
@@ -45,7 +45,7 @@ describe("mobile header gating (iOS/Android)", () => {
   });
 
   it("ReviewGrid menolak export folder (png/psd) di mobile", () => {
-    expect(gridSrc).toContain('from "./device"');
+    expect(gridSrc).toContain('from "./app/device"');
     expect(gridSrc).toContain("isMobile");
     expect(gridSrc).toContain("belum didukung di iOS");
   });

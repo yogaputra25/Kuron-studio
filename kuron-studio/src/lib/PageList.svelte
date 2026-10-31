@@ -3,7 +3,7 @@
   import type { Page } from "./contracts/types";
   import { fileName, parentFolder } from "./status";
   import StatusBadge from "./ui/StatusBadge.svelte";
-  import { t } from "./i18n";
+  import { t } from "./app/i18n";
 
   interface Props {
     pages: Page[];

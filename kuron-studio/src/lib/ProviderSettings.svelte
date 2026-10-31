@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { api } from "./contracts/api";
-  import { t } from "./i18n";
+  import { t } from "./app/i18n";
   import { DEFAULT_BASE_URLS, PROVIDER_TYPES } from "./contracts/types";
   import type { AiModelOption, AiProviderType, ProviderView } from "./contracts/types";
   import Button from "./ui/Button.svelte";

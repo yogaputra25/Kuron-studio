@@ -2,7 +2,7 @@
   import { onDestroy } from "svelte";
   import { scale } from "svelte/transition";
   import { api } from "./contracts/api";
-  import { t } from "./i18n";
+  import { t } from "./app/i18n";
   import { childrenOf, folderById, folderPath, singleOwnerFolderId, subtreeStats } from "./library";
   import type { MoveResult } from "./contracts/types";
   import type { Project } from "./contracts/types";

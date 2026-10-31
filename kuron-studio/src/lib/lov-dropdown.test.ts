@@ -67,7 +67,7 @@ describe("pemakaian sudah Lov semua", () => {
   });
 
   it("searchList ada di 3 bahasa", () => {
-    const src = readFileSync(join(SRC, "lib/i18n.ts"), "utf8");
+    const src = readFileSync(join(SRC, "lib/app/i18n.ts"), "utf8");
     expect(src).toContain("searchList");
   });
 });

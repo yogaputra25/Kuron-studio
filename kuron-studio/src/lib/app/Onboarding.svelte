@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Button from "./ui/Button.svelte";
+  import Button from "../ui/Button.svelte";
   import { t } from "./i18n";
   import { fly } from "svelte/transition";
 

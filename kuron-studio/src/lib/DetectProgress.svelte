@@ -1,6 +1,6 @@
 <script lang="ts">
   import { detectPercent, type DetectState } from "./detectProgress";
-  import { t } from "./i18n";
+  import { t } from "./app/i18n";
   import Button from "./ui/Button.svelte";
 
   interface Props {

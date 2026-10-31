@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Button from "./ui/Button.svelte";
+  import Button from "../ui/Button.svelte";
   // M4-7: check GitHub Releases via updater plugin; graceful no-op when
   // pubkey placeholder belum diganti atau plugin tak tersedia (dev browser).
   let status = $state<"idle" | "checking" | "ready" | "done" | "error">("idle");
