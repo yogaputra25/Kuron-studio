@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import src from "./CanvasEditor.svelte?raw";
 import panelSrc from "./EditorPanel.svelte?raw";
+import panesSrc from "./EditorPanes.svelte?raw";
 import measureSrc from "./text/textMeasure?raw";
 
 // Kontrak D3 change fix-editor-blank-canvas (§2), diverifikasi statis dari
@@ -118,8 +119,10 @@ describe("delete autosave (fix-preview-hang §6)", () => {
   });
 
   it("kontrak tak tersentuh: onChange umum tetap lokal+dirty, guard syncFromPage utuh", () => {
-    expect(panelSrc).toMatch(/onChange=\{\(nb\) => \{\s*bubbles = nb;\s*dirty = true;[\s\S]*?\}\}/);
-    expect(panelSrc).toContain("if (!samePage || (!localBusy && JSON.stringify(incoming) !== JSON.stringify(bubbles))) {");
+    // Sejak FE-4 (3.2): onChange gabung di objek shared, diteruskan via spread.
+    expect(panelSrc).toContain("onChange: (nb) => { bubbles = nb; dirty = true;");
+    expect(panesSrc).toContain("{...shared}");
+    expect(panelSrc).toContain("shouldApplyBubbles({ samePage, localBusy, incoming, current: bubbles })");
   });
 });
 

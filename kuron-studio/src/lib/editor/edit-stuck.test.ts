@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import panelSrc from "./EditorPanel.svelte?raw";
+import cardSrc from "./TranslationCard.svelte?raw";
+import hookSrc from "./useDraftText.svelte?raw";
 import canvasSrc from "./CanvasEditor.svelte?raw";
 
 // Kontrak change fix-edit-stuck, pola-sumber seperti edit-in-bubble.test.ts:
@@ -9,43 +11,48 @@ import canvasSrc from "./CanvasEditor.svelte?raw";
 // ceiling = ketik-tengah-kalimat + ketik-cepat-lawan-save beneran.)
 describe("edit draft kartu (§1)", () => {
   it("oninput kartu tulis cache plain, tak sentuh $state/translation.bubbles", () => {
-    expect(panelSrc).toContain("let draftBox: { cur:");
-    expect(panelSrc).toContain("function draftInput(");
-    const fn = panelSrc.slice(panelSrc.indexOf("function draftInput"), panelSrc.indexOf("function draftInput") + 900);
-    expect(fn).toContain("draftBox.cur[field] = v");
+    // Sejak FE-4 (1.3): mesin di useDraftText, panel hanya wiring.
+    expect(hookSrc).toContain("function input(field: DraftField, v: string)");
+    const fn = hookSrc.slice(hookSrc.indexOf("function input("), hookSrc.indexOf("function input(") + 700);
+    expect(fn).toContain("cur[field] = v");
     expect(fn).not.toContain("translation.bubbles =");
     expect(fn).not.toContain("editTr(");
     expect(fn).not.toContain("$state");
-    // Ketiga textarea kartu memakai draftInput, bukan editTr langsung.
-    const usages = panelSrc.match(/oninput=\{\(e\) => draftInput\("/g) ?? [];
+    // Ketiga textarea kartu memakai onDraftInput (prop ke draft.input panel).
+    const usages = cardSrc.match(/oninput=\{\(e\) => onDraftInput\("/g) ?? [];
     expect(usages.length).toBe(3);
-    expect(panelSrc).not.toMatch(/oninput=\{\(e\) => editTr\(i, /);
+    expect(panelSrc).toContain("onDraftInput={(f, v) => draft.input(f, v)}");
+    expect(cardSrc).not.toMatch(/oninput=\{\(e\) => editTr\(i, /);
   });
 
   it("textarea baca cache saat aktif, fallback ke b.field", () => {
-    expect(panelSrc).toContain("value={draftBox.cur && draftBox.cur.row === i ? draftBox.cur.original : b.original}");
-    expect(panelSrc).toContain("value={draftBox.cur && draftBox.cur.row === i ? draftBox.cur.reading : b.reading}");
-    expect(panelSrc).toContain("value={draftBox.cur && draftBox.cur.row === i ? draftBox.cur.translated : b.translated}");
+    // Sejak FE-4: kartu terima draft sebagai prop (dulu baca draftBox.cur langsung).
+    expect(cardSrc).toContain("value={draft && draft.row === i ? draft.original : b.original}");
+    expect(cardSrc).toContain("value={draft && draft.row === i ? draft.reading : b.reading}");
+    expect(cardSrc).toContain("value={draft && draft.row === i ? draft.translated : b.translated}");
+    expect(panelSrc).toContain("draft={draft.cur}");
   });
 
   it("commit di batas alami via editTr existing (blur/pindah/Save/jaring, bukan tiap jeda)", () => {
-    const blurs = panelSrc.match(/onblur=\{commitDraft\}/g) ?? [];
+    // Sejak FE-4 (1.3): blur kartu panggil prop onCommit, panel teruskan ke draft.
+    const blurs = cardSrc.match(/onblur=\{onCommit\}/g) ?? [];
     expect(blurs.length).toBe(3);
-    // draftInput tanpa timer-500ms: tulis cache saja.
-    const input = panelSrc.slice(panelSrc.indexOf("function draftInput"), panelSrc.indexOf("function draftInput") + 900);
+    expect(panelSrc).toContain("onCommit={() => draft.commit()}");
+    // input tanpa timer-500ms: tulis cache saja (mesin di hook).
+    const input = hookSrc.slice(hookSrc.indexOf("function input("), hookSrc.indexOf("function input(") + 700);
     expect(input).not.toContain(", 500)");
-    const commit = panelSrc.slice(panelSrc.indexOf("function commitDraft"), panelSrc.indexOf("function commitDraft") + 700);
-    expect(commit).toContain('editTr(row, "original", original)');
-    expect(commit).toContain('editTr(row, "reading", reading)');
-    expect(commit).toContain('editTr(row, "translated", translated)');
+    const commit = hookSrc.slice(hookSrc.indexOf("function doCommit"), hookSrc.indexOf("function doCommit") + 700);
+    expect(commit).toContain('deps.commit(row, "original", original)');
+    expect(commit).toContain('deps.commit(row, "reading", reading)');
+    expect(commit).toContain('deps.commit(row, "translated", translated)');
     // Hanya field berubah yang di-commit (guard per field).
-    expect(commit).toContain("if (cur.original !== original)");
+    expect(commit).toContain("if (b.original !== original)");
   });
   it("pindah seleksi commit draft kotor; null buang draft", () => {
     expect(panelSrc).toContain("function selectBubble(");
     const fn = panelSrc.slice(panelSrc.indexOf("function selectBubble"), panelSrc.indexOf("function selectBubble") + 250);
-    expect(fn).toContain("if (draftBox.cur) commitDraft();");
-    expect(fn).toContain("draftBox.cur = null;");
+    expect(fn).toContain("if (draft.cur) draft.commit();");
+    expect(fn).toContain("if (idx === null) draft.revert();");
     // Semua jalur ganti manualSel lewat selectBubble (tak ada assignment langsung tersisa).
     expect(panelSrc).not.toContain("manualSel = i)");
     expect(panelSrc).not.toContain("(manualSel = manualSel === b.index ? null : b.index)");
@@ -53,15 +60,15 @@ describe("edit draft kartu (§1)", () => {
 
   it("Save edits + resetBubble + unmount amankan draft", () => {
     const save = panelSrc.slice(panelSrc.indexOf("async function saveTranslationEdits"), panelSrc.indexOf("async function saveTranslationEdits") + 500);
-    expect(save).toContain("if (draftBox.cur) commitDraft();");
+    expect(save).toContain("if (draft.cur) draft.commit();");
     const reset = panelSrc.slice(panelSrc.indexOf("function resetBubble"), panelSrc.indexOf("function resetBubble") + 300);
-    expect(reset).toContain("draftBox.cur = null;");
-    expect(panelSrc).toContain("if (draftBox.cur) commitDraft(); if (saveTimer)");
+    expect(reset).toContain("draft.revert();");
+    expect(panelSrc).toContain("if (draft.cur) draft.commit(); if (saveTimer)");
   });
 
   it("hasil Translate baru commit draft dulu (tak hilang/timpa AI)", () => {
     const fn = panelSrc.slice(panelSrc.indexOf("function onTranslated"), panelSrc.indexOf("function onTranslated") + 300);
-    expect(fn).toContain("if (draftBox.cur) commitDraft();");
+    expect(fn).toContain("if (draft.cur) draft.commit();");
   });
 
   it("editTr tulis teks saja, tak sentuh seleksi (anti-yank)", () => {
@@ -74,36 +81,46 @@ describe("edit draft kartu (§1)", () => {
   });
 
   it("oninput tak tulis reactive per huruf (cache plain, nol render)", () => {
-    const fn = panelSrc.slice(panelSrc.indexOf("function draftInput"), panelSrc.indexOf("function draftInput") + 900);
+    // Sejak FE-4 (1.3): invarian di hook — cur plain, satu-satunya $state = dirty.
+    expect(hookSrc).toContain("let cur: DraftValue | null = null;");
+    expect(hookSrc).toContain("let dirty = $state(false);");
+    const fn = hookSrc.slice(hookSrc.indexOf("function input("), hookSrc.indexOf("function input(") + 900);
     expect(fn).not.toMatch(/=\s*\$state/);
     expect(fn).not.toContain("draftShown");
   });
 
   it("guard IME: komposisi tunda commit, selesai langsung commit", () => {
-    expect(panelSrc).toContain("function compStart()");
-    expect(panelSrc).toContain("function compEnd()");
-    const commit = panelSrc.slice(panelSrc.indexOf("function commitDraft"), panelSrc.indexOf("function commitDraft") + 200);
+    // Sejak FE-4 (1.3): guard di hook, panel hanya wiring prop.
+    expect(hookSrc).toContain("function compStart()");
+    expect(hookSrc).toContain("function compEnd()");
+    const commit = hookSrc.slice(hookSrc.indexOf("function doCommit"), hookSrc.indexOf("function doCommit") + 200);
     expect(commit).toContain("if (composing) return;");
-    const end = panelSrc.slice(panelSrc.indexOf("function compEnd()"), panelSrc.indexOf("function compEnd()") + 200);
-    expect(end).toContain("if (draftBox.cur) commitDraft();");
-    const areas = panelSrc.match(/oncompositionstart=\{compStart\}/g) ?? [];
+    const end = hookSrc.slice(hookSrc.indexOf("function compEnd()"), hookSrc.indexOf("function compEnd()") + 200);
+    expect(end).toContain("if (cur) doCommit();");
+    const areas = cardSrc.match(/oncompositionstart=\{onCompStart\}/g) ?? [];
     expect(areas.length).toBe(3);
-    const ends = panelSrc.match(/oncompositionend=\{compEnd\}/g) ?? [];
+    const ends = cardSrc.match(/oncompositionend=\{onCompEnd\}/g) ?? [];
     expect(ends.length).toBe(3);
+    expect(panelSrc).toContain("onCompStart={() => draft.compStart()}");
+    expect(panelSrc).toContain("onCompEnd={() => draft.compEnd()}");
   });
 
   it("timer-jaring 10dtk sekali per baris kotor (bukan ritme kerja)", () => {
-    expect(panelSrc).toContain("const DRAFT_SAFETY_MS = 10_000;");
-    const input = panelSrc.slice(panelSrc.indexOf("function draftInput"), panelSrc.indexOf("function draftInput") + 900);
-    expect(input).toContain("if (!draftTimer) draftTimer = setTimeout(");
-    expect(input).toContain("DRAFT_SAFETY_MS");
+    expect(hookSrc).toContain("export const DRAFT_SAFETY_MS = 10_000;");
+    // Penjaga sekali-arm di helper arm(), dipanggil di ujung input().
+    const arm = hookSrc.slice(hookSrc.indexOf("function arm()"), hookSrc.indexOf("function arm()") + 300);
+    expect(arm).toContain("if (!timer) timer = setTimeout(");
+    expect(arm).toContain("DRAFT_SAFETY_MS");
+    const input = hookSrc.slice(hookSrc.indexOf("function input("), hookSrc.indexOf("function input(") + 900);
+    expect(input).toContain("arm();");
   });
 
   it("indikator dirty + Save flush eksplisit + flush-on-destroy", () => {
-    expect(panelSrc).toContain("let dirtyDraft = $state(false);");
-    expect(panelSrc).toContain("belum tersimpan");
-    expect(panelSrc).toContain("if (draftBox.cur) commitDraft(); if (dirty) await save(); await saveTranslationEdits();");
-    expect(panelSrc).toContain("if (draftBox.cur) commitDraft(); if (saveTimer)");
+    // Sejak FE-4 (1.3): dirty $state di hook, badge di kartu, flush di panel.
+    expect(hookSrc).toContain("let dirty = $state(false);");
+    expect(cardSrc).toContain("belum tersimpan");
+    expect(panelSrc).toContain("if (draft.cur) draft.commit(); if (dirty) await save(); await saveTranslationEdits();");
+    expect(panelSrc).toContain("if (draft.cur) draft.commit(); if (saveTimer)");
   });
 });
 
@@ -121,7 +138,7 @@ describe("last-write-wins §4", () => {
 
   it("↺ tulis ai* lalu save LANGSUNG (bukan debounce)", () => {
     const fn = panelSrc.slice(panelSrc.indexOf("function resetBubble"), panelSrc.indexOf("function resetBubble") + 800);
-    expect(fn).toContain("draftBox.cur = null;");
+    expect(fn).toContain("draft.revert();");
     expect(fn).toContain("original: b.aiOriginal");
     expect(fn).toContain("isUserEdited: false");
     expect(fn).toContain("void saveTranslationEdits();");
@@ -140,8 +157,9 @@ describe("sync-guard translation (typing-comfort D6)", () => {
   it("skip timpa prop saat kotor/terbang; sync normal saat tenang", () => {
     const fn = panelSrc.slice(panelSrc.indexOf("function syncFromPage"), panelSrc.indexOf("function syncFromPage") + 2000);
     // Kondisi sibuk: cache kotor ATAU save terbang (timer/saving).
-    expect(fn).toContain("draftBox.cur !== null || saveTimer !== null || savingTr");
-    expect(fn).toContain("if (!busyTyping && incomingTr");
+    expect(fn).toContain("draft.cur !== null || saveTimer !== null || savingTr");
+    // Sejak FE-4 (2.2): keputusan via helper (behavior di useSyncedPage.test.ts).
+    expect(fn).toContain("shouldApplyTranslation({ busyTyping, incomingRev: incomingTr, current: translation })");
     // busyTyping hanya dipakai guard cabang translation.
     const uses = panelSrc.match(/busyTyping/g) ?? [];
     expect(uses.length).toBe(2);
@@ -152,7 +170,7 @@ describe("sync-guard translation (typing-comfort D6)", () => {
     // Guard = edit lokal atau save terbang; ganti halaman tetap memaksa resync.
     expect(fn).toContain("const samePage = syncedFor === page.id;");
     expect(fn).toContain("const localBusy = dirty || saving || savingTr || saveTimer !== null;");
-    expect(fn).toContain("if (!samePage || (!localBusy &&");
+    expect(fn).toContain("shouldApplyBubbles({ samePage, localBusy, incoming, current: bubbles })");
   });
 });
 

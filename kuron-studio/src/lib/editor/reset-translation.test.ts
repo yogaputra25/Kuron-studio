@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import panelSrc from "./EditorPanel.svelte?raw";
+import cardSrc from "./TranslationCard.svelte?raw";
 
 // Kontrak change reset-translation (opsi A), diverifikasi statis dari sumber
 // (pola sama seperti manual-text-split.test.ts): assert pada pola kode.
@@ -16,8 +17,9 @@ describe("reset-translation (opsi A)", () => {
   });
 
   it("tombol ↺ hanya tampil bila edited + baseline non-kosong", () => {
-    expect(panelSrc).toContain("{#if b.isUserEdited && b.aiTranslated}");
-    expect(panelSrc).toContain("onclick={() => resetBubble(i)}");
+    expect(cardSrc).toContain("{#if b.isUserEdited && b.aiTranslated}");
+    expect(cardSrc).toContain("onclick={() => onResetBubble(i)}");
+    expect(panelSrc).toContain("onResetBubble={(i) => resetBubble(i)}");
   });
 
   it("reset kirim langsung, bukan via debounce (§4 D7)", () => {

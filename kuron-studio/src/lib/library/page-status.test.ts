@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { statusAfterBubbleSave, statusAfterTranslationSave, translationComplete } from "./status";
 import panelSrc from "../editor/EditorPanel.svelte?raw";
+import cardSrc from "../editor/TranslationCard.svelte?raw";
 import apiSrc from "../contracts/api.ts?raw";
 
 // page-status-truth: status turunan data, bukan last-write-wins.
@@ -58,7 +59,9 @@ describe("page-status wiring", () => {
   it("tombol Tandai selesai hanya untuk terjemahan sebagian", () => {
     expect(panelSrc).toContain("!translation.manualDone && !translationComplete(translation.bubbles)");
     expect(panelSrc).toContain("api.markPageCompleted(page.id, true)");
-    expect(panelSrc).toContain('$t("markDone")');
+    // Sejak FE-4: tombol tinggal di TranslationCard, panel memasok wiring.
+    expect(cardSrc).toContain('$t("markDone")');
+    expect(panelSrc).toContain("onMarkDone={() => void markDone()}");
   });
 
   it("api + kontrak mengenal mark_page_completed", () => {
