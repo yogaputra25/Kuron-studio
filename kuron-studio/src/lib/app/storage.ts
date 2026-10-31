@@ -1,3 +1,5 @@
+import type { TranslateOpts } from "../provider/translateOpts";
+
 // Persistensi localStorage berversi + berskema (FE-8 app-storage 1.1).
 // Satu-satunya modul yang menyentuh `localStorage` langsung.
 // Semantik: hilang/rusak/versi-beda/tipe-salah/melempar → fallback,
@@ -13,6 +15,17 @@ const rawString: Codec<string> = {
   parse: (raw) => raw,
   serialize: (v) => v,
 };
+const json = <T>(): Codec<T> => ({
+  parse: (raw) => {
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      return undefined;
+    }
+  },
+  serialize: (v) => JSON.stringify(v),
+});
+
 
 const num: Codec<number> = {
   parse: (raw: string) => {
@@ -39,6 +52,8 @@ export const STORAGE_KEYS = {
   lang: defineKey("kuron-lang:v1", rawString, "kuron-lang"),
   theme: defineKey("kuron-theme:v1", rawString, "kuron-theme"),
   sidebarW: defineKey("kuron-sidebar-w:v1", num),
+  batchProvider: defineKey("kuron-batch-provider:v1", rawString),
+  batchOpts: defineKey<TranslateOpts>("kuron-batch-opts:v1", json<TranslateOpts>()),
 } as const;
 
 function getItem(key: string): string | null {

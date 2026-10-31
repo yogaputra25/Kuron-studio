@@ -7,6 +7,7 @@
   import EditorPanel from "../../editor/EditorPanel.svelte";
   import DetectProgress from "../../detection/DetectProgress.svelte";
   import BatchPanel from "../../provider/BatchPanel.svelte";
+  import BatchTranslateDialog from "../../provider/BatchTranslateDialog.svelte";
   import GlossaryPanel from "../../provider/GlossaryPanel.svelte";
   import MoveDialog from "../../library/MoveDialog.svelte";
   import ReviewGrid from "../../export/ReviewGrid.svelte";
@@ -16,6 +17,7 @@
   import type { Project } from "../../contracts/types";
   import type { ReadingDirection } from "../../contracts/types";
   import type { TranslateOpts } from "../../provider/translateOpts";
+  import { allPages } from "../../library/library";
   import type { Selection } from "../../library/selection.svelte.ts";
   import type { ThumbnailQueue } from "../../previews/thumbnailQueue.svelte.ts";
   import type { DetectRun } from "../../detection/detectRun.svelte.ts";
@@ -33,6 +35,8 @@
     showBatch: boolean;
     /** Referensi opts milik EditorPanel (bukan salinan merge). */
     batchReq: { providerId: string; opts: TranslateOpts } | null;
+    showBatchDialog: boolean;
+    batchPageIds: string[] | null;
     showGlossary: boolean;
     showMove: boolean;
     folderId: string | "all";
@@ -44,6 +48,8 @@
     onCloseEditor: () => void;
     onSaved: (updated: Page) => void;
     onBatchOpts: (o: { providerId: string; opts: TranslateOpts }) => void;
+    onBatchDialogClose: () => void;
+    onBatchDialogSubmit: (req: { providerId: string; opts: TranslateOpts }, pageIds: string[]) => void;
     onDetectClose: () => void;
     onBatchDone: () => void;
     onBatchClose: () => void;
@@ -73,6 +79,8 @@
     readingDir,
     showBatch,
     batchReq,
+    showBatchDialog,
+    batchPageIds,
     showGlossary,
     showMove,
     folderId,
@@ -84,6 +92,8 @@
     onCloseEditor,
     onSaved,
     onBatchOpts,
+    onBatchDialogClose,
+    onBatchDialogSubmit,
     onDetectClose,
     onBatchDone,
     onBatchClose,
@@ -100,6 +110,10 @@
   // selalu segar dari EditorPanel.opts, tak ada snapshot basi.
   const batchOpts = $derived(
     batchReq ? { ...batchReq.opts, providerId: batchReq.providerId, readingDirection: readingDir } : null,
+  );
+  /** Cakupan dialog (ids) dipetakan ke Page; null = perilaku lama (scopedPages). */
+  const batchPages = $derived(
+    current && batchPageIds ? allPages(current).filter((p) => batchPageIds.includes(p.id)) : scopedPages,
   );
 </script>
 
@@ -126,10 +140,22 @@
 
 {#if showBatch && current && batchOpts}
   <BatchPanel
-    pages={scopedPages}
+    pages={batchPages}
     opts={batchOpts}
     onDone={onBatchDone}
     onClose={onBatchClose}
+  />
+{/if}
+
+{#if showBatchDialog && current}
+  <BatchTranslateDialog
+    project={current}
+    selectedIds={selection.selectedIds}
+    {folderId}
+    visiblePages={scopedPages}
+    readingDirection={readingDir}
+    onSubmit={onBatchDialogSubmit}
+    onClose={onBatchDialogClose}
   />
 {/if}
 

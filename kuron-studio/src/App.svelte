@@ -104,6 +104,9 @@
   let busy = $state(false);
   let showProviders = $state(false);
   let showBatch = $state(false);
+  /** Dialog opsi batch (dari list): null = ikut scopedPages saat submit. */
+  let batchPageIds = $state<string[] | null>(null);
+  let showBatchDialog = $state(false);
   let showGlossary = $state(false);
   let showReview = $state(false);
   let showDiagnostics = $state(false);
@@ -469,13 +472,12 @@
       {projects}
       {busy}
       {readingDir}
-      batchProviderId={batchReq?.providerId ?? null}
       {lastInvokeError}
       brokenCount={queue.failed}
       canDetect={!!current && scopedPages.length > 0}
       onToggleReadingDir={() => (readingDir = readingDir === "rtl" ? "ltr" : "rtl")}
       onProviders={() => (showProviders = true)}
-      onBatch={() => (showBatch = true)}
+      onBatch={() => (showBatchDialog = true)}
       onGlossary={() => (showGlossary = true)}
       onResults={() => (showReview = true)}
       onDetect={detectAll}
@@ -636,6 +638,8 @@
     {readingDir}
     {showBatch}
     {batchReq}
+    {showBatchDialog}
+    {batchPageIds}
     {showGlossary}
     {showMove}
     {folderId}
@@ -647,6 +651,13 @@
     onCloseEditor={closeEditor}
     {onSaved}
     onBatchOpts={(o) => (batchReq = o)}
+    onBatchDialogClose={() => (showBatchDialog = false)}
+    onBatchDialogSubmit={(req, pageIds) => {
+      batchReq = req;
+      batchPageIds = pageIds;
+      showBatchDialog = false;
+      showBatch = true;
+    }}
     onDetectClose={closeDetectOverlay}
     onBatchDone={handleBatchDone}
     onBatchClose={() => (showBatch = false)}
