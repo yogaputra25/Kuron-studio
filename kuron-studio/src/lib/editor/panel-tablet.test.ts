@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import panelSrc from "./editor/EditorPanel.svelte?raw";
-import deviceSrc from "./app/device?raw";
+import panelSrc from "./EditorPanel.svelte?raw";
+import deviceSrc from "../app/device?raw";
 
-import gridSrc from "./library/PageGrid.svelte?raw";
+import gridSrc from "../library/PageGrid.svelte?raw";
 
 // panel-resize-tablet: layout resizable + mode tablet wajib lewat jalur
 // terpusat (device.ts + panel.ts), bukan angka/UA-sniff tersebar.
