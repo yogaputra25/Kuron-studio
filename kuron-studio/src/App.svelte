@@ -20,13 +20,14 @@
   import type { Lang, Theme } from "./lib/app/i18n";
   import type { BatchOpts, Page, Project, ReadingDirection } from "./lib/contracts/types";
   import { ARCHIVE_EXTS, IMAGE_EXTS, PDF_EXTS } from "./lib/contracts/types";
-  import { allPages, childrenOf, folderPath, groupKanban, hasNesting, projectStats, subtreePages, subtreeStats } from "./lib/library/library";
+  import { allPages, childrenOf, folderPath, groupKanban, hasNesting, projectStats, subtreePages } from "./lib/library/library";
   import Button from "./lib/ui/Button.svelte";
   import { fileName, sortPagesByBubbles, sortPagesByName, sortPagesByStatus } from "./lib/library/status";
-  import FolderChip from "./lib/library/FolderChip.svelte";
+
   import MoveDialog from "./lib/library/MoveDialog.svelte";
   import Onboarding from "./lib/app/Onboarding.svelte";
   import AlertBanners from "./lib/app/shell/AlertBanners.svelte";
+  import FolderBar from "./lib/app/shell/FolderBar.svelte";
   import ProjectCard from "./lib/app/shell/ProjectCard.svelte";
   import DetectProgress from "./lib/detection/DetectProgress.svelte";
   import { createDetectRun } from "./lib/detection/detectRun.svelte.ts";
@@ -727,74 +728,22 @@
         <Button type="submit" variant="default" size="sm" disabled={busy || !name.trim()}>{$t("create")}</Button>
       </form>
     </section>
-    <section class="flex flex-wrap items-center gap-1.5 border-b border-line px-5 py-2" aria-label="folders">
-      <button
-        class="rounded-md border px-2.5 py-1 text-xs {folderId === 'all' ? 'border-accent bg-accent/10 font-semibold' : 'border-line hover:border-accent/60'}"
-        onclick={() => (folderId = "all")}
-      >{$t("allFolders")} ({allPages(current).length})</button>
-      {#if nested}
-        {#each crumb as f, i (f.id)}
-          <span class="text-ink-3" aria-hidden="true">›</span>
-          <FolderChip
-            projectId={current.id}
-            folders={current.folders}
-            folder={f}
-            stats={subtreeStats(current, f.id)}
-            active={i === crumb.length - 1}
-            canDelete={current.folders.length > 1}
-            {busy}
-            onSelect={(id) => (folderId = id)}
-            onDelete={(id) => void deleteFolder(id)}
-            onRenamed={() => projectStore.currentId && void refreshProject(projectStore.currentId)}
-            onError={(msg) => (error = msg)}
-          />
-        {/each}
-        {#if childFolders.length > 0}
-          <span class="mx-1 h-4 w-px bg-line" aria-hidden="true"></span>
-          {#each childFolders as f (f.id)}
-            <FolderChip
-              projectId={current.id}
-              folders={current.folders}
-              folder={f}
-              stats={subtreeStats(current, f.id)}
-              active={false}
-              dashed
-              canDelete={false}
-              {busy}
-              onSelect={(id) => (folderId = id)}
-              onDelete={(id) => void deleteFolder(id)}
-              onRenamed={() => projectStore.currentId && void refreshProject(projectStore.currentId)}
-              onError={(msg) => (error = msg)}
-            />
-          {/each}
-        {/if}
-      {:else}
-        {#each current.folders as f (f.id)}
-          <FolderChip
-            projectId={current.id}
-            folders={current.folders}
-            folder={f}
-            stats={subtreeStats(current, f.id)}
-            active={folderId === f.id}
-            canDelete={current.folders.length > 1}
-            {busy}
-            onSelect={(id) => (folderId = id)}
-            onDelete={(id) => void deleteFolder(id)}
-            onRenamed={() => projectStore.currentId && void refreshProject(projectStore.currentId)}
-            onError={(msg) => (error = msg)}
-          />
-        {/each}
-      {/if}
-      <form class="ml-1 flex gap-1" onsubmit={(e) => { e.preventDefault(); void createFolder(); }}>
-        <input
-          class="h-7 w-32 rounded-md border border-line bg-surface-2 px-2 text-xs outline-none focus:border-accent"
-          placeholder={$t("folderName")}
-          aria-label={$t("folderName")}
-          bind:value={folderName}
-        />
-        <Button type="submit" variant="default" size="sm" disabled={busy || !folderName.trim()} title={folderId === "all" ? $t("newFolder") : `${$t("newFolder")} → ${currentFolder?.name ?? ""}`}>{$t("newFolder")}</Button>
-      </form>
-    </section>
+    <FolderBar
+      {current}
+      {nested}
+      {crumb}
+      {childFolders}
+      {folderId}
+      currentFolderName={currentFolder?.name ?? ""}
+      {folderName}
+      {busy}
+      onSelectFolder={(id) => (folderId = id)}
+      onDeleteFolder={(id) => void deleteFolder(id)}
+      onRenamed={() => projectStore.currentId && void refreshProject(projectStore.currentId)}
+      onError={(msg) => (error = msg)}
+      onFolderName={(v) => (folderName = v)}
+      onCreateFolder={() => void createFolder()}
+    />
     <section class="flex flex-wrap items-center gap-1.5 px-5 pt-3" aria-label="kanban">
       {#each [["all", allPages(current).length, "bg-ink-3"], ["todo", kanbanGroups.todo.length, "bg-warn"], ["doing", kanbanGroups.doing.length, "bg-info"], ["done", kanbanGroups.done.length, "bg-success"], ["failed", kanbanGroups.failed.length, "bg-danger"]] as [key, n, dot]}
         <button
