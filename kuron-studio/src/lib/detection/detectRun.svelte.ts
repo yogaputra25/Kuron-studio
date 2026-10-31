@@ -4,9 +4,8 @@
  * Bentuk factory (D1): panggil sekali di komposisi; `cancel()` WAJIB
  * dipanggil saat unmount (D4) — komposisi menyimpannya dari `start()`.
  */
-import { listen } from "@tauri-apps/api/event";
+import { onDetectProgress } from "../app/events";
 import { api } from "../contracts/api";
-import type { DetectProgress as DetectProgressEv } from "../contracts/types";
 import type { Project } from "../contracts/types";
 import { initialDetectState, reduceDetectProgress, type DetectState } from "./detectProgress";
 
@@ -55,13 +54,17 @@ export function createDetectRun(): DetectRun {
         unlisten?.();
       };
       const done: Promise<Project | null> = (async () => {
-        unlisten = await listen<DetectProgressEv>("detect_progress", (e) => {
+        unlisten = onDetectProgress((e) => {
           if (myGen !== detectGen || !detectState) return;
           detectState = reduceDetectProgress(detectState, {
             ...e.payload,
             file: names.get(e.payload.pageId) ?? "",
           });
         });
+        // Yield sekali: cancel() yang dipanggil sinkron tepat setelah start()
+        // harus menang sebelum guard dievaluasi (dulu dijamin oleh
+        // `await listen(...)`; helper mendaftar tanpa yield).
+        await Promise.resolve();
         if (cancelled || myGen !== detectGen) {
           unlisten();
           return null;

@@ -1,13 +1,13 @@
 <script lang="ts">
-  import { listen } from "@tauri-apps/api/event";
-  import { onMount } from "svelte";
+  import { onDestroy } from "svelte";
+  import { onTranslateProgress } from "../app/events";
   import { api } from "../contracts/api";
   import { initialBatchState, reduceProgress } from "./batch";
   import { toBatchInput } from "./translateOpts";
   import { t } from "../app/i18n";
   import Button from "../ui/Button.svelte";
   import Panel from "../ui/Panel.svelte";
-  import type { BatchOpts, Page, TranslateProgress } from "../contracts/types";
+  import type { BatchOpts, Page } from "../contracts/types";
 
   interface Props {
     pages: Page[];
@@ -29,11 +29,12 @@
   const targets = $derived(pages.map((p) => p.id));
   const pct = $derived(batch.total > 0 ? Math.round((batch.done / batch.total) * 100) : 0);
 
-  onMount(async () => {
-    await listen<TranslateProgress>("translate_progress", (e) => {
-      batch = reduceProgress(batch, e.payload);
-    });
+  // Helper mengembalikan unlisten sinkron — simpan + panggil di destroy
+  // agar buka-tutup panel tak menumpuk handler (FE-7 1.2).
+  const offProgress = onTranslateProgress((e) => {
+    batch = reduceProgress(batch, e.payload);
   });
+  onDestroy(() => { offProgress(); });
 
   async function run(ids: string[]) {
     running = true;
