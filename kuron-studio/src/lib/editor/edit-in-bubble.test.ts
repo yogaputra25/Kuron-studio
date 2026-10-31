@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import panelSrc from "./EditorPanel.svelte?raw";
+import cardSrc from "./TranslationCard.svelte?raw";
+import hookSrc from "./useDraftText.svelte?raw";
 import canvasSrc from "./CanvasEditor.svelte?raw";
 
 // Kontrak change edit-in-bubble, pola-sumber seperti manual-text-split.test.ts:
@@ -85,30 +87,37 @@ describe("in-bubble edit (§2 panel)", () => {
     expect(panelSrc).toContain("selectedBubble");
     expect(panelSrc).not.toMatch(/\{#each translation\.bubbles as b, i/);
     // Satu kartu via singleCard (fallback: translation 1 bubble) — bukan list.
-    expect(panelSrc).toMatch(/singleCard = selectedBubble && selectedRow/);
-    expect(panelSrc).toContain("{#if singleCard}");
-    expect(panelSrc).toContain("Klik bubble di After untuk memilih.");
+    // Sejak FE-4: view-model di panel, render di TranslationCard.
+    expect(panelSrc).toMatch(/const singleCard = \$derived\(/);
+    expect(panelSrc).toContain("card={singleCard}");
+    expect(cardSrc).toContain("{#if card}");
+    expect(cardSrc).toContain("Klik bubble di After untuk memilih.");
   });
 
   it("isi kartu = 3 textarea + ↺ + badge + glossary pindah rumah", () => {
-    const areas = panelSrc.match(/<textarea/g) ?? [];
+    const areas = cardSrc.match(/<textarea/g) ?? [];
     expect(areas.length).toBeGreaterThanOrEqual(3);
     // Sejak fix-edit-stuck: kartu tulis draft, commit via editTr(row, …).
-    expect(panelSrc).toContain('draftInput("original"');
-    expect(panelSrc).toContain('draftInput("reading"');
-    expect(panelSrc).toContain('draftInput("translated"');
-    expect(panelSrc).toContain('editTr(row, "translated"');
-    expect(panelSrc).toContain("resetBubble(i)");
-    expect(panelSrc).toContain(">edited<");
-    expect(panelSrc).toContain("pressStart(b.original, b.translated)");
+    // Sejak FE-4: kartu panggil prop onDraftInput, panel teruskan ke draftInput.
+    expect(cardSrc).toContain('onDraftInput("original"');
+    expect(cardSrc).toContain('onDraftInput("reading"');
+    expect(cardSrc).toContain('onDraftInput("translated"');
+    expect(panelSrc).toContain("onDraftInput={(f, v) => draft.input(f, v)}");
+    // Commit via hook deps (behavior dikunci unit useDraftText).
+    expect(hookSrc).toContain('deps.commit(row, "translated", translated)');
+    expect(cardSrc).toContain("onResetBubble(i)");
+    expect(panelSrc).toContain("onResetBubble={(i) => resetBubble(i)}");
+    expect(cardSrc).toContain(">edited<");
+    expect(cardSrc).toContain("onPressStart(b.original, b.translated)");
   });
 
   it("label bahasa ikut target, bukan hardcoded JP/ID", () => {
     // Regresi: user ID→EN melihat "Original (JP)" + "Terjemahan (ID)".
-    expect(panelSrc).not.toContain("Original (JP)");
-    expect(panelSrc).not.toContain(">Terjemahan (ID)<");
-    expect(panelSrc).toMatch(/Terjemahan \(\s*\{trgLabel\}\s*\)/);
+    expect(cardSrc).not.toContain("Original (JP)");
+    expect(cardSrc).not.toContain(">Terjemahan (ID)<");
+    expect(cardSrc).toMatch(/Terjemahan \(\s*\{trgLabel\}\s*\)/);
     expect(panelSrc).toMatch(/TARGET_LANGS/);
+    expect(panelSrc).toContain("trgLabel={trgLabel}");
   });
 });
 

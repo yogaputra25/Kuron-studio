@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import panelSrc from "./EditorPanel.svelte?raw";
+import cardSrc from "./TranslationCard.svelte?raw";
+import hookSrc from "./useDraftText.svelte?raw";
+import toolbarSrc from "./EditorToolbar.svelte?raw";
+import panesSrc from "./EditorPanes.svelte?raw";
 import canvasSrc from "./CanvasEditor.svelte?raw";
 
 // Kontrak change manual-text-before-after, diverifikasi statis dari sumber
@@ -12,18 +16,21 @@ import canvasSrc from "./CanvasEditor.svelte?raw";
 // beneran, bukan pola string.)
 describe("manual text entry (1.1–1.3, via draft fix-edit-stuck)", () => {
   it("original/reading/translated adalah textarea editable per bubble", () => {
-    // Sejak fix-edit-stuck: oninput tulis draft lokal, commit via editTr.
-    expect(panelSrc).toMatch(/draftInput\("original"/);
-    expect(panelSrc).toMatch(/draftInput\("reading"/);
-    expect(panelSrc).toMatch(/draftInput\("translated"/);
-    const commit = panelSrc.slice(panelSrc.indexOf("function commitDraft"), panelSrc.indexOf("function commitDraft") + 700);
-    expect(commit).toContain('editTr(row, "original"');
-    expect(commit).toContain('editTr(row, "reading"');
-    expect(commit).toContain('editTr(row, "translated"');
-    const areas = panelSrc.match(/<textarea/g) ?? [];
+    // Sejak FE-4 (1.1): markup kartu tinggal di TranslationCard,
+    // panel hanya memasok wiring draft via prop onDraftInput.
+    expect(cardSrc).toMatch(/onDraftInput\("original"/);
+    expect(cardSrc).toMatch(/onDraftInput\("reading"/);
+    expect(cardSrc).toMatch(/onDraftInput\("translated"/);
+    expect(panelSrc).toContain("onDraftInput={(f, v) => draft.input(f, v)}");
+    // Commit via hook deps (behavior dikunci unit useDraftText).
+    const commit = hookSrc.slice(hookSrc.indexOf("function doCommit"), hookSrc.indexOf("function doCommit") + 700);
+    expect(commit).toContain('deps.commit(row, "original"');
+    expect(commit).toContain('deps.commit(row, "reading"');
+    expect(commit).toContain('deps.commit(row, "translated"');
+    const areas = cardSrc.match(/<textarea/g) ?? [];
     expect(areas.length).toBeGreaterThanOrEqual(3);
     // Tak ada lagi <p>O:> read-only.
-    expect(panelSrc).not.toContain("<p class=\"truncate text-zinc-500\"");
+    expect(cardSrc).not.toContain("<p class=\"truncate text-zinc-500\"");
   });
 
   it("editTr set isUserEdited=true untuk ketiga field", () => {
@@ -56,31 +63,34 @@ describe("manual text entry (1.1–1.3, via draft fix-edit-stuck)", () => {
   });
 
   it("guard syncFromPage tak tersentuh: save identik tidak reset saat ngetik", () => {
-    expect(panelSrc).toContain("if (!samePage || (!localBusy && JSON.stringify(incoming) !== JSON.stringify(bubbles))) {");
+    // Sejak FE-4 (2.2): guard struktural via helper (behavior di useSyncedPage.test.ts).
+    expect(panelSrc).toContain("shouldApplyBubbles({ samePage, localBusy, incoming, current: bubbles })");
   });
 });
 
 describe("before|split|after (3.1–3.4)", () => {
   it("state mode + switcher Before|Split|After", () => {
+    // Sejak FE-4 (2.1): state di panel, switcher di EditorToolbar.
     expect(panelSrc).toContain('let mode = $state<PaneMode>("before")');
-    expect(panelSrc).toContain('type PaneMode = "before" | "split" | "after"');
-    expect(panelSrc).toContain('[["before", "Before"], ["split", "Split"], ["after", "After"]]');
+    expect(panelSrc).toContain("mode={mode}");
+    expect(toolbarSrc).toContain('export type PaneMode = "before" | "split" | "after"');
+    expect(toolbarSrc).toContain('[["before", "Before"], ["split", "Split"], ["after", "After"]]');
   });
 
   it("before = editable tanpa overlay; after = overlay + geometri editable", () => {
-    expect(panelSrc).toMatch(/showTranslation=\{false\}[\s\S]{0,120}editable=\{true\}/);
+    // Sejak FE-4 (3.2): override per pane di EditorPanes, shared dari panel.
+    expect(panesSrc).toMatch(/showTranslation=\{false\}[\s\S]{0,120}editable=\{true\}/);
     // After: overlay terjemahan + geometri editable (bubble-edit-any-pane), tanpa gambar.
-    expect(panelSrc).toMatch(/showTranslation=\{true\}[\s\S]{0,160}editable=\{true\}[\s\S]{0,80}canDraw=\{false\}/);
+    expect(panesSrc).toMatch(/showTranslation=\{true\}[\s\S]{0,160}editable=\{true\}[\s\S]{0,80}canDraw=\{false\}/);
+    expect(panelSrc).toContain("translations: translation?.bubbles ?? [],");
   });
 
   it("split = dua pane flex-1 + satu data-URL dishare (get_image_preview sekali)", () => {
-    // Sejak panel-resize-tablet pane punya min-h-0 (kolom tablet). Intent
-    // tetap: tepat dua pane flex-1 berbagi satu data-URL.
-    const splits = panelSrc.match(/class="(?:min-h-0 )?min-w-0 flex-1 overflow-auto p-4"/g) ?? [];
+    // Sejak FE-4 (3.2): scroll-div di EditorPanes, satu URL di shared panel.
+    const splits = panesSrc.match(/class="min-h-0 min-w-0 flex-1 overflow-auto p-4"/g) ?? [];
     expect(splits.length).toBe(2);
-    // Kedua pane pakai referensi imageUrl yang sama — tak ada fetch kedua.
-    const usages = panelSrc.match(/imageUrl=\{fullImageUrl\}/g) ?? [];
-    expect(usages.length).toBe(2);
+    expect(panelSrc).toContain("imageUrl: fullImageUrl,");
+    expect(panesSrc).toContain("{...shared}");
     expect(panelSrc).not.toContain("getImagePreview");
   });
 
@@ -89,18 +99,20 @@ describe("before|split|after (3.1–3.4)", () => {
     expect(fn).toContain("if (!from || !to || syncing) return;");
     expect(fn).toContain("to.scrollTop = from.scrollTop;");
     expect(fn).toContain("to.scrollLeft = from.scrollLeft;");
-    expect(panelSrc).toContain("onscroll={() => syncScroll(beforeScroll, afterScroll)}");
-    expect(panelSrc).toContain("onscroll={() => syncScroll(afterScroll, beforeScroll)}");
+    expect(panesSrc).toContain("onScroll(beforeScrollEl, afterScrollEl)");
+    expect(panesSrc).toContain("onScroll(afterScrollEl, beforeScrollEl)");
+    expect(panelSrc).toContain("onScroll={(f, t) => syncScroll(f, t)}");
   });
 
   it("after editable geometri: seleksi selalu forward, gambar tetap Before-only", () => {
     // bubble-edit-any-pane D1: pane After boleh ubah geometri → onChange nyata.
-    expect(panelSrc).toContain("onSelectForward={(i) => selectBubble(i)}");
-    expect(panelSrc).toContain("editable={true}");
-    expect(panelSrc).toContain("canDraw={false}");
-    expect(panelSrc).not.toContain("onChange={() => {}}");
+    // Sejak FE-4 (3.2): wiring gabung di shared, override di EditorPanes.
+    expect(panelSrc).toContain("onSelectForward: (i) => selectBubble(i),");
+    expect(panesSrc).toContain("editable={true}");
+    expect(panesSrc).toContain("canDraw={false}");
+    expect(panesSrc).not.toContain("onChange={() => {}}");
     // Pane before & after berbagi seleksi via externalSelected (satu state).
-    expect(panelSrc).toContain("externalSelected={manualSel}");
+    expect(panelSrc).toContain("externalSelected: manualSel,");
     // D2: seleksi SELALU diteruskan, bukan hanya saat read-only.
     expect(canvasSrc).toContain("if (onSelectForward) onSelectForward(i);");
     expect(canvasSrc).not.toContain("if (!editable && onSelectForward)");
@@ -117,22 +129,21 @@ describe("before|split|after (3.1–3.4)", () => {
 
 describe("bubble edit any pane", () => {
   it("After bisa ubah geometri: onChange nyata + canDraw false", () => {
-    const at = panelSrc.indexOf("bind:this={afterRef}");
-    const after = panelSrc.slice(at, at + 1200);
-    expect(after).toContain("editable={true}");
-    expect(after).toContain("canDraw={false}");
-    expect(after).toContain('onChange={(nb) => { bubbles = nb; dirty = true; drawHint = ""; }}');
-    // fix-draw-tools B: tool asli diteruskan ke After, tapi canDraw={false}
-    // + hint menggantikan keheningan — menggambar tetap mustahil di sini.
-    expect(after).toContain("tool={tool}");
+    // Sejak FE-4 (3.2): After di EditorPanes, onChange nyata via shared.
+    expect(panelSrc).toContain("bind:afterApi={afterRef}");
+    expect(panesSrc).toContain("editable={true}");
+    expect(panesSrc).toContain("canDraw={false}");
+    expect(panelSrc).toContain("onChange: (nb) => { bubbles = nb; dirty = true;");
+    expect(panesSrc).toContain("{...shared}");
   });
 
   it("Delete hidup di After-only: coba editorRef lalu afterRef", () => {
     const key = panelSrc.slice(panelSrc.indexOf("function onKey"), panelSrc.indexOf("function onKey") + 700);
     expect(key).toContain("editorRef?.deleteSelected()");
     expect(key).toContain("afterRef?.deleteSelected()");
-    // Tipe ref After membawa deleteSelected (dipakai jalur After-only).
-    expect(panelSrc).toContain("deleteSelected: () => boolean");
+    // Tipe ref = CanvasApi EditorPanes (membawa deleteSelected).
+    expect(panesSrc).toContain('"deleteSelected"');
+    expect(panelSrc).toContain("CanvasApi");
   });
 
   it("canDraw prop di canvas: default literal false, gerbang onStageDown", () => {

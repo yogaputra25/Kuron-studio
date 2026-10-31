@@ -1,22 +1,27 @@
 import { describe, expect, it } from "vitest";
 import panelSrc from "./EditorPanel.svelte?raw";
+import cardSrc from "./TranslationCard.svelte?raw";
+import geomSrc from "./GeometryControls.svelte?raw";
+import toolbarSrc from "./EditorToolbar.svelte?raw";
+import panesSrc from "./EditorPanes.svelte?raw";
 import canvasSrc from "./CanvasEditor.svelte?raw";
 
 // Kontrak change draw-tools-feedback: tool tak-pernah-tampak-rusak.
 // Pola-sumber seperti edit-in-bubble.test.ts (Konva runtime tak di-mount).
 describe("draw tools feedback (§1)", () => {
   it("toolbar draw disabled saat After + alasan terlihat", () => {
+    // Sejak FE-4 (2.1): tombol di EditorToolbar, panel pasok readOnlyMode.
     expect(panelSrc).toContain("readOnlyMode");
-    expect(panelSrc).toContain("Gambar hanya di Before");
-    expect(panelSrc).toContain("disabled={off}");
+    expect(panelSrc).toContain("readOnlyMode={readOnlyMode}");
+    expect(toolbarSrc).toContain("Gambar hanya di Before");
+    expect(toolbarSrc).toContain("disabled={off}");
   });
 
   it("callback onDrawHint opsional, Before pasang + clear saat sukses", () => {
     expect(canvasSrc).toContain("onDrawHint?: (msg: string) => void");
-    expect(panelSrc).toContain("onDrawHint={(m) => { drawHint = m; }}");
-    // fix-draw-tools B: After kini IKUT memasang (suara di tiap pane).
-    const usages = panelSrc.match(/onDrawHint=/g) ?? [];
-    expect(usages.length).toBe(2);
+    // Sejak FE-4 (3.2): satu wiring shared diteruskan ke dua pane via spread.
+    expect(panelSrc).toContain("onDrawHint: (m) => { drawHint = m; },");
+    expect(panesSrc).toContain("{...shared}");
     expect(panelSrc).toContain('drawHint = "";');
   });
 
@@ -64,7 +69,9 @@ describe("bubble resize full (§1.5)", () => {
   it("kontrol angka + skala-dari-pusat + clamp di sidebar", () => {
     expect(panelSrc).toContain("setBubbleGeometry");
     expect(panelSrc).toContain("scaleSelectedBubble");
-    expect(panelSrc).toContain("Geometri (px asli)");
+    // Sejak FE-4 (1.2): grid geometri tinggal di GeometryControls.
+    expect(geomSrc).toContain("Geometri (px asli)");
+    expect(cardSrc).toContain("GeometryControls");
   });
 
   it("whitePatch dihitung ulang dari geometri baru (port Rust)", () => {
@@ -91,9 +98,11 @@ describe("kepemilikan canvas oleh mode tool (fix-draw-tools)", () => {
   });
 
   it("B: After menerima tool asli + hint; Before canDraw true", () => {
-    expect(panelSrc).toContain("tool={tool}");
-    expect(panelSrc).toContain("canDraw={true}");
-    expect(panelSrc).toContain("canDraw={false}");
+    // Sejak FE-4 (3.2): tool via shared-spread, canDraw override per pane.
+    expect(panelSrc).toContain("tool,");
+    expect(panesSrc).toContain("canDraw={true}");
+    expect(panesSrc).toContain("canDraw={false}");
+    expect(panesSrc).toContain("{...shared}");
     expect(canvasSrc).toContain('onDrawHint?.("Gambar hanya di pane Before")');
   });
 

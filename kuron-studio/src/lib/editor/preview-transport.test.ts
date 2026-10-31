@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import canvasSrc from "./CanvasEditor.svelte?raw";
 import appSrc from "../../App.svelte?raw";
 import panelSrc from "./EditorPanel.svelte?raw";
+import panesSrc from "./EditorPanes.svelte?raw";
 import hostSrc from "../app/shell/OverlayHost.svelte?raw";
 
 // Kontrak fix-preview-hang §2 + §3, diverifikasi statis dari sumber.
@@ -48,7 +49,9 @@ describe("preview transport (fix-preview-hang §2 progressive open)", () => {
 
   it("App teruskan thumb sebagai fallbackUrl ke EditorPanel", () => {
     expect(hostSrc).toContain("fallbackUrl={queue.thumbs[selectedPage.id] ??");
-    expect(panelSrc).toContain("fallbackUrl={fallbackUrl}");
+    // Sejak FE-4 (3.2): panel teruskan via shared ke EditorPanes.
+    expect(panelSrc).toContain("fallbackUrl,");
+    expect(panesSrc).toContain("{...shared}");
   });
 });
 
