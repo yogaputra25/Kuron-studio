@@ -25,31 +25,26 @@ Import folder/files/zip → Detect bubble (ONNX, per halaman)
 
 ## 3. Frontend (`kuron-studio/src/`)
 
+`src/lib/` hanya berisi 9 folder domain (tanpa file loose). Aturan import:
+`app/ → domain/ → ui/ + contracts/`; pengecualian tunggal `editor/ → editor/text/`.
+
+| Folder | Isi |
+|---|---|
+| `contracts/` | `types.ts` (cermin Rust; `IMAGE_EXTS` sinkron `project.rs` via `image-ext-contract.test.ts`), `api.ts` (satu-satunya jembatan invoke; key top-level `snake_case`, field `camelCase`; dijaga `invoke-contract.test.ts`), `log.ts` + 5 contract test |
+| `app/` | `i18n.ts` (id/en/zh; `i18n.test.ts` gagal bila key hilang), `device.ts` (deteksi mobile; dijaga `mobile-gating.test.ts`), `Onboarding/DiagnosticsPanel/UpdateButton.svelte` + 5 test shell |
+| `ui/` | 6 primitif (`Button/Field/Lov/Panel/Snackbar/StatusBadge`) + `__fixtures__/` + 7 test |
+| `library/` | `library.ts` (agregat murni), `status.ts`, `PageGrid/PageList/FolderChip/MoveDialog.svelte` + 6 test |
+| `editor/` | `EditorPanel/CanvasEditor.svelte`, `bubble.ts`, `translation.ts`, `panel.ts` + 13 test; `editor/text/` = `textLayout/textMeasure.ts` + test |
+| `detection/` | `detectProgress.ts` + `DetectProgress.svelte` + 2 test |
+| `provider/` | `batch.ts`, `BatchPanel/ProviderSettings/TranslatePanel/GlossaryPanel.svelte` + 4 test |
+| `export/` | `ReviewGrid.svelte` (progres, QA, TM, ekspor) |
+| `previews/` | `previewQueue.ts`, `previewMetrics.ts` + test |
+
 - `App.svelte`: state root — `projects`, `currentId`, `folderId`,
   `selectedIds` (multi-select), `thumbs`, panel mana yang terbuka.
   Dashboard + breadcrumb + grid + header + panel di sini.
-- `lib/library.ts`: agregat murni — `subtreePages/Stats`,
-  `folderPath/childrenOf/hasNesting`, `rangeSelect`,
-  `isSiblingNameTaken` (cermin guard backend). Unit-testable.
-- `lib/api.ts`: satu-satunya jembatan invoke. **Kontrak**:
-  key top-level `snake_case` persis nama param Rust
-  (`project_id`, `page_ids`); field struct `camelCase`.
-  Dijaga `invoke-contract.test.ts`.
-- `lib/types.ts`: cermin tipe Rust. `IMAGE_EXTS` wajib sinkron dengan
-  `project.rs` (dijaga `image-ext-contract.test.ts`). Jangan tambah
-  ekstensi di satu sisi saja.
-- Panel: `EditorPanel` (canvas Rect/Ellipse/Freeform/Tail),
-  `ReviewGrid` (progres, QA, TM, ekspor), `BatchPanel`,
-  `GlossaryPanel`, `ProviderSettings`, `DiagnosticsPanel`,
-  `MoveDialog` (pindah halaman + LOV tujuan), `FolderChip`
-  (rename inline + hapus), `ui/Lov` (satu-satunya dropdown —
-  tombol + search + listbox, dipakai semua form, ganti `Select`).
-- `i18n.ts`: id/en/zh, tombol header cycler, persist localStorage.
-  `i18n.test.ts` gagal kalau ada key hilang di satu bahasa.
 - `app.css`: token `--ks-*` (netral warm, aksen coral, sekunder cyan),
   dark default + light. Jangan tambah nilai di luar token.
-- `device.ts`: deteksi mobile → sembunyikan folder-picker/updater/
-  PNG-PSD (dijaga `mobile-gating.test.ts`).
 
 ## 4. Backend (`kuron-studio/src-tauri/src/`)
 

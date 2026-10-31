@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { fly } from "svelte/transition";
-  import { t } from "../i18n";
+  import { t } from "../app/i18n";
   import Button from "./Button.svelte";
 
   interface Props {

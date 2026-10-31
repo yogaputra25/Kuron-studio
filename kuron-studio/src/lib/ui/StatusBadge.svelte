@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { statusBadgeClass, statusLabel } from "../status";
-  import type { PageStatus } from "../types";
+  import { statusBadgeClass, statusLabel } from "../library/status";
+  import type { PageStatus } from "../contracts/types";
 
   interface Props {
     status: PageStatus;

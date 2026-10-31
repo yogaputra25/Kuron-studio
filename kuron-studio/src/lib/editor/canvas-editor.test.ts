@@ -1,0 +1,301 @@
+import { describe, expect, it } from "vitest";
+import src from "./CanvasEditor.svelte?raw";
+import panelSrc from "./EditorPanel.svelte?raw";
+import measureSrc from "./text/textMeasure?raw";
+
+// Kontrak D3 change fix-editor-blank-canvas (§2), diverifikasi statis dari
+// sumber komponen. Alasan: komponen terikat Konva + DOM + Svelte runtime
+// ($effect/onMount) sehingga mount unit murah tidak bermakna; test palsu
+// dengan mock Konva hanya menguji mock itu sendiri. Test ini assert pada pola
+// kode yang menjamin kontrak — bila pola hilang, test gagal dan memaksa
+// perbaikan sadar, bukan silent regress.
+//
+// (ponytail: upgrade ke component-test sungguhan — @testing-library/svelte +
+// jsdom + Konva asli — saat repo butuh interaksi canvas; ceiling = render
+// pixel, bukan pola string.)
+describe("canvas-editor blank-canvas contract (D3)", () => {
+  it("onMount membuat stage + overlay tanpa menunggu gambar", () => {
+    const mount = src.slice(src.indexOf("onMount(() => {"));
+    expect(mount).toMatch(/new Konva\.Stage/);
+    expect(mount).toMatch(/overlayLayer = new Konva\.Layer/);
+    // Tidak ada guard imageUrl yang menunda pembuatan stage.
+    const mountHead = mount.slice(0, mount.indexOf("overlayLayer = new Konva.Layer"));
+    expect(mountHead).not.toContain("if (imageUrl)");
+  });
+
+  it("$effect swap background saat imageUrl tiba + guard requestedUrl", () => {
+    expect(src).toMatch(/\$effect\(\(\) => \{\s*if \(!imageUrl\) return;/);
+    expect(src).toContain("if (requestedUrl === imageUrl) return;");
+    expect(src).toContain("requestedUrl = imageUrl;");
+    expect(src).toContain("loadBackground(imageUrl);");
+  });
+
+  it("load basi diabaikan di onload dan onerror", () => {
+    expect(src).toContain("requestedUrl !== url) return;");
+  });
+
+  it("hint imgReady/imgError dirender di bawah canvas", () => {
+    expect(src).toContain("Memuat gambar…");
+    expect(src).toContain("{imgError}");
+  });
+
+  it("redraw() tidak bergantung pada bgImage non-null", () => {
+    const redraw = src.slice(src.indexOf("export function redraw()"), src.indexOf("function commit("));
+    expect(redraw).toMatch(/if \(!stage \|\| !overlayLayer\) return;/);
+    expect(redraw).not.toContain("bgImage.image");
+    expect(redraw).not.toContain("if (!bgImage)");
+  });
+
+  it("loadBackground mengantre via pendingUrl bila stage belum ada, onMount mengonsumsinya", () => {
+    expect(src).toContain("pendingUrl = url;");
+    expect(src).toContain("} else if (pendingUrl) {");
+    // Kedua cabang onMount membersihkan antrean agar tak ada sisa basi.
+    // \r? — file bisa CRLF di Windows, pola harus toleran.
+    expect(src).toMatch(/pendingUrl = null;\r?\n      requestedUrl = imageUrl;/);
+  });
+
+  it("callback async aman setelah unmount (tidak menyentuh stage yang sudah null)", () => {
+    const onload = src.slice(src.indexOf("img.onload = () => {"));
+    expect(onload).toContain("if (!stage || !overlayLayer) return;");
+    const onerror = src.slice(src.indexOf("img.onerror = () => {"));
+    expect(onerror).toContain("if (!stage) return;");
+  });
+});
+
+// Kontrak fix-preview-hang §5: structuredClone() throw DataCloneError pada
+// Svelte 5 $state proxy (non-kosong) — pakai $state.snapshot (rune bawaan,
+// tanpa import, plain deep copy). Pola-sumber, gaya sama di atas.
+describe("snapshot copy (fix-preview-hang §5)", () => {
+  it("CanvasEditor: effect sync pakai $state.snapshot, bukan structuredClone", () => {
+    const effect = src.slice(src.indexOf("$effect(() => {"), src.indexOf("loadBackground(imageUrl);"));
+    expect(effect).toContain("const incoming = $state.snapshot(initial);");
+    expect(effect).not.toContain("structuredClone");
+  });
+
+  it("CanvasEditor: semua onChange kirim snapshot (clone aman proxy non-kosong)", () => {
+    const calls = src.match(/onChange\(\$state\.snapshot\(bubbles\)\)/g) ?? [];
+    // 4 jalur via commit()/langsung (commit, delete, tail, gambar) — handle +
+    // vertex + group-dragend konsolidasi lewat commit() (refactor definitif).
+    expect(calls.length).toBe(4);
+    expect(src).not.toContain("structuredClone");
+  });
+
+  it("EditorPanel: syncFromPage + restore translation pakai $state.snapshot", () => {
+    expect(panelSrc).toContain("const incoming = $state.snapshot(page.bubbles ?? []);");
+    expect(panelSrc).toContain("translation = $state.snapshot(page.translation) ?? null;");
+    expect(panelSrc).not.toContain("structuredClone");
+  });
+});
+
+// Kontrak fix-preview-hang §6: hapus bubble = persist via save() — guard
+// syncFromPage JANGAN diubah (tetap lindungi reset saat ngetik). Pola-sumber,
+// gaya sama di atas.
+describe("delete autosave (fix-preview-hang §6)", () => {
+  it("deleteSelected return boolean (true bila menghapus, false bila no-op)", () => {
+    expect(src).toContain("export function deleteSelected(): boolean {");
+    expect(src).toContain("if (selectedIdx === null) return false;");
+    const fn = src.slice(src.indexOf("export function deleteSelected"));
+    expect(fn).toContain("return true;");
+    expect(fn).toContain("onChange($state.snapshot(bubbles))");
+  });
+
+  it("tombol hapus sidebar: splice lalu save() + disabled saat saving", () => {
+    // Anchor di handler `bubbles.splice(i, 1)` — itu yang benar-benar
+    // membedakan tombol hapus dari guard lain, dan tahan restyling.
+    const at = panelSrc.indexOf("bubbles.splice(i, 1);");
+    expect(at, "handler hapus sidebar tidak ditemukan").toBeGreaterThan(-1);
+    const btn = panelSrc.slice(Math.max(0, at - 600), at + 200);
+    expect(btn).toContain("dirty = true;");
+    expect(btn).toContain("void save();");
+    // `disabled={saving}` ada di tag Button yang sama.
+    expect(btn.slice(-400)).toContain("disabled={saving}");
+  });
+
+  it("onKey Delete: abaikan saat saving, save() hanya bila deleteSelected true", () => {
+    const key = panelSrc.slice(panelSrc.indexOf("function onKey"), panelSrc.indexOf("async function saveTranslationEdits"));
+    expect(key).toContain("if (saving) return;");
+    expect(key).toContain("if (editorRef?.deleteSelected() || afterRef?.deleteSelected()) void save();");
+  });
+
+  it("kontrak tak tersentuh: onChange umum tetap lokal+dirty, guard syncFromPage utuh", () => {
+    expect(panelSrc).toMatch(/onChange=\{\(nb\) => \{\s*bubbles = nb;\s*dirty = true;[\s\S]*?\}\}/);
+    expect(panelSrc).toContain("if (!samePage || (!localBusy && JSON.stringify(incoming) !== JSON.stringify(bubbles))) {");
+  });
+});
+
+// Regresi: tool gambar manual lempar TypeError.
+// onStageUp mendestructure `const [[x0,y0],[x1,y1]] = pts`, tapi `pts`
+// hanya berisi 1 titik kalau user klik tanpa drag (onStageMove tidak pernah
+// jalan). Destructure 1-elemen = `undefined is not iterable` — semua tool
+// gambar mati karena satu kasus yang/common: klik cepat.
+describe("manual draw tools never throw (regression)", () => {
+  it("onStageUp guards pts length before destructuring", () => {
+    const up = src.slice(src.indexOf("function onStageUp"));
+    const destructureAt = up.indexOf("[[x0, y0], [x1, y1]] = pts");
+    expect(destructureAt, "baris destructure tidak ditemukan").toBeGreaterThan(-1);
+    const guardAt = up.indexOf("if (pts.length < 2)");
+    expect(guardAt, "guard pts.length hilang — destructure bisa throw").toBeGreaterThan(-1);
+    expect(guardAt, "guard harus SEBELUM destructure").toBeLessThan(destructureAt);
+  });
+
+  it("freeform juga punya guard panjang pts", () => {
+    const up = src.slice(src.indexOf("function onStageUp"));
+    const ff = up.slice(0, up.indexOf("if (pts.length < 2)"));
+    expect(ff).toContain("if (pts.length < 6)");
+  });
+
+  it("semua tool gambar punya batas minimum yang sama", () => {
+    expect(src).toContain("const MIN_BUBBLE_PX = 8;");
+    const up = src.slice(src.indexOf("function onStageUp"));
+    // Tidak ada literal yang的神色 bypass — semua lewat konstanta.
+    expect(up).toContain("if (w < MIN_BUBBLE_PX || h < MIN_BUBBLE_PX)");
+    expect(up).toContain("if (bbW < MIN_BUBBLE_PX || bbH < MIN_BUBBLE_PX)");
+  });
+
+  it("ekor: blok tail mendahului jalur gambar, tanpa guard e.target", () => {
+    const down = src.slice(src.indexOf("function onStageDown"));
+    // Blok tail tetap didahulukan agar ekor bisa ditempel pada bubble sendiri.
+    const tailAt = down.indexOf('if (tool === "tail")');
+    expect(tailAt, "blok tool tail tidak ditemukan").toBeGreaterThan(-1);
+    // fix-draw-tools A1: guard `e.target` dibuang — mengembalikannya berarti
+    // badan bubble jadi zona mati untuk menggambar.
+    expect(down, "guard e.target harus sudah dibuang").not.toContain("e.target !== stage");
+  });
+
+  it("ekor: titik melekat = titik yang diklik, bukan tengah bubble", () => {
+    const fn = src.slice(src.indexOf("export function setTailForSelected"));
+    expect(fn, "anchor harus pakai koordinat klik (px, py)").toContain("[px, py]");
+    expect(fn, "anchor jangan dipatok ke tengah bubble").not.toContain("b.w / 2");
+  });
+
+  it("ekor: ujung dijepit ke bounds gambar", () => {
+    const fn = src.slice(src.indexOf("export function setTailForSelected"));
+    expect(fn).toContain("Math.min(Math.max(tipOriginal[0], 0), imgW)");
+  });
+});
+
+// Overlay terjemahan: dua bug yang pernah bikin teks salah posisi + font salah
+// ukuran, keduanya dari salah baca API Konva. Dijaga secara statis karena
+// mount komponen butuh canvas sungguhan.
+//
+//  1. Posisi — `verticalAlign: "middle"` hanya bekerja bila TINGGI kotak
+//     dikunci eksplisit. `_getTextTop()` memakai getHeight(); selama height
+//     auto, getHeight() justru mengembalikan tinggi TEKS, jadi ruang bebas
+//     selalu 0 dan teks nempel di tepi atas bubble.
+//
+//  2. Font — loop auto-shrink memakai `txt.height()`, yaitu getter Node yang
+//     mengembalikan 0 selama height belum di-set. `0 > boxH` selalu false,
+//     loop tidak pernah jalan, ukuran font beku di nilai awal untuk semua
+//     bubble. Yang benar: `getHeight()`.
+describe("overlay terjemahan: posisi & ukuran font", () => {
+  const overlay = src.slice(src.indexOf("if (showTranslation) {"));
+
+  it("mengunci tinggi kotak supaya verticalAlign middle berfungsi", () => {
+    expect(
+      overlay,
+      "tanpa txt.height(boxH), teks menempel di atas bubble",
+    ).toMatch(/txt\.height\(boxH\)/);
+    expect(overlay).toMatch(/verticalAlign\("middle"\)/);
+  });
+
+  it("mengukur lebar lewat getTextWidth(), bukan getter Node", () => {
+    // Pengukuran tinggal di modul bersama `textMeasure.ts` (dipakai kanvas DAN
+    // panel yang menyimpan layout) — bukan lagi di dalam komponen.
+    expect(
+      measureSrc,
+      "pengukuran lebar harus lewat API Text (getTextWidth), bukan properti Node",
+    ).toContain("getTextWidth()");
+    expect(
+      measureSrc,
+      "jangan kembali ke txt.height() sebagai ukuran tinggi blok",
+    ).not.toMatch(/txt\.height\(\)\s*[<>]/);
+  });
+
+  it("ukuran font dari computeTextLayout, bukan rumus lokal", () => {
+    expect(overlay).toContain("computeTextLayout(");
+    expect(overlay).toContain('wrap: "none"');
+    expect(overlay, "font size hard-coded 18 = bug lama").not.toMatch(/fontSize:\s*18\b/);
+  });
+
+  it("font overlay = font export (font sistem), bukan token UI", () => {
+    // Grup 4 pendekatan "pakai font sistem": `ab_glyph` di Rust hanya bisa
+    // TTF/OTF dan repo tak membundel Inter dalam bentuk itu. Overlay sengaja
+    // TIDAK lagi mengikuti --font-sans, supaya metriknya sama dengan export.
+    expect(measureSrc).toContain("overlayFontFamily()");
+    expect(measureSrc).toContain("OVERLAY_FONT_STACK");
+    expect(measureSrc, "kembali ke token UI = paritas font hilang").not.toContain(
+      'getPropertyValue("--font-sans")',
+    );
+  });
+
+  it("redraw ulang setelah webfont siap", () => {
+    // Canvas tidak digambar ulang otomatis saat font selesai dimuat.
+    expect(
+      src,
+      "tanpa gates document.fonts, teks pertama menempel di font fallback",
+    ).toMatch(/document\.fonts\?\.ready/);
+    const gate = src.slice(src.indexOf("document.fonts?.ready"));
+    expect(gate.slice(0, 200)).toContain("redraw();");
+  });
+});
+
+describe("bubble resize repair (R1-R3)", () => {
+  it("R2: garis polygon relatif ke origin group (bukan absolut)", () => {
+    expect(src).toContain("points: b.shape.flatMap(([px, py]) => [(px - b.x) * s, (py - b.y) * s])");
+    expect(src).not.toContain("points: b.shape.flatMap(([px, py]) => [px * s, py * s])");
+  });
+
+  it("R1: dragmove handle update Rect/Ellipse + posisi handle secara live", () => {
+    const dm = src.slice(src.indexOf('handle.on("dragmove"'), src.indexOf('handle.on("dragmove"') + 1200);
+    expect(dm).toContain('group.findOne("Rect")');
+    expect(dm).toContain("setAttrs({ width:");
+    expect(dm).toContain("handle.position({");
+    expect(dm).toContain("overlayLayer?.batchDraw()");
+    expect(dm).not.toContain("redraw()");
+  });
+
+  it("R1: dragmove vertex pakai state lokal + update garis live", () => {
+    expect(src).toContain("let curShape:");
+    expect(src).toContain("syncVertexNodes()");
+    expect(src).toContain('poly?.setAttrs({ points: curShape.flatMap');
+  });
+
+  it("R3: dragend group translasi shape sebesar delta", () => {
+    const de = src.slice(src.indexOf('group.on("dragend"'), src.indexOf('group.on("dragend"') + 700);
+    expect(de).toContain("const dx = nx - b.x;");
+    expect(de).toContain("const dy = ny - b.y;");
+    expect(de).toContain("[px + dx, py + dy]");
+  });
+});
+
+describe("bubble resize repair (R6 drag-lock)", () => {
+  it("handle besar + terlihat (radius 11, stroke putih)", () => {
+    expect(src).toContain("radius: 11,");
+    expect(src).toContain('handle.on("mouseenter"');
+    expect(src).toContain('handle.on("mousedown touchstart"');
+    expect(src).toContain("group.draggable(false)");
+    expect(src).toContain('handle.on("click tap"');
+    expect(src).toContain('handle.on("mouseup"');
+  });
+
+  it("vertex besar + terlihat (radius 10, stroke 2)", () => {
+    expect(src).toContain("radius: 10,");
+    expect(src).toContain("strokeWidth: 2,");
+    expect(src).toContain('v.on("mouseenter"');
+    expect(src).toContain('v.on("mousedown touchstart"');
+    expect(src).toContain('v.on("click tap"');
+    expect(src).toContain('v.on("mouseup"');
+  });
+
+  it("dragmove tulis pending lokal, state sekali di dragend", () => {
+    const dm = src.slice(src.indexOf('handle.on("dragmove"'), src.indexOf('handle.on("dragmove"') + 900);
+    expect(dm).toContain("pendW");
+    expect(dm).not.toContain("bubbles[i] = ");
+    const de = src.slice(src.indexOf('handle.on("dragend"'), src.indexOf('handle.on("dragend"') + 300);
+    expect(de).toContain("commit(i, clampBubble(");
+  });
+
+  it("klik ulang bubble sama = no-op tanpa redraw", () => {
+    expect(src).toContain("if (selectedIdx === i) return;");
+  });
+});

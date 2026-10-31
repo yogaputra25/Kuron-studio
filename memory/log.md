@@ -226,3 +226,10 @@ menyentuh baris lama).
 - Masalah (screenshot user): bubble berdurasi/ekor -> chord ekor sempit memaksa font mini + pecah per huruf ("H E L P U S ! !" vertikal di ekor).
 - Aturan: badan = lajur menyambung sekitar chord terlebar dgn lebar >= 0.35x terlebar (sampling 2px); blok teks tengah di badan saja. Konstanta `BODY_MIN_FRAC` dipin kontrak dua sisi.
 - Bukti: TS test ekor, Rust tail-test (span hi<=152, font>min, pita tak masuk ekor, no-overflow); `pnpm test` 448, `check` 0, `cargo test` 153 lib + semua suite, clippy bersih.
+
+## 2026-10-31 - frontend-domain-move: 15/15, 10 commit hijau + docs
+
+- Pure move 77 entri `src/lib/` -> 9 domain (contracts/app/ui/library/editor+editor-text/detection/provider/export/previews). Nol rename/logika; import relatif murni (tanpa alias).
+- 10 commit hijau berurutan (df339ea..90c8cb1 + dff18fb docs): tiap folder = git mv + fix import + gate. Deviasi tercatat: test-assertion path string ikut diupdate (mobile-gating, panel-tablet, previewGrid, spacing, lov-dropdown); translate-cancel sementara `../ReviewGrid` lalu final `../export/`; panel-tablet.test ketinggalan di 2.5, menyusul commit sendiri.
+- Gates: pnpm test 448, svelte-check 0, cargo test 153 lib + semua suite, clippy bersih. Root lib/ = 9 folder persis; ARCHITECTURE.md §3 sinkron tree.
+- Lanjut: /opsx:archive frontend-domain-move (FE-1 selesai; FE-2..FE-11 + XC-2 menunggu).
