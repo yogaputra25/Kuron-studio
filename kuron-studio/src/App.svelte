@@ -1,40 +1,33 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { tick } from "svelte";
-  import { fly, scale } from "svelte/transition";
   import { open } from "@tauri-apps/plugin-dialog";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
 
-  import iconUrl from "../icon.svg";
   import { isMobile } from "./lib/app/device";
   import { api } from "./lib/contracts/api";
-  import UpdateButton from "./lib/app/UpdateButton.svelte";
-  import BatchPanel from "./lib/provider/BatchPanel.svelte";
-  import EditorPanel from "./lib/editor/EditorPanel.svelte";
-  import GlossaryPanel from "./lib/provider/GlossaryPanel.svelte";
-  import ProviderSettings from "./lib/provider/ProviderSettings.svelte";
-  import ReviewGrid from "./lib/export/ReviewGrid.svelte";
+  import AlertBanners from "./lib/app/shell/AlertBanners.svelte";
+  import AppHeader from "./lib/app/shell/AppHeader.svelte";
+  import OverlayHost from "./lib/app/shell/OverlayHost.svelte";
   import PageGrid from "./lib/library/PageGrid.svelte";
   import PageList from "./lib/library/PageList.svelte";
-  import { lang, t, theme } from "./lib/app/i18n";
-  import type { Lang, Theme } from "./lib/app/i18n";
+  import { t, theme } from "./lib/app/i18n";
   import type { BatchOpts, Page, Project, ReadingDirection } from "./lib/contracts/types";
   import { ARCHIVE_EXTS, IMAGE_EXTS, PDF_EXTS } from "./lib/contracts/types";
-  import { allPages, childrenOf, folderPath, groupKanban, hasNesting, projectStats, subtreePages, subtreeStats } from "./lib/library/library";
+  import { allPages, childrenOf, folderPath, groupKanban, hasNesting, projectStats, subtreePages } from "./lib/library/library";
+  import type { KanbanFilter, PageView, SortKey } from "./lib/library/library";
   import Button from "./lib/ui/Button.svelte";
   import { fileName, sortPagesByBubbles, sortPagesByName, sortPagesByStatus } from "./lib/library/status";
-  import FolderChip from "./lib/library/FolderChip.svelte";
-  import MoveDialog from "./lib/library/MoveDialog.svelte";
   import Onboarding from "./lib/app/Onboarding.svelte";
-  import Snackbar from "./lib/ui/Snackbar.svelte";
-  import DetectProgress from "./lib/detection/DetectProgress.svelte";
-  import { createDetectRun } from "./lib/detection/detectRun.svelte.ts";
-  import DiagnosticsPanel from "./lib/app/DiagnosticsPanel.svelte";
+  import FolderBar from "./lib/app/shell/FolderBar.svelte";
+  import KanbanBar from "./lib/app/shell/KanbanBar.svelte";
+  import ProjectCard from "./lib/app/shell/ProjectCard.svelte";
   import { onInvoke } from "./lib/contracts/log";
   import { createProjectStore } from "./lib/library/projectStore.svelte.ts";
 
   import { createSelection, orderIds } from "./lib/library/selection.svelte.ts";
   import { createThumbnailQueue } from "./lib/previews/thumbnailQueue.svelte.ts";
+  import { createDetectRun } from "./lib/detection/detectRun.svelte.ts";
 
   const projectStore = createProjectStore();
   const projects = $derived(projectStore.projects);
@@ -42,15 +35,12 @@
   let name = $state("");
   /** false sampai daftar project pertama selesai dimuat (cegah flash onboarding). */
   let folderId = $state<string | "all">("all");
-  let kanban = $state<"all" | "todo" | "doing" | "done" | "failed">("all");
+  let kanban = $state<KanbanFilter>("all");
   let folderName = $state("");
   /** Seleksi multi-halaman: state milik modul, App hanya merangkai. */
   const selection = createSelection();
   let showMove = $state(false);
-  let showProjMenu = $state(false);
-  // detect-ux-pack 3.1: satu tombol Import + menu pola switcher.
-  let showImportMenu = $state(false);
-  let projQuery = $state("");
+  // detect-ux-pack 3.1: satu tombol Import + menu pola switcher (state di AppHeader).
   let fullUrls = $state<Record<string, string>>({});
   /** Antrean thumbnail: state milik modul, App hanya merangkai. */
   const queue = createThumbnailQueue();
@@ -69,8 +59,8 @@
       return "grid";
     }
   }
-  let pageView = $state<"grid" | "list">(loadPageView());
-  let scrollByView: Record<"grid" | "list", number> = { grid: 0, list: 0 };
+  let pageView = $state<PageView>(loadPageView());
+  let scrollByView: Record<PageView, number> = { grid: 0, list: 0 };
 
   /** Ganti mode: simpan scroll lama, pulihkan scroll mode tujuan. */
   async function setPageView(v: "grid" | "list") {
@@ -97,7 +87,6 @@
   }
   let openError = $state("");
   // grid-sort D1: satu state sortir untuk Grid + List.
-  type SortKey = "name" | "status" | "bubbles";
   let sortKey = $state<SortKey>("name");
   let sortDir = $state<1 | -1>(1);
 
@@ -150,13 +139,6 @@
     kanban === "all" ? [...kanbanGroups.todo, ...kanbanGroups.doing, ...kanbanGroups.done, ...kanbanGroups.failed] : kanbanGroups[kanban],
   );
   const selectedPage = $derived(allPages(current ?? { id: "", name: "", folders: [] } as Project).find((p) => p.id === selectedId) ?? null);
-  /** Halaman yang preview-nya gagal → jumlah tombol "Bersihkan". */
-  const brokenCount = $derived(Object.keys(queue.broken).length);
-  const filteredProjects = $derived(
-    projQuery.trim()
-      ? projects.filter((p) => p.name.toLowerCase().includes(projQuery.trim().toLowerCase()))
-      : projects,
-  );
 
   async function refresh() {
     try {
@@ -173,9 +155,6 @@
   $effect(() => {
     document.documentElement.dataset.theme = $theme;
   });
-  const cycleLang = () => {
-    lang.update((v: Lang) => (v === "id" ? "en" : v === "en" ? "zh" : "id"));
-  };
 
   // Antrean thumbnail milik modul previews/thumbnailQueue (FE-2).
   function loadThumbs(projectId: string) {
@@ -273,12 +252,6 @@
     } finally {
       busy = false;
     }
-  }
-
-  function pickProject(id: string) {
-    showProjMenu = false;
-    projQuery = "";
-    openProject(id);
   }
 
   async function doImport(paths: string[]) {
@@ -434,6 +407,26 @@
     detectRun.closeOverlay();
   }
 
+  /** Batch selesai: refresh project + tutup. Dipindah utuh dari markup. */
+  function handleBatchDone() {
+    const cur = projectStore.current;
+    if (cur) void refreshProject(cur.id);
+    showBatch = false;
+  }
+
+  /** Pindah folder selesai: refresh project + buang seleksi/thumb basi. */
+  async function handleMoved(res: { moved: number; skipped: number }, destName: string, cid: string) {
+    const updated = await api.getProject(cid);
+    projectStore.replaceProject(cid, updated);
+    const live = new Set(allPages(updated).map((pg) => pg.id));
+    queue.pruneThumbs(live);
+    for (const id of Object.keys(fullUrls)) if (!live.has(id)) delete fullUrls[id];
+    selection.reset();
+    fullUrls = { ...fullUrls };
+    info = $t("moveDone").replace("{n}", String(res.moved)).replace("{d}", destName)
+      + (res.skipped > 0 ? ` (${$t("skippedCount").replace("{n}", String(res.skipped))})` : "");
+  }
+
   async function importFolder() {
     const dir = await open({ directory: true });
     if (typeof dir === "string") await doImport([dir]);
@@ -485,221 +478,37 @@
 
 <main class="flex min-h-screen flex-col bg-bg text-ink" data-theme={$theme}>
   {#if projectStore.loaded && projects.length > 0}
-  <header class="sticky top-0 z-30 border-b border-line bg-surface/80 backdrop-blur-md">
-    <div class="flex items-center gap-2 px-4 pt-2">
-      <img src={iconUrl} alt="Kuron Studio" class="size-6 shrink-0" />
-      <h1 class="font-display shrink-0 text-base font-semibold tracking-tight">Kuron Studio</h1>
-      <p class="hidden text-[11px] text-ink-3 sm:block">{$t("appTagline")}</p>
-    </div>
-    <div class="flex flex-wrap items-center gap-2 px-4 py-2">
-    {#if projects.length > 0}
-      {@const cur = current}
-      {@const curSt = cur ? projectStats(cur) : null}
-      <div
-        class="relative"
-        onfocusout={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) showProjMenu = false; }}
-      >
-        <button
-          class="flex h-8 max-w-64 items-center gap-2 rounded-md border border-line bg-surface-2 px-2.5 text-sm text-ink
-                 outline-none transition-colors hover:border-line-strong focus:border-accent"
-          aria-haspopup="listbox"
-          aria-expanded={showProjMenu}
-          aria-label={$t("selectProject")}
-          onclick={() => (showProjMenu = !showProjMenu)}
-          onkeydown={(e) => { if (e.key === "Escape") showProjMenu = false; }}
-        >
-          <span class="min-w-0 flex-1 truncate text-left">{cur?.name ?? "—"}</span>
-          {#if curSt}
-            <span class="tnum shrink-0 text-[11px] text-ink-3">{curSt.done}/{curSt.total}</span>
-            <span class="h-1 w-12 shrink-0 overflow-hidden rounded bg-raised" aria-hidden="true">
-              <span class="block h-full rounded bg-accent" style="width: {Math.round(curSt.progress * 100)}%"></span>
-            </span>
-          {/if}
-          <span class="shrink-0 text-[10px] text-ink-3" aria-hidden="true">{showProjMenu ? "▴" : "▾"}</span>
-        </button>
-        {#if showProjMenu}
-          <div
-            class="absolute left-0 top-full z-50 mt-1 w-72 overflow-hidden rounded-md border border-line-strong bg-surface-2 py-1"
-            transition:scale={{ duration: 140, start: 0.96 }}
-            style="transform-origin: top left;"
-            role="listbox"
-            aria-label={$t("projectList")}
-          >
-            <div class="px-1 pb-1">
-              <input
-                class="h-8 w-full rounded border border-line bg-surface px-2 text-xs text-ink
-                       placeholder:text-ink-3 outline-none focus:border-accent"
-                placeholder={$t("searchProject")}
-                aria-label={$t("searchProject")}
-                bind:value={projQuery}
-                onkeydown={(e) => { if (e.key === "Escape") showProjMenu = false; }}
-              />
-            </div>
-            <div class="max-h-64 overflow-y-auto py-0.5">
-              {#each filteredProjects as p (p.id)}
-                {@const st = projectStats(p)}
-                <button
-                  class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-raised {p.id === projectStore.currentId ? 'bg-accent/10' : ''}"
-                  role="option"
-                  aria-selected={p.id === projectStore.currentId}
-                  onclick={() => pickProject(p.id)}
-                  title="{p.name} · {st.done}/{st.total}"
-                >
-                  <span class="min-w-0 flex-1 truncate {p.id === projectStore.currentId ? 'font-semibold' : ''}">{p.name}</span>
-                  <span class="tnum shrink-0 text-[11px] {st.failed > 0 ? 'text-danger' : 'text-ink-3'}">{st.done}/{st.total}</span>
-                </button>
-              {:else}
-                <p class="px-2.5 py-2 text-xs text-ink-3">{$t("noProjectMatch")}</p>
-              {/each}
-            </div>
-          </div>
-        {/if}
-      </div>
-      <span class="tnum text-xs text-ink-3">{curSt ? curSt.total : 0} {$t("pages")}</span>
-    {/if}
-
-    <div class="ml-auto flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto sm:flex-none sm:flex-wrap sm:overflow-visible">
-      <Button variant="ghost" size="sm" class="font-mono" onclick={() => (readingDir = readingDir === "rtl" ? "ltr" : "rtl")} title="Urutan baca bubble">
-        {readingDir === "rtl" ? "RTL→" : "←LTR"}
-      </Button>
-      <Button variant="ghost" size="icon" onclick={() => theme.update((v: Theme) => (v === "dark" ? "light" : "dark"))} title="Tema gelap/terang" aria-label="Tema gelap/terang">
-        {$theme === "dark" ? "◐" : "◑"}
-      </Button>
-      <Button variant="ghost" size="icon" class="font-mono" onclick={cycleLang} title="Bahasa / Language / 语言" aria-label="Ganti bahasa">
-        {$lang.toUpperCase()}
-      </Button>
-
-      {#if !isMobile}<div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>{/if}
-
-      <Button variant="ghost" size="sm" onclick={() => (showProviders = true)}>{$t("providers")}</Button>
-      {#if !isMobile}<UpdateButton />{/if}
-      <Button
-        variant="ghost"
-        size="sm"
-        onclick={() => (showBatch = true)}
-        disabled={!current || !batchOpts?.providerId}
-        title={batchOpts?.providerId ? "Batch translate" : "Buka satu halaman di editor + pilih provider dulu"}
-      >{$t("batch")}</Button>
-      <Button variant="ghost" size="sm" onclick={() => (showGlossary = true)}>{$t("glossary")}</Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        onclick={() => (showReview = true)}
-        disabled={!current}
-      >{$t("resultsExport")}</Button>
-
-      <div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>
-
-      <Button
-        variant="primary"
-        size="sm"
-        onclick={detectAll}
-        disabled={!current || busy || scopedPages.length === 0}
-      >{$t("detectAll")}</Button>
-      <div
-        class="relative"
-        onfocusout={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) showImportMenu = false; }}
-      >
-        <Button
-          variant="default"
-          size="sm"
-          onclick={() => (showImportMenu = !showImportMenu)}
-          onkeydown={(e) => { if (e.key === "Escape") showImportMenu = false; }}
-          disabled={!current || busy}
-          aria-haspopup="menu"
-          aria-expanded={showImportMenu}
-        >⬆ {$t("importAction")} ▾</Button>
-        {#if showImportMenu}
-          <div
-            class="absolute top-full z-50 mt-1 w-44 overflow-hidden rounded-md border border-line-strong bg-surface-2 py-1"
-            role="menu"
-            aria-label={$t("importAction")}
-          >
-            {#if !isMobile}
-              <button
-                class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-raised"
-                role="menuitem"
-                onclick={() => { showImportMenu = false; void importFolder(); }}
-                onkeydown={(e) => {
-                  if (e.key === "Escape") showImportMenu = false;
-                  if (e.key === "ArrowDown") (e.currentTarget.nextElementSibling as HTMLElement | null)?.focus();
-                }}
-              >📁 {$t("importFolder")}</button>
-            {/if}
-            <button
-              class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-raised"
-              role="menuitem"
-              onclick={() => { showImportMenu = false; void importFiles(); }}
-              onkeydown={(e) => {
-                if (e.key === "Escape") showImportMenu = false;
-                // iOS: folder picker tidak ada (FolderPickerNotImplemented) —
-                // opsi folder disembunyikan total, bukan disabled.
-                if (e.key === "ArrowUp") (e.currentTarget.previousElementSibling as HTMLElement | null)?.focus();
-              }}
-            >🖼️ {$t("importFiles")}</button>
-          </div>
-        {/if}
-      </div>
-
-      {#if !isMobile}<div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>{/if}
-
-      {#if !isMobile}<Button
-        variant="default"
-        size="sm"
-        onclick={cleanPages}
-        disabled={!current || busy || brokenCount === 0}
-        title={brokenCount > 0 ? `${brokenCount} halaman preview gagal` : $t("nothingToClean")}
-      >
-        {#if brokenCount > 0}<span class="tnum text-danger">{brokenCount}</span>{/if}
-        {$t("cleanImages")}
-      </Button>{/if}
-      <Button
-        variant="danger"
-        size="sm"
-        onclick={deleteProject}
-        disabled={!current || busy}
-        title={$t("confirmDeleteProject")}
-      >{$t("deleteProject")}</Button>
-
-      {#if !isMobile}<div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>{/if}
-
-      {#if !isMobile}<Button
-        variant={lastInvokeError ? "danger" : "ghost"}
-        size="icon"
-        onclick={() => (showDiagnostics = true)}
-        title={lastInvokeError
-          ? `${lastInvokeError.command}: ${lastInvokeError.error}`
-          : "Diagnostics & log"}
-        aria-label="Diagnostics"
-      >⚙</Button>{/if}
-    </div>
-    </div>
-  </header>
+    <AppHeader
+      {current}
+      {projects}
+      {busy}
+      {readingDir}
+      {batchOpts}
+      {lastInvokeError}
+      brokenCount={queue.failed}
+      canDetect={!!current && scopedPages.length > 0}
+      onToggleReadingDir={() => (readingDir = readingDir === "rtl" ? "ltr" : "rtl")}
+      onProviders={() => (showProviders = true)}
+      onBatch={() => (showBatch = true)}
+      onGlossary={() => (showGlossary = true)}
+      onResults={() => (showReview = true)}
+      onDetect={detectAll}
+      onImportFolder={() => void importFolder()}
+      onImportFiles={() => void importFiles()}
+      onClean={() => void cleanPages()}
+      onDelete={() => void deleteProject()}
+      onOpenDiagnostics={() => (showDiagnostics = true)}
+      onPickProject={(id) => openProject(id)}
+    />
   {/if}
 
-  {#if lastInvokeError}
-    <p
-      role="alert"
-      class="flex items-center gap-2 border-b border-danger-soft bg-danger-soft px-5 py-1.5 text-xs text-danger"
-    >
-      <span class="font-mono">{lastInvokeError.command}</span>
-      <span class="min-w-0 flex-1 truncate" title={lastInvokeError.error}>
-        {lastInvokeError.error}
-      </span>
-      <Button variant="default" size="sm" onclick={() => (showDiagnostics = true)}>
-        Detail
-      </Button>
-    </p>
-  {/if}
-
-  {#if error}
-    <p role="alert" class="border-b border-warn-soft bg-warn-soft px-5 py-2 text-sm text-warn">{error}</p>
-  {/if}
-  {#if info}
-    {#key info}
-      <Snackbar message={info} onClose={() => (info = "")} />
-    {/key}
-  {/if}
+  <AlertBanners
+    {lastInvokeError}
+    {error}
+    {info}
+    onOpenDiagnostics={() => (showDiagnostics = true)}
+    onClearInfo={() => (info = "")}
+  />
 
   {#if !projectStore.loaded}
     <div class="flex flex-1 items-center justify-center p-10" aria-hidden="true">
@@ -726,27 +535,13 @@
       <div class="hidden w-px self-stretch bg-line sm:block" aria-hidden="true"></div>
       <div class="flex min-w-0 flex-1 items-stretch gap-1.5 overflow-x-auto">
         {#each projects as p (p.id)}
-          {@const st = projectStats(p)}
-          {@const pct = Math.round(st.progress * 100)}
-        <div class="relative w-36 shrink-0 self-center">
-          <button
-            class="block w-full overflow-hidden rounded-md border px-2.5 pt-1.5 pb-2.5 text-left transition-colors {p.id === projectStore.currentId ? 'border-accent bg-accent/10' : 'border-line bg-surface hover:border-accent/60'}"
-            onclick={() => openProject(p.id)}
-            title="{p.name} · {st.done}/{st.total} · {st.failed} {$t('kanbanFailed')}"
-          >
-            <div class="truncate pr-5 text-xs font-semibold">{p.name}</div>
-            <div class="tnum mt-0.5 text-[10px] {st.failed > 0 ? 'text-danger' : 'text-ink-3'}">{st.done}/{st.total} · {pct}%{st.failed > 0 ? ` · ${st.failed}` : ""}</div>
-            <div class="absolute inset-x-0 bottom-0 h-0.5 bg-raised">
-              <div class="h-full bg-accent" style="width: {pct}%"></div>
-            </div>
-          </button>
-          <button
-            class="absolute top-1 right-1 rounded bg-surface-2/90 px-1 py-0.5 text-[11px] leading-none text-ink-2 opacity-70 backdrop-blur-sm transition-opacity hover:bg-hover hover:text-ink hover:opacity-100 focus-visible:opacity-100"
-            title={$t("resultsExport")}
-            aria-label="{$t('resultsExport')}: {p.name}"
-            onclick={(e) => { e.stopPropagation(); void openResults(p.id); }}
-          >⧉</button>
-        </div>
+          <ProjectCard
+            project={p}
+            selected={p.id === projectStore.currentId}
+            variant="card"
+            onOpen={(id) => openProject(id)}
+            onResults={(id) => void openResults(id)}
+          />
         {/each}
       </div>
       <div class="hidden w-px self-stretch bg-line sm:block" aria-hidden="true"></div>
@@ -761,138 +556,42 @@
         <Button type="submit" variant="default" size="sm" disabled={busy || !name.trim()}>{$t("create")}</Button>
       </form>
     </section>
-    <section class="flex flex-wrap items-center gap-1.5 border-b border-line px-5 py-2" aria-label="folders">
-      <button
-        class="rounded-md border px-2.5 py-1 text-xs {folderId === 'all' ? 'border-accent bg-accent/10 font-semibold' : 'border-line hover:border-accent/60'}"
-        onclick={() => (folderId = "all")}
-      >{$t("allFolders")} ({allPages(current).length})</button>
-      {#if nested}
-        {#each crumb as f, i (f.id)}
-          <span class="text-ink-3" aria-hidden="true">›</span>
-          <FolderChip
-            projectId={current.id}
-            folders={current.folders}
-            folder={f}
-            stats={subtreeStats(current, f.id)}
-            active={i === crumb.length - 1}
-            canDelete={current.folders.length > 1}
-            {busy}
-            onSelect={(id) => (folderId = id)}
-            onDelete={(id) => void deleteFolder(id)}
-            onRenamed={() => projectStore.currentId && void refreshProject(projectStore.currentId)}
-            onError={(msg) => (error = msg)}
-          />
-        {/each}
-        {#if childFolders.length > 0}
-          <span class="mx-1 h-4 w-px bg-line" aria-hidden="true"></span>
-          {#each childFolders as f (f.id)}
-            <FolderChip
-              projectId={current.id}
-              folders={current.folders}
-              folder={f}
-              stats={subtreeStats(current, f.id)}
-              active={false}
-              dashed
-              canDelete={false}
-              {busy}
-              onSelect={(id) => (folderId = id)}
-              onDelete={(id) => void deleteFolder(id)}
-              onRenamed={() => projectStore.currentId && void refreshProject(projectStore.currentId)}
-              onError={(msg) => (error = msg)}
-            />
-          {/each}
-        {/if}
-      {:else}
-        {#each current.folders as f (f.id)}
-          <FolderChip
-            projectId={current.id}
-            folders={current.folders}
-            folder={f}
-            stats={subtreeStats(current, f.id)}
-            active={folderId === f.id}
-            canDelete={current.folders.length > 1}
-            {busy}
-            onSelect={(id) => (folderId = id)}
-            onDelete={(id) => void deleteFolder(id)}
-            onRenamed={() => projectStore.currentId && void refreshProject(projectStore.currentId)}
-            onError={(msg) => (error = msg)}
-          />
-        {/each}
-      {/if}
-      <form class="ml-1 flex gap-1" onsubmit={(e) => { e.preventDefault(); void createFolder(); }}>
-        <input
-          class="h-7 w-32 rounded-md border border-line bg-surface-2 px-2 text-xs outline-none focus:border-accent"
-          placeholder={$t("folderName")}
-          aria-label={$t("folderName")}
-          bind:value={folderName}
-        />
-        <Button type="submit" variant="default" size="sm" disabled={busy || !folderName.trim()} title={folderId === "all" ? $t("newFolder") : `${$t("newFolder")} → ${currentFolder?.name ?? ""}`}>{$t("newFolder")}</Button>
-      </form>
-    </section>
-    <section class="flex flex-wrap items-center gap-1.5 px-5 pt-3" aria-label="kanban">
-      {#each [["all", allPages(current).length, "bg-ink-3"], ["todo", kanbanGroups.todo.length, "bg-warn"], ["doing", kanbanGroups.doing.length, "bg-info"], ["done", kanbanGroups.done.length, "bg-success"], ["failed", kanbanGroups.failed.length, "bg-danger"]] as [key, n, dot]}
-        <button
-          class="tnum flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs {kanban === key ? 'border-accent bg-accent/10 font-semibold' : 'border-line hover:border-accent/60'}"
-          onclick={() => (kanban = key as typeof kanban)}
-          aria-pressed={kanban === key}
-        >
-          <span class="h-1.5 w-1.5 shrink-0 rounded-full {dot}" aria-hidden="true"></span>
-          {key === "all" ? $t("allFolders") : $t(key === "todo" ? "kanbanTodo" : key === "doing" ? "kanbanDoing" : key === "done" ? "kanbanDone" : "kanbanFailed")} · {n}
-        </button>
-      {/each}
-      {#if !selection.selectMode}
-        <Button
-          variant="default"
-          size="sm"
-          onclick={() => selection.setSelectMode(true)}
-          disabled={busy || visiblePages.length === 0}
-        >{$t("selectMode")}</Button>
-      {:else}
-        <span class="mx-1 h-4 w-px bg-line" aria-hidden="true"></span>
-        <Button
-          variant="default"
-          size="sm"
-          onclick={() => selection.selectAll(visiblePages.map((p) => p.id))}
-          disabled={busy || visiblePages.length === 0 || visiblePages.every((p) => selection.selectedIds.includes(p.id))}
-        >{$t("selectAll")} ({visiblePages.length})</Button>
-        {#if selection.selectedIds.length === 0}
-          <Button variant="ghost" size="sm" onclick={() => selection.setSelectMode(false)}>{$t("close")}</Button>
-        {/if}
-      {/if}
-      <div class="ml-auto flex overflow-hidden rounded-md border border-line" role="tablist" aria-label="{$t('gridView')} / {$t('listView')}">
-        <button
-          class="h-7 px-3 text-xs font-medium transition-colors {pageView === 'grid' ? 'bg-accent text-accent-fg' : 'bg-surface-2 text-ink-2 hover:bg-hover hover:text-ink'}"
-          role="tab"
-          aria-selected={pageView === "grid"}
-          title="{$t('gridView')} (G)"
-          onclick={() => void setPageView("grid")}
-        >⬢ {$t("gridView")}</button>
-        <button
-          class="h-7 border-l border-line px-3 text-xs font-medium transition-colors {pageView === 'list' ? 'bg-accent text-accent-fg' : 'bg-surface-2 text-ink-2 hover:bg-hover hover:text-ink'}"
-          role="tab"
-          aria-selected={pageView === "list"}
-          title="{$t('listView')} (L)"
-          onclick={() => void setPageView("list")}
-        >☰ {$t("listView")}</button>
-      </div>
-      <div class="flex overflow-hidden rounded-md border border-line" role="group" aria-label={$t("sortBy")}>
-        {#each [["name", $t("sortName")], ["status", $t("sortStatus")], ["bubbles", $t("sortBubbles")]] as [key, label]}
-          <button
-            class="h-7 px-2.5 text-xs font-medium transition-colors {sortKey === key ? 'bg-accent text-accent-fg' : 'bg-surface-2 text-ink-2 hover:bg-hover hover:text-ink'} {key !== 'name' ? 'border-l border-line' : ''}"
-            aria-pressed={sortKey === key}
-          title={label}
-            onclick={() => setSortKey(key as SortKey)}
-          >{label}{sortKey === key ? (sortDir === 1 ? " ▲" : " ▼") : ""}</button>
-        {/each}
-      </div>
-    </section>
-    {#if selection.selectedIds.length > 0}
-      <div class="tnum mx-5 mt-3 flex items-center gap-2 rounded-md border border-line bg-surface-2 px-3 py-1.5 text-xs" role="status" transition:fly={{ y: -8, duration: 180 }}>
-        <span class="font-semibold">{$t("selectedCount").replace("{n}", String(selection.selectedIds.length))}</span>
-        <Button variant="default" size="sm" onclick={() => (showMove = true)} disabled={busy}>{$t("moveTo")}</Button>
-        <Button variant="ghost" size="sm" onclick={() => selection.reset()}>{$t("clearSelection")}</Button>
-      </div>
-    {/if}
+    <FolderBar
+      {current}
+      {nested}
+      {crumb}
+      {childFolders}
+      {folderId}
+      currentFolderName={currentFolder?.name ?? ""}
+      {folderName}
+      {busy}
+      onSelectFolder={(id) => (folderId = id)}
+      onDeleteFolder={(id) => void deleteFolder(id)}
+      onRenamed={() => projectStore.currentId && void refreshProject(projectStore.currentId)}
+      onError={(msg) => (error = msg)}
+      onFolderName={(v) => (folderName = v)}
+      onCreateFolder={() => void createFolder()}
+    />
+    <KanbanBar
+      {kanban}
+      counts={{
+        all: allPages(current).length,
+        todo: kanbanGroups.todo.length,
+        doing: kanbanGroups.doing.length,
+        done: kanbanGroups.done.length,
+        failed: kanbanGroups.failed.length,
+      }}
+      {sortKey}
+      {sortDir}
+      {pageView}
+      {visiblePages}
+      {selection}
+      {busy}
+      onKanban={(k) => (kanban = k)}
+      onSortKey={(k) => setSortKey(k)}
+      onSetPageView={(v) => void setPageView(v)}
+      onMoveRequest={() => (showMove = true)}
+    />
     {#if queue.total > 0 && queue.done < queue.total}
       <p role="status" class="tnum border-b border-line bg-surface-2 px-5 py-1.5 text-xs text-ink-2">
         {$t("loadingPreviews").replace("{done}", String(queue.done)).replace("{total}", String(queue.total))}
@@ -939,87 +638,42 @@
     {/if}
   {/if}
 
-  {#if selectedPage && projectStore.currentId}
-    <div class="fixed inset-0 z-50 flex flex-col bg-bg">
-      {#key selectedPage.id}
-        <EditorPanel
-          projectId={projectStore.currentId}
-          page={selectedPage}
-        fullImageUrl={fullUrls[selectedPage.id] ?? queue.thumbs[selectedPage.id] ?? ""}
-        fallbackUrl={queue.thumbs[selectedPage.id] ?? ""}
-          openError={openError}
-          {readingDir}
-          onClose={closeEditor}
-          onSaved={onSaved}
-          onBatchOpts={(o) => (batchOpts = { providerId: o.providerId, ...o.opts, readingDirection: readingDir }) }
-        />
-      {/key}
-    </div>
-  {/if}
-  {#if detectRun.state && !detectRun.hidden}
-    <DetectProgress state={detectRun.state} onClose={closeDetectOverlay} />
-  {/if}
+  <OverlayHost
+    {selection}
+    {queue}
+    {detectRun}
+    {selectedPage}
+    {current}
+    currentId={projectStore.currentId}
+    {fullUrls}
+    {openError}
+    {readingDir}
+    {showBatch}
+    {batchOpts}
+    {showGlossary}
+    {showMove}
+    {folderId}
+    {busy}
+    {showReview}
+    {showProviders}
+    {showDiagnostics}
+    scopedPages={visiblePages}
+    onCloseEditor={closeEditor}
+    {onSaved}
+    onBatchOpts={(o) => (batchOpts = { providerId: o.providerId, ...o.opts, readingDirection: readingDir }) }
+    onDetectClose={closeDetectOverlay}
+    onBatchDone={handleBatchDone}
+    onBatchClose={() => (showBatch = false)}
+    onGlossaryClose={() => (showGlossary = false)}
+    onMoveClose={() => (showMove = false)}
+    onMoveError={(msg) => (error = msg)}
+    onMoved={(res, destName, cid) => void handleMoved(res, destName, cid)}
+    onReviewClose={() => (showReview = false)}
+    onRefreshReview={() => { const c = projectStore.current; if (c) void refreshProject(c.id); }}
+    onProvidersClose={() => (showProviders = false)}
+    onDiagnosticsClose={() => (showDiagnostics = false)}
+  />
 
-  {#if showBatch && current && batchOpts}
-    {@const cur = current}
-    <BatchPanel
-      pages={scopedPages}
-      opts={batchOpts}
-      onDone={() => { void refreshProject(cur.id); showBatch = false; }}
-      onClose={() => (showBatch = false)}
-    />
-  {/if}
-
-  {#if showGlossary}
-    <GlossaryPanel onClose={() => (showGlossary = false)} />
-  {/if}
-
-  {#if showMove && current && projectStore.currentId}
-    {@const cur = current}
-    {@const cid = projectStore.currentId}
-    <MoveDialog
-      project={cur}
-      fromFolderId={folderId}
-      pageIds={selection.selectedIds}
-      {busy}
-      onClose={() => (showMove = false)}
-      onError={(msg) => (error = msg)}
-      onMoved={(res, destName) => {
-        // Dialog tetap terbuka: tampilkan layar sukses, user yang menutup.
-        void (async () => {
-          const updated = await api.getProject(cid);
-          projectStore.replaceProject(cid, updated);
-          // Seleksi + thumbnail basi dibuang: halaman sudah pindah folder.
-          const live = new Set(allPages(updated).map((pg) => pg.id));
-          queue.pruneThumbs(live);
-          for (const id of Object.keys(fullUrls)) if (!live.has(id)) delete fullUrls[id];
-          selection.reset();
-          fullUrls = { ...fullUrls };
-          info = $t("moveDone").replace("{n}", String(res.moved)).replace("{d}", destName)
-            + (res.skipped > 0 ? ` (${$t("skippedCount").replace("{n}", String(res.skipped))})` : "");
-        })();
-      }}
-    />
-  {/if}
-
-  {#if showReview && current}
-    {@const cur = current}
-    <ReviewGrid
-      project={cur}
-      opts={batchOpts}
-      selectedIds={selection.selectedIds}
-      onRefresh={() => { void refreshProject(cur.id); }}
-      onClose={() => (showReview = false)}
-    />
-  {/if}
-
-  {#if showProviders}
-    <ProviderSettings onClose={() => (showProviders = false)} />
-  {/if}
-
-  {#if showDiagnostics}
-    <DiagnosticsPanel onClose={() => (showDiagnostics = false)} />
-  {/if}
 </main>
 
 <svelte:window onkeydown={onViewKey} />

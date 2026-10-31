@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import canvasSrc from "./CanvasEditor.svelte?raw";
 import appSrc from "../../App.svelte?raw";
 import panelSrc from "./EditorPanel.svelte?raw";
+import hostSrc from "../app/shell/OverlayHost.svelte?raw";
 
 // Kontrak fix-preview-hang §2 + §3, diverifikasi statis dari sumber.
 // Alasan pola-sumber (bukan mount): CanvasEditor terikat Konva + DOM +
@@ -46,7 +47,7 @@ describe("preview transport (fix-preview-hang §2 progressive open)", () => {
   });
 
   it("App teruskan thumb sebagai fallbackUrl ke EditorPanel", () => {
-    expect(appSrc).toContain("fallbackUrl={queue.thumbs[selectedPage.id] ??");
+    expect(hostSrc).toContain("fallbackUrl={queue.thumbs[selectedPage.id] ??");
     expect(panelSrc).toContain("fallbackUrl={fallbackUrl}");
   });
 });

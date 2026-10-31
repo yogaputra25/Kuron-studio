@@ -3,6 +3,13 @@ import { sortPagesByName } from "./status";
 
 export const DEFAULT_FOLDER_NAME = "default";
 
+/** Kunci sortir grid/list (satu sumber; dulu dideklarasi ulang di App). */
+export type SortKey = "name" | "status" | "bubbles";
+/** Mode tampilan grid vs list (persist localStorage di App). */
+export type PageView = "grid" | "list";
+/** Filter kanban + semua. */
+export type KanbanFilter = "all" | "todo" | "doing" | "done" | "failed";
+
 export interface FolderStats {
   total: number;
   done: number;
@@ -164,4 +171,40 @@ export function singleOwnerFolderId(folders: ChapterFolder[], pageIds: string[])
     }
   }
   return owner;
+}
+
+/** Satu baris chip di folder bar: folder + stat + varian tampil. */
+export interface FolderChipSpec {
+  folder: ChapterFolder;
+  stats: FolderStats;
+  active: boolean;
+  dashed: boolean;
+  canDelete: boolean;
+}
+
+/** Varian daftar chip: `crumb` (jalur breadcrumb), `children` (anak, gaya dashed), `flat` (tanpa nesting). */
+export type FolderChipList = "crumb" | "children" | "flat";
+
+/**
+ * Spesifikasi chip per baris untuk `FolderBar`: ganti 3 blok `<FolderChip>`
+ * yang dulu ditulis manual (beda `active`/`dashed`/`canDelete`).
+ */
+export function chipSpecs(
+  project: Project,
+  kind: FolderChipList,
+  folders: ChapterFolder[],
+  folderId: string | "all",
+): FolderChipSpec[] {
+  const total = project.folders.length;
+  return folders.map((f, i) => {
+    const stats = subtreeStats(project, f.id);
+    switch (kind) {
+      case "crumb":
+        return { folder: f, stats, active: i === folders.length - 1, dashed: false, canDelete: total > 1 };
+      case "children":
+        return { folder: f, stats, active: false, dashed: true, canDelete: false };
+      case "flat":
+        return { folder: f, stats, active: f.id === folderId, dashed: false, canDelete: total > 1 };
+    }
+  });
 }

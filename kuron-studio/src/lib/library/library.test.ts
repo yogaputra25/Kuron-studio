@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   allPages,
   childrenOf,
+  chipSpecs,
   folderPath,
   folderStats,
   groupKanban,
@@ -166,5 +167,37 @@ describe("singleOwnerFolderId", () => {
     expect(singleOwnerFolderId(mk(), [])).toBeNull();
     expect(singleOwnerFolderId(mk(), ["zz"])).toBeNull();
     expect(singleOwnerFolderId(mk(), ["a", "c"])).toBeNull();
+  });
+});
+
+describe("chipSpecs", () => {
+  it("crumb: hanya ujung yang aktif, tanpa dashed", () => {
+    const out = chipSpecs(proj(), "crumb", proj().folders, "f1");
+    expect(out.map((c) => c.active)).toEqual([false, true]);
+    expect(out.every((c) => !c.dashed)).toBe(true);
+    expect(out.every((c) => c.canDelete)).toBe(true);
+  });
+
+  it("children: semua nonaktif + dashed + tak bisa hapus", () => {
+    const out = chipSpecs(proj(), "children", proj().folders, "all");
+    expect(out.every((c) => !c.active && c.dashed && !c.canDelete)).toBe(true);
+  });
+
+  it("flat: aktif mengikuti folderId", () => {
+    const out = chipSpecs(proj(), "flat", proj().folders, "f2");
+    expect(out.map((c) => c.active)).toEqual([false, true]);
+  });
+
+  it("canDelete mati bila cuma satu folder", () => {
+    const one = proj();
+    one.folders = [one.folders[0]];
+    expect(chipSpecs(one, "flat", one.folders, "f1")[0].canDelete).toBe(false);
+    expect(chipSpecs(one, "crumb", one.folders, "f1")[0].canDelete).toBe(false);
+  });
+
+  it("stats ikut per folder", () => {
+    const out = chipSpecs(proj(), "flat", proj().folders, "all");
+    expect(out[0].stats.total).toBe(2);
+    expect(out[1].stats.total).toBe(2);
   });
 });
