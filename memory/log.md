@@ -324,3 +324,10 @@ menyentuh baris lama).
 - Hasil: Gate penuh hijau terverifikasi koordinator — `cargo test` 204 lolos (173 lib + 11 target integrasi), `clippy --all-targets -- -D warnings` bersih, `pnpm test` 497/497 (7,3s), `pnpm check` 0 error. DoD baris #38 tercapai semua; DoD #39: ≤6 source-pattern ✓, 6 mount ✓, i18n key-scan diverifikasi gagal bila key fiktif disuntik ✓. Satu edge `commands::detect` di `translate/pipeline.rs` hanya di `#[cfg(test)]`, bukan produksi.
 - Keputusan: Tak commit/push/tutup issue (menunggu pemilik). Laporkan angka jujur: pnpm 561→497 karena assertion `toContain` dihapus, bukan cakupan hilang — tiap hapus dipasangi behavioral pengganti.
 - Lanjut: Smoke manual translate, review PR, tutup epik #38/#39 oleh pemilik.
+
+## 2026-11-01 — Resolusi konflik PR #78 (be-layer vs main Yoga)
+
+- Kerja: Trial-merge di worktree sekali-pakai → hanya 2 file konflik (Yoga tak sentuh `src-tauri`). (1) `mobile-gating.test.ts` (modify/delete): pertahankan hapus, `contracts/lint.test.ts` dialihkan ke `ExportActions.svelte` (Yoga pindah gating ReviewGrid→ExportActions di d263261). (2) `translate-cancel.test.ts` (content): pakai versi behavioral kita + port 3 assertion baru Yoga tanpa `?raw` — wiring `exportState.retryPage/retryBubble`→konverter (unit via `createExportState` + mock api), urutan Model-sebelum-Target + details + sticky (mount TranslatePanel), ganti-model tanpa `saveProvider` (mount + pilih M2, assert `onOptsChange` + save tak terpanggil). Merge `origin/main` (f888781) ke be-layer, commit lokal `4e51117` (amend sekali karena `lint.test.ts` tertinggal staging), worktree sekali-pakai dihapus. Tanpa push.
+- Hasil: `pnpm test` 56 file/524 lolos (naik dari 497: test baru Yoga `BatchTranslateDialog` + `progressStats` + port kita), `pnpm check` 1008 file 0 error, `cargo test` 12 suite ok, `clippy` bersih.
+- Keputusan: Resolve = gabung dua intent (konsolidasi lint + struktur baru Yoga; behavioral + assertion baru Yoga), bukan pilih satu sisi. Satu `git add` sempat tak menempel (`UU` persisten) — diverifikasi via `git ls-files -u` + add ulang sebelum commit.
+- Lanjut: Push + review PR #78 oleh pemilik; smoke manual translate.
