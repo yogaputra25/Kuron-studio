@@ -330,7 +330,9 @@ describe("sidebar forms have breathing room", () => {
 describe("mobile header gating (iOS/Android)", () => {
   const appSrc = readFileSync(join(SRC, "App.svelte"), "utf8");
   const headSrc = readFileSync(join(SRC, "lib/app/shell/AppHeader.svelte"), "utf8");
-  const gridSrc = readFileSync(join(SRC, "lib/export/ReviewGrid.svelte"), "utf8");
+  // Gating export folder (png/psd) pindah ReviewGrid → ExportActions
+  // saat split #50 (main d263261); baca komponen yang memegang tombol.
+  const gridSrc = readFileSync(join(SRC, "lib/export/ExportActions.svelte"), "utf8");
 
   it("App memakai isMobile terpusat dari lib/device", () => {
     expect(headSrc).toContain('from "../../app/device"');
@@ -365,7 +367,7 @@ describe("mobile header gating (iOS/Android)", () => {
     expect(appSrc).toContain("emptyHintMobile");
   });
 
-  it("ReviewGrid menolak export folder (png/psd) di mobile", () => {
+  it("ExportActions menolak export folder (png/psd) di mobile", () => {
     expect(gridSrc).toContain('from "../app/device"');
     expect(gridSrc).toContain("isMobile");
     expect(gridSrc).toContain("belum didukung di iOS");
