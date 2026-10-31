@@ -6,12 +6,12 @@ import onbSrc from "./Onboarding.svelte?raw";
 // pilihan dua pintu (V4) + wizard 4 langkah (V3).
 describe("onboarding shell", () => {
   it("header hanya tampil setelah project pertama dimuat", () => {
-    expect(appSrc).toContain("{#if loaded && projects.length > 0}");
+    expect(appSrc).toContain("{#if projectStore.loaded && projects.length > 0}");
     expect(appSrc).not.toContain("Satu project = satu judul");
   });
 
   it("loading tidak flash onboarding", () => {
-    const gate = appSrc.indexOf("{#if !loaded}");
+    const gate = appSrc.indexOf("{#if !projectStore.loaded}");
     const mount = appSrc.indexOf("<Onboarding");
     expect(gate).toBeGreaterThan(-1);
     expect(mount).toBeGreaterThan(gate);

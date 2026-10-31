@@ -74,6 +74,8 @@ Import folder/files/zip → Detect bubble (ONNX, per halaman)
     Custom; label vision dari allowlist per provider (#26/#27).
     Model per-run: override opsional di tiap request translate
     (default = simpanan provider), tercatat di `translation.model`.
+    Alur provider: `diagrams/provider-list-models-draft.mmd` dan
+    `diagrams/provider-validate.mmd`.
   - `export`: JSON / PNG (overlay, typeset TTF sistem + fallback
     bitmap) / CBZ / PSD (folder = dir, file = path).
   - `extras`: `tm_search` lintas project, `qa_check`,

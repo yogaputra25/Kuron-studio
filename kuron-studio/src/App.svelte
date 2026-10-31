@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { tick } from "svelte";
   import { fly, scale } from "svelte/transition";
   import { open } from "@tauri-apps/plugin-dialog";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
-  import { listen } from "@tauri-apps/api/event";
+
   import iconUrl from "../icon.svg";
   import { isMobile } from "./lib/app/device";
   import { api } from "./lib/contracts/api";
@@ -20,7 +20,7 @@
   import type { Lang, Theme } from "./lib/app/i18n";
   import type { BatchOpts, Page, Project, ReadingDirection } from "./lib/contracts/types";
   import { ARCHIVE_EXTS, IMAGE_EXTS, PDF_EXTS } from "./lib/contracts/types";
-  import { allPages, childrenOf, folderPath, groupKanban, hasNesting, projectStats, rangeSelect, subtreePages, subtreeStats } from "./lib/library/library";
+  import { allPages, childrenOf, folderPath, groupKanban, hasNesting, projectStats, subtreePages, subtreeStats } from "./lib/library/library";
   import Button from "./lib/ui/Button.svelte";
   import { fileName, sortPagesByBubbles, sortPagesByName, sortPagesByStatus } from "./lib/library/status";
   import FolderChip from "./lib/library/FolderChip.svelte";
@@ -28,59 +28,39 @@
   import Onboarding from "./lib/app/Onboarding.svelte";
   import Snackbar from "./lib/ui/Snackbar.svelte";
   import DetectProgress from "./lib/detection/DetectProgress.svelte";
-  import { initialDetectState, reduceDetectProgress, type DetectState } from "./lib/detection/detectProgress";
-  import type { DetectProgress as DetectProgressEv } from "./lib/contracts/types";
+  import { createDetectRun } from "./lib/detection/detectRun.svelte.ts";
   import DiagnosticsPanel from "./lib/app/DiagnosticsPanel.svelte";
   import { onInvoke } from "./lib/contracts/log";
-  import { PREFETCH_MARGIN, PREVIEW_CONCURRENCY, pickNext } from "./lib/previews/previewQueue";
-  import { summarizePreviews, type PreviewSample } from "./lib/previews/previewMetrics";
+  import { createProjectStore } from "./lib/library/projectStore.svelte.ts";
 
-  let projects = $state<Project[]>([]);
-  /** false sampai daftar project pertama selesai dimuat (cegah flash onboarding). */
-  let loaded = $state(false);
-  let currentId = $state<string | null>(null);
+  import { createSelection, orderIds } from "./lib/library/selection.svelte.ts";
+  import { createThumbnailQueue } from "./lib/previews/thumbnailQueue.svelte.ts";
+
+  const projectStore = createProjectStore();
+  const projects = $derived(projectStore.projects);
+  const current = $derived(projectStore.current);
   let name = $state("");
+  /** false sampai daftar project pertama selesai dimuat (cegah flash onboarding). */
   let folderId = $state<string | "all">("all");
   let kanban = $state<"all" | "todo" | "doing" | "done" | "failed">("all");
   let folderName = $state("");
-  /** Halaman terpilih (multi-select untuk pindah folder). */
-  let selectedIds = $state<string[]>([]);
-  let selAnchor = $state<string | null>(null);
-  /** Mode pilih manual: checkbox + "Pilih semua" baru muncul di mode ini. */
-  let selectMode = $state(false);
-  let holdTimer: ReturnType<typeof setTimeout> | null = null;
-  let heldSelect = false;
+  /** Seleksi multi-halaman: state milik modul, App hanya merangkai. */
+  const selection = createSelection();
   let showMove = $state(false);
   let showProjMenu = $state(false);
   // detect-ux-pack 3.1: satu tombol Import + menu pola switcher.
   let showImportMenu = $state(false);
   let projQuery = $state("");
-  let thumbs = $state<Record<string, string>>({});
   let fullUrls = $state<Record<string, string>>({});
+  /** Antrean thumbnail: state milik modul, App hanya merangkai. */
+  const queue = createThumbnailQueue();
   let selectedId = $state<string | null>(null);
   let readingDir = $state<ReadingDirection>("rtl");
   let error = $state("");
   let info = $state("");
-  /** pageId → alasan preview gagal (file hilang / tidak bisa di-decode). */
-  let broken = $state<Record<string, string>>({});
-  // grid-preview-perf D1-D3: antrean thumbnail berprioritas viewport.
-  // `loadGen` guard generasi — ganti project membuang hasil basi.
-  let loadGen = 0;
-  let thumbPending: string[] = [];
-  let thumbInflight = new Set<string>();
-  let thumbActive = 0;
-  let thumbByPath = new Map<string, string>();
-  let visibleIds = new Set<string>();
-  let thumbTotal = $state(0);
-  let thumbDone = $state(0);
-  let thumbFailed = $state(0);
-  let thumbT0 = 0;
-  let thumbFirstAt = 0;
-  let thumbSamples: PreviewSample[] = [];
   // detect-ux-pack D1: overlay progres non-blocking + guard generasi.
-  let detectState = $state<DetectState | null>(null);
-  let detectHidden = $state(false);
-  let detectGen = 0;
+  const detectRun = createDetectRun();
+  let pendingDetectCancel: (() => void) | null = null;
   // page-list-view D4/D5: mode Grid/List + pref + scroll per mode.
   function loadPageView(): "grid" | "list" {
     try {
@@ -149,11 +129,9 @@
   let batchOpts = $state<BatchOpts | null>(null);
 
   async function refreshProject(id: string) {
-    const updated = await api.getProject(id);
-    projects = projects.map((p) => (p.id === id ? updated : p));
+    await projectStore.refreshProject(id);
   }
 
-  const current = $derived(projects.find((p) => p.id === currentId) ?? null);
   const currentFolder = $derived(
     current && folderId !== "all" ? (current.folders.find((f) => f.id === folderId) ?? null) : null,
   );
@@ -173,7 +151,7 @@
   );
   const selectedPage = $derived(allPages(current ?? { id: "", name: "", folders: [] } as Project).find((p) => p.id === selectedId) ?? null);
   /** Halaman yang preview-nya gagal → jumlah tombol "Bersihkan". */
-  const brokenCount = $derived(Object.keys(broken).length);
+  const brokenCount = $derived(Object.keys(queue.broken).length);
   const filteredProjects = $derived(
     projQuery.trim()
       ? projects.filter((p) => p.name.toLowerCase().includes(projQuery.trim().toLowerCase()))
@@ -182,16 +160,13 @@
 
   async function refresh() {
     try {
-      projects = await api.listProjects();
-      if (!currentId && projects.length > 0) currentId = projects[0].id;
+      await projectStore.refresh();
     } catch (e) {
       // Hanya `list_projects` yang gagal di sini. Label "Backend
       // unreachable" hanya sah kalau invoke-nya sendiri yang tidak jalan.
       error = `Backend unreachable (jalankan via 'pnpm tauri dev'): ${e}`;
-    } finally {
-      loaded = true;
     }
-    if (currentId) await loadThumbs(currentId);
+    if (projectStore.currentId) await loadThumbs(projectStore.currentId);
   }
 
   // M4-6: apply persisted theme before first paint of the shell.
@@ -202,121 +177,34 @@
     lang.update((v: Lang) => (v === "id" ? "en" : v === "en" ? "zh" : "id"));
   };
 
-  // grid-preview-perf D1-D3: antrean konkurensi-4 + prioritas viewport +
-  // guard generasi. Ganti `Promise.allSettled` semua-halaman (isu #11: N
-  // decode paralel + N payload IPC satu gelombang).
+  // Antrean thumbnail milik modul previews/thumbnailQueue (FE-2).
   function loadThumbs(projectId: string) {
     const proj = projects.find((p) => p.id === projectId);
     if (!proj) return;
-    const myGen = ++loadGen;
-    visibleIds = new Set<string>();
-    thumbInflight = new Set<string>();
-    thumbActive = 0;
-    thumbByPath = new Map(allPages(proj).map((pg) => [pg.id, pg.path]));
-    // Skip yang sudah broken: retry file sidecar tiap ganti project mahal.
-    // `cleanPages`/retry yang membersihkan peta ini sebagai jalur recovery.
-    thumbPending = sortPagesByName(allPages(proj))
-      .filter((pg) => !thumbs[pg.id] && !broken[pg.id])
-      .map((pg) => pg.id);
-    thumbTotal = thumbPending.length;
-    thumbDone = 0;
-    thumbFailed = 0;
-    thumbT0 = performance.now();
-    thumbFirstAt = 0;
-    thumbSamples = [];
-    pumpThumbs(myGen);
-  }
-
-  /** Ambil id berikutnya: terlihat dulu, lalu prefetch awal antrean. */
-  function nextThumbId(): string | null {
-    const done = (id: string) => !!thumbs[id] || !!broken[id];
-    return pickNext(thumbPending, visibleIds, thumbInflight, done, PREFETCH_MARGIN);
-  }
-
-  /** Pompa worker sampai batas konkurensi; hasil basi (gen beda) dibuang. */
-  function pumpThumbs(myGen: number) {
-    while (thumbActive < PREVIEW_CONCURRENCY && myGen === loadGen) {
-      const id = nextThumbId();
-      if (!id) return; // tunggu intersection berikutnya
-      thumbInflight.add(id);
-      thumbActive++;
-      const path = thumbByPath.get(id) ?? "";
-      const t = performance.now();
-      void api
-        .getImagePreview(path)
-        .then((url) => {
-          if (myGen !== loadGen) return;
-          thumbSamples.push({ ms: performance.now() - t, bytes: url.length });
-          thumbs = { ...thumbs, [id]: url };
-          if (!thumbFirstAt) thumbFirstAt = performance.now();
-          thumbDone++;
-        })
-        .catch((e) => {
-          if (myGen !== loadGen) return;
-          broken = { ...broken, [id]: String(e) };
-          thumbFailed++;
-          thumbDone++;
-        })
-        .finally(() => {
-          thumbInflight.delete(id);
-          thumbActive--;
-          if (myGen !== loadGen) return;
-          if (thumbTotal > 0 && thumbDone >= thumbTotal) {
-            console.info(`[preview] ${JSON.stringify(summarizePreviews(thumbSamples, thumbFirstAt - thumbT0))}`);
-          }
-          pumpThumbs(myGen);
-        });
-    }
+    queue.loadThumbs(allPages(proj));
   }
 
   /** Coba lagi thumbnail yang gagal di project aktif. */
   function retryThumbs() {
-    if (!currentId || !current) return;
-    const live = new Set(allPages(current).map((pg) => pg.id));
-    for (const id of Object.keys(broken)) if (live.has(id)) delete broken[id];
-    broken = { ...broken };
-    void loadThumbs(currentId);
-  }
-
-  /** Action kartu grid: laporkan keterlihatan ke antrean (D2). */
-  function observeCard(node: HTMLElement, id: string) {
-    const io = new IntersectionObserver(
-      (es) => {
-        for (const e of es) {
-          if (e.isIntersecting) {
-            visibleIds.add(id);
-            pumpThumbs(loadGen);
-          }
-        }
-      },
-      { rootMargin: "400px 0px" },
-    );
-    io.observe(node);
-    return {
-      destroy() {
-        io.disconnect();
-      },
-    };
+    if (!current) return;
+    queue.retryThumbs(allPages(current));
   }
 
   async function cleanPages() {
+    const currentId = projectStore.currentId;
     if (!currentId) return;
-    if (!confirm($t("confirmClean"))) return;
     busy = true;
     error = "";
     try {
       const res = await api.cleanPages(currentId, folderId === "all" ? null : folderId);
       const updated = await api.getProject(currentId);
-      projects = projects.map((p) => (p.id === currentId ? updated : p));
+      projectStore.replaceProject(currentId, updated);
       // Halaman hilang dari store — buang juga thumbnail-nya.
       const live = new Set(allPages(updated).map((pg) => pg.id));
-      for (const id of Object.keys(thumbs)) if (!live.has(id)) delete thumbs[id];
+      queue.pruneThumbs(live);
       for (const id of Object.keys(fullUrls)) if (!live.has(id)) delete fullUrls[id];
-      for (const id of Object.keys(broken)) if (!live.has(id)) delete broken[id];
       selectedId = live.has(selectedId ?? "") ? selectedId : null;
-      thumbs = { ...thumbs };
       fullUrls = { ...fullUrls };
-      broken = { ...broken };
       info =
         res.removed === 0
           ? $t("nothingToClean")
@@ -331,6 +219,7 @@
   }
 
   async function deleteProject() {
+    const currentId = projectStore.currentId;
     if (!currentId || !current) return;
     if (!confirm($t("confirmDeleteProject"))) return;
     busy = true;
@@ -338,14 +227,12 @@
     const gone = currentId;
     try {
       await api.deleteProject(gone);
-      thumbs = {};
+      queue.resetThumbs();
       fullUrls = {};
-      broken = {};
       selectedId = null;
       closeEditor();
-      projects = projects.filter((p) => p.id !== gone);
-      currentId = projects[0]?.id ?? null;
-      if (currentId) await loadThumbs(currentId);
+      projectStore.removeProject(gone);
+      if (projectStore.currentId) await loadThumbs(projectStore.currentId);
     } catch (e) {
       error = String(e);
     } finally {
@@ -361,8 +248,7 @@
     try {
       const p = await api.createProject(n);
       name = "";
-      projects = [...projects, p];
-      currentId = p.id;
+      projectStore.addProject(p);
       folderId = "all";
       kanban = "all";
       selectedId = null;
@@ -380,7 +266,7 @@
     error = "";
     try {
       const p = await api.createSample($t("onboardSample"));
-      projects = [...projects, p];
+      projectStore.addProject(p);
       openProject(p.id);
     } catch (e) {
       error = String(e);
@@ -396,13 +282,14 @@
   }
 
   async function doImport(paths: string[]) {
+    const currentId = projectStore.currentId;
     if (!currentId || paths.length === 0) return;
     busy = true;
     try {
       const target = folderId === "all" ? null : folderId;
       const res = await api.importPages(currentId, paths, target);
       const updated = await api.getProject(currentId);
-      projects = projects.map((p) => (p.id === currentId ? updated : p));
+      projectStore.replaceProject(currentId, updated);
       await loadThumbs(currentId);
       if (res.skipped > 0) error = `${res.skipped} file non-image dilewati.`;
     } catch (e) {
@@ -439,92 +326,40 @@
     openError = "";
   }
 
-  /** Seleksi ikut konteks: ganti project/folder = mulai dari kosong. */
+  /** Seleksi ikut konteks: ganti project/folder = mulai dari kosong (D3). */
   $effect(() => {
-    const _scope = currentId + "|" + folderId;
+    const _scope = projectStore.currentId + "|" + folderId;
     void _scope;
-    selectedIds = [];
-    selAnchor = null;
-    selectMode = false;
+    selection.reset();
   });
 
-  function toggleSelect(id: string) {
-    selectedIds = selectedIds.includes(id)
-      ? selectedIds.filter((x) => x !== id)
-      : [...selectedIds, id];
-    selAnchor = id;
-  }
-
-  /** Pilih semua halaman yang tampil (ikut filter folder + kanban). */
-  function selectAll() {
-    selectedIds = visiblePages.map((p) => p.id);
-    selAnchor = null;
-  }
-
-  function cancelHold() {
-    if (holdTimer !== null) {
-      clearTimeout(holdTimer);
-      holdTimer = null;
-    }
-  }
-
-  /** Tahan gambar ±0.5 dtk = masuk mode pilih + pilih kartu itu (pola mobile). */
-  function onCardPress(pg: Page) {
-    if (selectMode) return;
-    heldSelect = false;
-    cancelHold();
-    holdTimer = setTimeout(() => {
-      heldSelect = true;
-      selectMode = true;
-      if (!selectedIds.includes(pg.id)) {
-        selectedIds = [...selectedIds, pg.id];
-        selAnchor = pg.id;
-      }
-    }, 500);
-  }
-
   function onCardClick(e: MouseEvent, pg: Page) {
-    if (heldSelect) {
-      // Lepas-tahan setelah long-press: jangan buka editor.
-      heldSelect = false;
-      return;
-    }
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
-      selectMode = true;
-      toggleSelect(pg.id);
-    } else if (e.shiftKey && selAnchor) {
-      e.preventDefault();
-      selectMode = true;
-      const order = sortPagesByName(visiblePages).map((p) => p.id);
-      const range = rangeSelect(order, selAnchor, pg.id);
-      selectedIds = [...new Set([...selectedIds, ...range])];
-      selAnchor = pg.id;
-    } else {
-      openEditor(pg);
-    }
+    if (!selection.click(e, pg, orderIds(visiblePages))) openEditor(pg);
   }
 
   function onSaved(updated: Page) {
-    if (!currentId) return;
-    projects = projects.map((p) =>
-      p.id === currentId
-        ? { ...p, folders: p.folders.map((f) => ({ ...f, pages: f.pages.map((pg) => (pg.id === updated.id ? updated : pg)) })) }
-        : p,
-    );
+    const currentId = projectStore.currentId;
+    const cur = projectStore.current;
+    if (!currentId || !cur) return;
+    projectStore.replaceProject(currentId, {
+      ...cur,
+      folders: cur.folders.map((f) => ({ ...f, pages: f.pages.map((pg) => (pg.id === updated.id ? updated : pg)) })),
+    });
   }
 
   function openProject(id: string) {
-    currentId = id;
+    projectStore.setCurrent(id);
     folderId = "all";
     kanban = "all";
     selectedId = null;
     void loadThumbs(id);
   }
+
+
   /** Buka Hasil & Ekspor untuk satu kartu dashboard (pintu-ekspor D2). */
   async function openResults(id: string) {
     if (busy) return;
-    if (id !== currentId) {
+    if (id !== projectStore.currentId) {
       openProject(id);
       try {
         await refreshProject(id);
@@ -537,6 +372,7 @@
   }
 
   async function createFolder() {
+    const currentId = projectStore.currentId;
     if (!currentId) return;
     const n = folderName.trim();
     if (!n) return;
@@ -547,7 +383,7 @@
       const f = await api.createFolder(currentId, n, parent);
       folderName = "";
       const updated = await api.getProject(currentId);
-      projects = projects.map((p) => (p.id === currentId ? updated : p));
+      projectStore.replaceProject(currentId, updated);
       folderId = f.id;
     } catch (e) {
       error = String(e);
@@ -557,6 +393,7 @@
   }
 
   async function deleteFolder(id: string) {
+    const currentId = projectStore.currentId;
     if (!currentId) return;
     if (!confirm($t("confirmDeleteFolder"))) return;
     busy = true;
@@ -564,7 +401,7 @@
     try {
       await api.deleteFolder(currentId, id);
       const updated = await api.getProject(currentId);
-      projects = projects.map((p) => (p.id === currentId ? updated : p));
+      projectStore.replaceProject(currentId, updated);
       if (folderId === id) folderId = "all";
       selectedId = null;
       await loadThumbs(currentId);
@@ -577,37 +414,24 @@
 
   async function detectAll() {
     if (!current || scopedPages.length === 0) return;
-    const myGen = ++detectGen;
-    const ids = scopedPages.map((p) => p.id);
-    const names = new Map(scopedPages.map((p) => [p.id, fileName(p.path)]));
-    detectState = initialDetectState(ids.length);
-    detectHidden = false;
     busy = true;
     error = "";
-    const unlisten = await listen<DetectProgressEv>("detect_progress", (e) => {
-      if (myGen !== detectGen || !detectState) return;
-      detectState = reduceDetectProgress(detectState, {
-        ...e.payload,
-        file: names.get(e.payload.pageId) ?? "",
-      });
-    });
+    const names = new Map(scopedPages.map((p) => [p.id, fileName(p.path)]));
+    const { done, cancel, gen } = detectRun.start(current.id, scopedPages.map((p) => p.id), names);
+    pendingDetectCancel = cancel;
     try {
-      await api.detectBatch(ids);
-      const updated = await api.getProject(current.id);
-      if (myGen !== detectGen) return;
-      projects = projects.map((p) => (p.id === current.id ? updated : p));
+      const updated = await done;
+      if (updated && current) projectStore.replaceProject(current.id, updated);
     } catch (e) {
-      if (myGen === detectGen) error = String(e);
+      if (detectRun.isCurrent(gen)) error = String(e);
     } finally {
-      unlisten();
-      if (myGen === detectGen) busy = false;
+      if (detectRun.isCurrent(gen)) busy = false;
     }
   }
 
   /** Tutup overlay: selesai → buang state; jalan → sembunyikan saja. */
   function closeDetectOverlay() {
-    if (detectState?.finished) detectState = null;
-    else detectHidden = true;
+    detectRun.closeOverlay();
   }
 
   async function importFolder() {
@@ -647,12 +471,20 @@
       }
     });
     // onMount tidak boleh async di Svelte 5 — return cleanup langsung.
-    return offInvoke;
+    return () => {
+      offInvoke();
+      selection.dispose();
+    };
+  });
+
+  onDestroy(() => {
+    pendingDetectCancel?.();
+    pendingDetectCancel = null;
   });
 </script>
 
 <main class="flex min-h-screen flex-col bg-bg text-ink" data-theme={$theme}>
-  {#if loaded && projects.length > 0}
+  {#if projectStore.loaded && projects.length > 0}
   <header class="sticky top-0 z-30 border-b border-line bg-surface/80 backdrop-blur-md">
     <div class="flex items-center gap-2 px-4 pt-2">
       <img src={iconUrl} alt="Kuron Studio" class="size-6 shrink-0" />
@@ -707,13 +539,13 @@
               {#each filteredProjects as p (p.id)}
                 {@const st = projectStats(p)}
                 <button
-                  class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-raised {p.id === currentId ? 'bg-accent/10' : ''}"
+                  class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-raised {p.id === projectStore.currentId ? 'bg-accent/10' : ''}"
                   role="option"
-                  aria-selected={p.id === currentId}
+                  aria-selected={p.id === projectStore.currentId}
                   onclick={() => pickProject(p.id)}
                   title="{p.name} · {st.done}/{st.total}"
                 >
-                  <span class="min-w-0 flex-1 truncate {p.id === currentId ? 'font-semibold' : ''}">{p.name}</span>
+                  <span class="min-w-0 flex-1 truncate {p.id === projectStore.currentId ? 'font-semibold' : ''}">{p.name}</span>
                   <span class="tnum shrink-0 text-[11px] {st.failed > 0 ? 'text-danger' : 'text-ink-3'}">{st.done}/{st.total}</span>
                 </button>
               {:else}
@@ -869,7 +701,7 @@
     {/key}
   {/if}
 
-  {#if !loaded}
+  {#if !projectStore.loaded}
     <div class="flex flex-1 items-center justify-center p-10" aria-hidden="true">
       <div class="h-10 w-10 animate-pulse rounded-full bg-raised"></div>
     </div>
@@ -898,7 +730,7 @@
           {@const pct = Math.round(st.progress * 100)}
         <div class="relative w-36 shrink-0 self-center">
           <button
-            class="block w-full overflow-hidden rounded-md border px-2.5 pt-1.5 pb-2.5 text-left transition-colors {p.id === currentId ? 'border-accent bg-accent/10' : 'border-line bg-surface hover:border-accent/60'}"
+            class="block w-full overflow-hidden rounded-md border px-2.5 pt-1.5 pb-2.5 text-left transition-colors {p.id === projectStore.currentId ? 'border-accent bg-accent/10' : 'border-line bg-surface hover:border-accent/60'}"
             onclick={() => openProject(p.id)}
             title="{p.name} · {st.done}/{st.total} · {st.failed} {$t('kanbanFailed')}"
           >
@@ -947,7 +779,7 @@
             {busy}
             onSelect={(id) => (folderId = id)}
             onDelete={(id) => void deleteFolder(id)}
-            onRenamed={() => currentId && void refreshProject(currentId)}
+            onRenamed={() => projectStore.currentId && void refreshProject(projectStore.currentId)}
             onError={(msg) => (error = msg)}
           />
         {/each}
@@ -965,7 +797,7 @@
               {busy}
               onSelect={(id) => (folderId = id)}
               onDelete={(id) => void deleteFolder(id)}
-              onRenamed={() => currentId && void refreshProject(currentId)}
+              onRenamed={() => projectStore.currentId && void refreshProject(projectStore.currentId)}
               onError={(msg) => (error = msg)}
             />
           {/each}
@@ -982,7 +814,7 @@
             {busy}
             onSelect={(id) => (folderId = id)}
             onDelete={(id) => void deleteFolder(id)}
-            onRenamed={() => currentId && void refreshProject(currentId)}
+            onRenamed={() => projectStore.currentId && void refreshProject(projectStore.currentId)}
             onError={(msg) => (error = msg)}
           />
         {/each}
@@ -1008,11 +840,11 @@
           {key === "all" ? $t("allFolders") : $t(key === "todo" ? "kanbanTodo" : key === "doing" ? "kanbanDoing" : key === "done" ? "kanbanDone" : "kanbanFailed")} · {n}
         </button>
       {/each}
-      {#if !selectMode}
+      {#if !selection.selectMode}
         <Button
           variant="default"
           size="sm"
-          onclick={() => (selectMode = true)}
+          onclick={() => selection.setSelectMode(true)}
           disabled={busy || visiblePages.length === 0}
         >{$t("selectMode")}</Button>
       {:else}
@@ -1020,11 +852,11 @@
         <Button
           variant="default"
           size="sm"
-          onclick={selectAll}
-          disabled={busy || visiblePages.length === 0 || visiblePages.every((p) => selectedIds.includes(p.id))}
+          onclick={() => selection.selectAll(visiblePages.map((p) => p.id))}
+          disabled={busy || visiblePages.length === 0 || visiblePages.every((p) => selection.selectedIds.includes(p.id))}
         >{$t("selectAll")} ({visiblePages.length})</Button>
-        {#if selectedIds.length === 0}
-          <Button variant="ghost" size="sm" onclick={() => (selectMode = false)}>{$t("close")}</Button>
+        {#if selection.selectedIds.length === 0}
+          <Button variant="ghost" size="sm" onclick={() => selection.setSelectMode(false)}>{$t("close")}</Button>
         {/if}
       {/if}
       <div class="ml-auto flex overflow-hidden rounded-md border border-line" role="tablist" aria-label="{$t('gridView')} / {$t('listView')}">
@@ -1054,48 +886,48 @@
         {/each}
       </div>
     </section>
-    {#if selectedIds.length > 0}
+    {#if selection.selectedIds.length > 0}
       <div class="tnum mx-5 mt-3 flex items-center gap-2 rounded-md border border-line bg-surface-2 px-3 py-1.5 text-xs" role="status" transition:fly={{ y: -8, duration: 180 }}>
-        <span class="font-semibold">{$t("selectedCount").replace("{n}", String(selectedIds.length))}</span>
+        <span class="font-semibold">{$t("selectedCount").replace("{n}", String(selection.selectedIds.length))}</span>
         <Button variant="default" size="sm" onclick={() => (showMove = true)} disabled={busy}>{$t("moveTo")}</Button>
-        <Button variant="ghost" size="sm" onclick={() => { selectedIds = []; selAnchor = null; selectMode = false; }}>{$t("clearSelection")}</Button>
+        <Button variant="ghost" size="sm" onclick={() => selection.reset()}>{$t("clearSelection")}</Button>
       </div>
     {/if}
-    {#if thumbTotal > 0 && thumbDone < thumbTotal}
+    {#if queue.total > 0 && queue.done < queue.total}
       <p role="status" class="tnum border-b border-line bg-surface-2 px-5 py-1.5 text-xs text-ink-2">
-        {$t("loadingPreviews").replace("{done}", String(thumbDone)).replace("{total}", String(thumbTotal))}
+        {$t("loadingPreviews").replace("{done}", String(queue.done)).replace("{total}", String(queue.total))}
       </p>
-    {:else if thumbFailed > 0}
+    {:else if queue.failed > 0}
       <p role="status" class="flex items-center gap-2 border-b border-line bg-surface-2 px-5 py-1.5 text-xs text-ink-2">
-        <span class="tnum">{$t("loadingPreviews").replace("{done}", String(thumbDone)).replace("{total}", String(thumbTotal))} · {$t("previewsFailed").replace("{n}", String(thumbFailed))}</span>
+        <span class="tnum">{$t("loadingPreviews").replace("{done}", String(queue.done)).replace("{total}", String(queue.total))} · {$t("previewsFailed").replace("{n}", String(queue.failed))}</span>
         <Button variant="ghost" size="sm" onclick={retryThumbs}>{$t("retryThumbs")}</Button>
       </p>
     {/if}
     {#if pageView === "grid"}
       <PageGrid
         pages={orderedPages}
-        {thumbs}
-        {broken}
-        {selectedIds}
-        {selectMode}
+        thumbs={queue.thumbs}
+        broken={queue.broken}
+        selectedIds={selection.selectedIds}
+        selectMode={selection.selectMode}
         {dragging}
         onCardClick={(e, pg) => onCardClick(e, pg)}
-        onCardPress={(pg) => onCardPress(pg)}
-        onRelease={cancelHold}
-        onToggleSelect={(id) => toggleSelect(id)}
-        observeCard={observeCard}
+        onCardPress={(pg) => selection.press(pg)}
+        onRelease={() => selection.cancelHold()}
+        onToggleSelect={(id) => selection.toggleSelect(id)}
+        observeCard={queue.observeCard}
       />
     {:else}
       <PageList
         pages={orderedPages}
-        {thumbs}
-        {broken}
-        {selectedIds}
-        {selectMode}
+        thumbs={queue.thumbs}
+        broken={queue.broken}
+        selectedIds={selection.selectedIds}
+        selectMode={selection.selectMode}
         onCardClick={(e, pg) => onCardClick(e, pg)}
         onOpen={(pg) => openEditor(pg)}
-        onToggleSelect={(id) => toggleSelect(id)}
-        observeCard={observeCard}
+        onToggleSelect={(id) => selection.toggleSelect(id)}
+        observeCard={queue.observeCard}
       />
     {/if}
     {#if scopedPages.length === 0}
@@ -1107,14 +939,14 @@
     {/if}
   {/if}
 
-  {#if selectedPage && currentId}
+  {#if selectedPage && projectStore.currentId}
     <div class="fixed inset-0 z-50 flex flex-col bg-bg">
       {#key selectedPage.id}
         <EditorPanel
-          projectId={currentId}
+          projectId={projectStore.currentId}
           page={selectedPage}
-          fullImageUrl={fullUrls[selectedPage.id] ?? thumbs[selectedPage.id] ?? ""}
-          fallbackUrl={thumbs[selectedPage.id] ?? ""}
+        fullImageUrl={fullUrls[selectedPage.id] ?? queue.thumbs[selectedPage.id] ?? ""}
+        fallbackUrl={queue.thumbs[selectedPage.id] ?? ""}
           openError={openError}
           {readingDir}
           onClose={closeEditor}
@@ -1124,8 +956,8 @@
       {/key}
     </div>
   {/if}
-  {#if detectState && !detectHidden}
-    <DetectProgress state={detectState} onClose={closeDetectOverlay} />
+  {#if detectRun.state && !detectRun.hidden}
+    <DetectProgress state={detectRun.state} onClose={closeDetectOverlay} />
   {/if}
 
   {#if showBatch && current && batchOpts}
@@ -1142,13 +974,13 @@
     <GlossaryPanel onClose={() => (showGlossary = false)} />
   {/if}
 
-  {#if showMove && current && currentId}
+  {#if showMove && current && projectStore.currentId}
     {@const cur = current}
-    {@const cid = currentId}
+    {@const cid = projectStore.currentId}
     <MoveDialog
       project={cur}
       fromFolderId={folderId}
-      pageIds={selectedIds}
+      pageIds={selection.selectedIds}
       {busy}
       onClose={() => (showMove = false)}
       onError={(msg) => (error = msg)}
@@ -1156,18 +988,13 @@
         // Dialog tetap terbuka: tampilkan layar sukses, user yang menutup.
         void (async () => {
           const updated = await api.getProject(cid);
-          projects = projects.map((p) => (p.id === cid ? updated : p));
+          projectStore.replaceProject(cid, updated);
           // Seleksi + thumbnail basi dibuang: halaman sudah pindah folder.
           const live = new Set(allPages(updated).map((pg) => pg.id));
-          for (const id of Object.keys(thumbs)) if (!live.has(id)) delete thumbs[id];
+          queue.pruneThumbs(live);
           for (const id of Object.keys(fullUrls)) if (!live.has(id)) delete fullUrls[id];
-          for (const id of Object.keys(broken)) if (!live.has(id)) delete broken[id];
-          selectedIds = [];
-          selAnchor = null;
-          selectMode = false;
-          thumbs = { ...thumbs };
+          selection.reset();
           fullUrls = { ...fullUrls };
-          broken = { ...broken };
           info = $t("moveDone").replace("{n}", String(res.moved)).replace("{d}", destName)
             + (res.skipped > 0 ? ` (${$t("skippedCount").replace("{n}", String(res.skipped))})` : "");
         })();
@@ -1180,7 +1007,7 @@
     <ReviewGrid
       project={cur}
       opts={batchOpts}
-      selectedIds={selectedIds}
+      selectedIds={selection.selectedIds}
       onRefresh={() => { void refreshProject(cur.id); }}
       onClose={() => (showReview = false)}
     />

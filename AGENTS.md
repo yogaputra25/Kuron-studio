@@ -1,3 +1,4 @@
+@C:/Users/yoga/.ai-rules/mermaid.md
 # AGENTS.md — Kuron Studio
 
 Aturan kerja AI assistant. Baca sebelum mengubah kode.
