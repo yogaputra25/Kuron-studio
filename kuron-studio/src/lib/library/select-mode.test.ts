@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import appSrc from "../../App.svelte?raw";
 import gridSrc from "./PageGrid.svelte?raw";
 import moveSrc from "./MoveDialog.svelte?raw";
+import barSrc from "../app/shell/KanbanBar.svelte?raw";
 
 // Mode pilih manual: checkbox kartu + "Pilih semua" disembunyikan sampai
 // user masuk mode (tombol Pilih / ctrl-klik / shift-klik / tahan gambar).
@@ -16,9 +17,9 @@ describe("select mode gating + move source", () => {
   });
 
   it("tombol Pilih masuk mode; Pilih semua di dalam mode", () => {
-    expect(appSrc).toContain("{$t(\"selectMode\")}");
-    const gate = appSrc.indexOf("{#if !selection.selectMode}");
-    const selectAll = appSrc.indexOf("selection.selectAll(");
+    expect(barSrc).toContain("{$t(\"selectMode\")}");
+    const gate = barSrc.indexOf("{#if !selection.selectMode}");
+    const selectAll = barSrc.indexOf("selection.selectAll(");
     expect(gate).toBeGreaterThan(-1);
     expect(selectAll).toBeGreaterThan(gate);
   });
@@ -30,8 +31,8 @@ describe("select mode gating + move source", () => {
   });
 
   it("keluar mode saat Batal, pindah folder, dan selesai pindah", () => {
+    expect(barSrc).toContain("selection.setSelectMode(false)");
     expect(appSrc).toContain("selection.reset()");
-    expect(appSrc).toContain("selection.setSelectMode(false)");
   });
 
   it("dialog pindah menandai folder asal disabled", () => {

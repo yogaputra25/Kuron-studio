@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { tick } from "svelte";
-  import { fly, scale } from "svelte/transition";
+  import { scale } from "svelte/transition";
   import { open } from "@tauri-apps/plugin-dialog";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
 
@@ -9,6 +9,7 @@
   import { isMobile } from "./lib/app/device";
   import { api } from "./lib/contracts/api";
   import UpdateButton from "./lib/app/UpdateButton.svelte";
+  import AlertBanners from "./lib/app/shell/AlertBanners.svelte";
   import BatchPanel from "./lib/provider/BatchPanel.svelte";
   import EditorPanel from "./lib/editor/EditorPanel.svelte";
   import GlossaryPanel from "./lib/provider/GlossaryPanel.svelte";
@@ -21,13 +22,14 @@
   import type { BatchOpts, Page, Project, ReadingDirection } from "./lib/contracts/types";
   import { ARCHIVE_EXTS, IMAGE_EXTS, PDF_EXTS } from "./lib/contracts/types";
   import { allPages, childrenOf, folderPath, groupKanban, hasNesting, projectStats, subtreePages } from "./lib/library/library";
+  import type { KanbanFilter, PageView, SortKey } from "./lib/library/library";
   import Button from "./lib/ui/Button.svelte";
   import { fileName, sortPagesByBubbles, sortPagesByName, sortPagesByStatus } from "./lib/library/status";
 
   import MoveDialog from "./lib/library/MoveDialog.svelte";
   import Onboarding from "./lib/app/Onboarding.svelte";
-  import AlertBanners from "./lib/app/shell/AlertBanners.svelte";
   import FolderBar from "./lib/app/shell/FolderBar.svelte";
+  import KanbanBar from "./lib/app/shell/KanbanBar.svelte";
   import ProjectCard from "./lib/app/shell/ProjectCard.svelte";
   import DetectProgress from "./lib/detection/DetectProgress.svelte";
   import { createDetectRun } from "./lib/detection/detectRun.svelte.ts";
@@ -44,7 +46,7 @@
   let name = $state("");
   /** false sampai daftar project pertama selesai dimuat (cegah flash onboarding). */
   let folderId = $state<string | "all">("all");
-  let kanban = $state<"all" | "todo" | "doing" | "done" | "failed">("all");
+  let kanban = $state<KanbanFilter>("all");
   let folderName = $state("");
   /** Seleksi multi-halaman: state milik modul, App hanya merangkai. */
   const selection = createSelection();
@@ -71,8 +73,8 @@
       return "grid";
     }
   }
-  let pageView = $state<"grid" | "list">(loadPageView());
-  let scrollByView: Record<"grid" | "list", number> = { grid: 0, list: 0 };
+  let pageView = $state<PageView>(loadPageView());
+  let scrollByView: Record<PageView, number> = { grid: 0, list: 0 };
 
   /** Ganti mode: simpan scroll lama, pulihkan scroll mode tujuan. */
   async function setPageView(v: "grid" | "list") {
@@ -99,7 +101,6 @@
   }
   let openError = $state("");
   // grid-sort D1: satu state sortir untuk Grid + List.
-  type SortKey = "name" | "status" | "bubbles";
   let sortKey = $state<SortKey>("name");
   let sortDir = $state<1 | -1>(1);
 
@@ -744,70 +745,26 @@
       onFolderName={(v) => (folderName = v)}
       onCreateFolder={() => void createFolder()}
     />
-    <section class="flex flex-wrap items-center gap-1.5 px-5 pt-3" aria-label="kanban">
-      {#each [["all", allPages(current).length, "bg-ink-3"], ["todo", kanbanGroups.todo.length, "bg-warn"], ["doing", kanbanGroups.doing.length, "bg-info"], ["done", kanbanGroups.done.length, "bg-success"], ["failed", kanbanGroups.failed.length, "bg-danger"]] as [key, n, dot]}
-        <button
-          class="tnum flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs {kanban === key ? 'border-accent bg-accent/10 font-semibold' : 'border-line hover:border-accent/60'}"
-          onclick={() => (kanban = key as typeof kanban)}
-          aria-pressed={kanban === key}
-        >
-          <span class="h-1.5 w-1.5 shrink-0 rounded-full {dot}" aria-hidden="true"></span>
-          {key === "all" ? $t("allFolders") : $t(key === "todo" ? "kanbanTodo" : key === "doing" ? "kanbanDoing" : key === "done" ? "kanbanDone" : "kanbanFailed")} · {n}
-        </button>
-      {/each}
-      {#if !selection.selectMode}
-        <Button
-          variant="default"
-          size="sm"
-          onclick={() => selection.setSelectMode(true)}
-          disabled={busy || visiblePages.length === 0}
-        >{$t("selectMode")}</Button>
-      {:else}
-        <span class="mx-1 h-4 w-px bg-line" aria-hidden="true"></span>
-        <Button
-          variant="default"
-          size="sm"
-          onclick={() => selection.selectAll(visiblePages.map((p) => p.id))}
-          disabled={busy || visiblePages.length === 0 || visiblePages.every((p) => selection.selectedIds.includes(p.id))}
-        >{$t("selectAll")} ({visiblePages.length})</Button>
-        {#if selection.selectedIds.length === 0}
-          <Button variant="ghost" size="sm" onclick={() => selection.setSelectMode(false)}>{$t("close")}</Button>
-        {/if}
-      {/if}
-      <div class="ml-auto flex overflow-hidden rounded-md border border-line" role="tablist" aria-label="{$t('gridView')} / {$t('listView')}">
-        <button
-          class="h-7 px-3 text-xs font-medium transition-colors {pageView === 'grid' ? 'bg-accent text-accent-fg' : 'bg-surface-2 text-ink-2 hover:bg-hover hover:text-ink'}"
-          role="tab"
-          aria-selected={pageView === "grid"}
-          title="{$t('gridView')} (G)"
-          onclick={() => void setPageView("grid")}
-        >⬢ {$t("gridView")}</button>
-        <button
-          class="h-7 border-l border-line px-3 text-xs font-medium transition-colors {pageView === 'list' ? 'bg-accent text-accent-fg' : 'bg-surface-2 text-ink-2 hover:bg-hover hover:text-ink'}"
-          role="tab"
-          aria-selected={pageView === "list"}
-          title="{$t('listView')} (L)"
-          onclick={() => void setPageView("list")}
-        >☰ {$t("listView")}</button>
-      </div>
-      <div class="flex overflow-hidden rounded-md border border-line" role="group" aria-label={$t("sortBy")}>
-        {#each [["name", $t("sortName")], ["status", $t("sortStatus")], ["bubbles", $t("sortBubbles")]] as [key, label]}
-          <button
-            class="h-7 px-2.5 text-xs font-medium transition-colors {sortKey === key ? 'bg-accent text-accent-fg' : 'bg-surface-2 text-ink-2 hover:bg-hover hover:text-ink'} {key !== 'name' ? 'border-l border-line' : ''}"
-            aria-pressed={sortKey === key}
-          title={label}
-            onclick={() => setSortKey(key as SortKey)}
-          >{label}{sortKey === key ? (sortDir === 1 ? " ▲" : " ▼") : ""}</button>
-        {/each}
-      </div>
-    </section>
-    {#if selection.selectedIds.length > 0}
-      <div class="tnum mx-5 mt-3 flex items-center gap-2 rounded-md border border-line bg-surface-2 px-3 py-1.5 text-xs" role="status" transition:fly={{ y: -8, duration: 180 }}>
-        <span class="font-semibold">{$t("selectedCount").replace("{n}", String(selection.selectedIds.length))}</span>
-        <Button variant="default" size="sm" onclick={() => (showMove = true)} disabled={busy}>{$t("moveTo")}</Button>
-        <Button variant="ghost" size="sm" onclick={() => selection.reset()}>{$t("clearSelection")}</Button>
-      </div>
-    {/if}
+    <KanbanBar
+      {kanban}
+      counts={{
+        all: allPages(current).length,
+        todo: kanbanGroups.todo.length,
+        doing: kanbanGroups.doing.length,
+        done: kanbanGroups.done.length,
+        failed: kanbanGroups.failed.length,
+      }}
+      {sortKey}
+      {sortDir}
+      {pageView}
+      {visiblePages}
+      {selection}
+      {busy}
+      onKanban={(k) => (kanban = k)}
+      onSortKey={(k) => setSortKey(k)}
+      onSetPageView={(v) => void setPageView(v)}
+      onMoveRequest={() => (showMove = true)}
+    />
     {#if queue.total > 0 && queue.done < queue.total}
       <p role="status" class="tnum border-b border-line bg-surface-2 px-5 py-1.5 text-xs text-ink-2">
         {$t("loadingPreviews").replace("{done}", String(queue.done)).replace("{total}", String(queue.total))}

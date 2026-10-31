@@ -3,6 +3,13 @@ import { sortPagesByName } from "./status";
 
 export const DEFAULT_FOLDER_NAME = "default";
 
+/** Kunci sortir grid/list (satu sumber; dulu dideklarasi ulang di App). */
+export type SortKey = "name" | "status" | "bubbles";
+/** Mode tampilan grid vs list (persist localStorage di App). */
+export type PageView = "grid" | "list";
+/** Filter kanban + semua. */
+export type KanbanFilter = "all" | "todo" | "doing" | "done" | "failed";
+
 export interface FolderStats {
   total: number;
   done: number;

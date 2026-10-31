@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import gridSrc from "./PageGrid.svelte?raw";
 import listSrc from "./PageList.svelte?raw";
 import appSrc from "../../App.svelte?raw";
+import barSrc from "../app/shell/KanbanBar.svelte?raw";
 
 // page-list-view: grid diekstrak + list baru, props identik, tanpa string
 // inline. Pola-sumber (gaya preview-transport.test.ts): komponen Svelte,
@@ -32,7 +33,7 @@ describe("page grid/list split (page-list-view)", () => {
     expect(listSrc).toContain("animate-pulse");
     expect(listSrc).toContain("aria-selected");
     expect(appSrc).toContain("setSortKey");
-    expect(appSrc).toContain('role="group"');
+    expect(barSrc).toContain('role="group"');
   });
 
   it("grid: prefix folder + outline pilihan + visual lama utuh", () => {
