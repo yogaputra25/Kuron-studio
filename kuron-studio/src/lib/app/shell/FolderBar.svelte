@@ -53,6 +53,21 @@
   {@const specsCrumb = specs("crumb", crumb)}
   {@const specsChildren = specs("children", childFolders)}
   {@const specsFlat = specs("flat", current.folders)}
+  {@const rows = nested
+    ? [
+        ...specsCrumb.flatMap((spec) => [
+          { type: "sep" as const },
+          { type: "chip" as const, spec, dashed: false },
+        ]),
+        ...(specsChildren.length > 0
+          ? [
+              { type: "divider" as const },
+              ...specsChildren.map((spec) => ({ type: "chip" as const, spec, dashed: true })),
+            ]
+          : []),
+      ]
+    : specsFlat.map((spec) => ({ type: "chip" as const, spec, dashed: false }))
+  }
   <section class="flex flex-wrap items-center gap-1.5 border-b border-line px-5 py-2" aria-label="folders">
     <button
       class="rounded-md border px-2.5 py-1 text-xs {folderId === 'all'
@@ -60,59 +75,28 @@
         : 'border-line hover:border-accent/60'}"
       onclick={() => onSelectFolder("all")}>{$t("allFolders")} ({allPages(current).length})</button
     >
-    {#if nested}
-      {#each specsCrumb as c (c.folder.id)}
+    {#each rows as r, i (i)}
+      {#if r.type === "sep"}
         <span class="text-ink-3" aria-hidden="true">›</span>
-        <FolderChip
-          projectId={current.id}
-          folders={current.folders}
-          folder={c.folder}
-          stats={c.stats}
-          active={c.active}
-          canDelete={c.canDelete}
-          {busy}
-          onSelect={onSelectFolder}
-          onDelete={onDeleteFolder}
-          onRenamed={onRenamed}
-          onError={onError}
-        />
-      {/each}
-      {#if childFolders.length > 0}
+      {:else if r.type === "divider"}
         <span class="mx-1 h-4 w-px bg-line" aria-hidden="true"></span>
-        {#each specsChildren as c (c.folder.id)}
-          <FolderChip
-            projectId={current.id}
-            folders={current.folders}
-            folder={c.folder}
-            stats={c.stats}
-            active={c.active}
-            dashed
-            canDelete={c.canDelete}
-            {busy}
-            onSelect={onSelectFolder}
-            onDelete={onDeleteFolder}
-            onRenamed={onRenamed}
-            onError={onError}
-          />
-        {/each}
-      {/if}
-    {:else}
-      {#each specsFlat as c (c.folder.id)}
+      {:else}
         <FolderChip
           projectId={current.id}
           folders={current.folders}
-          folder={c.folder}
-          stats={c.stats}
-          active={c.active}
-          canDelete={c.canDelete}
+          folder={r.spec.folder}
+          stats={r.spec.stats}
+          active={r.spec.active}
+          dashed={r.dashed}
+          canDelete={r.spec.canDelete}
           {busy}
           onSelect={onSelectFolder}
           onDelete={onDeleteFolder}
           onRenamed={onRenamed}
           onError={onError}
         />
-      {/each}
-    {/if}
+      {/if}
+    {/each}
     <form
       class="ml-1 flex gap-1"
       onsubmit={(e) => {
