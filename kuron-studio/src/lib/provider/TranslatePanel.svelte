@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { api } from "./contracts/api";
-  import { TARGET_LANGS, TRANSLATE_STYLES } from "./contracts/types";
-  import type { AiModelOption, MosaicQuality, PageTranslation, ProviderView, ReadingDirection, TranslateStyle } from "./contracts/types";
-  import { t } from "./app/i18n";
-  import Button from "./ui/Button.svelte";
-  import Lov from "./ui/Lov.svelte";
+  import { api } from "../contracts/api";
+  import { TARGET_LANGS, TRANSLATE_STYLES } from "../contracts/types";
+  import type { AiModelOption, MosaicQuality, PageTranslation, ProviderView, ReadingDirection, TranslateStyle } from "../contracts/types";
+  import { t } from "../app/i18n";
+  import Button from "../ui/Button.svelte";
+  import Lov from "../ui/Lov.svelte";
 
   export interface TranslateOpts {
     targetLang: string;

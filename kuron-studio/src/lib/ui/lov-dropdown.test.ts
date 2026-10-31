@@ -55,13 +55,13 @@ describe("ui/Lov pola LOV project", () => {
 
 describe("pemakaian sudah Lov semua", () => {
   it("TranslatePanel: Provider/Model/Target/Style/Mosaic", () => {
-    const src = readFileSync(join(SRC, "lib/TranslatePanel.svelte"), "utf8");
+    const src = readFileSync(join(SRC, "lib/provider/TranslatePanel.svelte"), "utf8");
     expect(src).not.toContain("ui/Select.svelte");
     expect(src.match(/<Lov\b/g)?.length).toBe(5);
   });
 
   it("ProviderSettings: Tipe/Model tersedia", () => {
-    const src = readFileSync(join(SRC, "lib/ProviderSettings.svelte"), "utf8");
+    const src = readFileSync(join(SRC, "lib/provider/ProviderSettings.svelte"), "utf8");
     expect(src).not.toContain("ui/Select.svelte");
     expect(src.match(/<Lov\b/g)?.length).toBe(2);
   });

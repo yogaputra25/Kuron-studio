@@ -1,4 +1,4 @@
-import type { TranslateProgress } from "./contracts/types";
+import type { TranslateProgress } from "../contracts/types";
 
 export interface BatchState {
   done: number;

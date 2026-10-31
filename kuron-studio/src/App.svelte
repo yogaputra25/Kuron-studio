@@ -9,10 +9,10 @@
   import { isMobile } from "./lib/app/device";
   import { api } from "./lib/contracts/api";
   import UpdateButton from "./lib/app/UpdateButton.svelte";
-  import BatchPanel from "./lib/BatchPanel.svelte";
+  import BatchPanel from "./lib/provider/BatchPanel.svelte";
   import EditorPanel from "./lib/editor/EditorPanel.svelte";
-  import GlossaryPanel from "./lib/GlossaryPanel.svelte";
-  import ProviderSettings from "./lib/ProviderSettings.svelte";
+  import GlossaryPanel from "./lib/provider/GlossaryPanel.svelte";
+  import ProviderSettings from "./lib/provider/ProviderSettings.svelte";
   import ReviewGrid from "./lib/ReviewGrid.svelte";
   import PageGrid from "./lib/library/PageGrid.svelte";
   import PageList from "./lib/library/PageList.svelte";

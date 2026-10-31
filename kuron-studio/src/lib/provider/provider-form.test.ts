@@ -3,8 +3,8 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const SRC = fileURLToPath(new URL("..", import.meta.url));
-const panel = readFileSync(join(SRC, "lib/ProviderSettings.svelte"), "utf8");
+const SRC = fileURLToPath(new URL("../..", import.meta.url));
+const panel = readFileSync(join(SRC, "lib/provider/ProviderSettings.svelte"), "utf8");
 
 // Dua bug yang-reported user:
 //

@@ -4,8 +4,8 @@
   import { onDestroy, onMount } from "svelte";
   import { api } from "../contracts/api";
   import CanvasEditor from "./CanvasEditor.svelte";
-  import TranslatePanel from "../TranslatePanel.svelte";
-  import type { TranslateOpts } from "../TranslatePanel.svelte";
+  import TranslatePanel from "../provider/TranslatePanel.svelte";
+  import type { TranslateOpts } from "../provider/TranslatePanel.svelte";
   import { chipNumbers, clampBubble } from "./bubble";
   import { mergeUserEdits, syncGeometryToTranslation } from "./translation";
   import { computeTextLayout } from "./text/textLayout";
