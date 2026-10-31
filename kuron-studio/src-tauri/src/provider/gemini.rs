@@ -1,21 +1,10 @@
-use base64::Engine;
+use crate::error::AppError;
 
 use super::config::{vision_capable, AiModelOption, AiProviderType};
+use super::http;
 
-/// Tolerate legacy saved bases ending in /v1beta (old frontend default).
-fn norm_base(base_url: &str) -> &str {
-    let t = base_url.trim_end_matches('/');
-    t.strip_suffix("/v1beta").unwrap_or(t)
-}
-
-fn err_preview(status: reqwest::StatusCode, body: &str) -> String {
-    let p: String = body.chars().take(200).collect();
-    format!("http {status}: {p}")
-}
-
-fn b64(jpeg: &[u8]) -> String {
-    base64::engine::general_purpose::STANDARD.encode(jpeg)
-}
+/// Sufiks base lawas yang ditoleransi (default frontend lama).
+const STRIP_SUFFIXES: &[&str] = &["/v1beta"];
 
 pub async fn chat_completions_image(
     client: &reqwest::Client,
@@ -24,45 +13,36 @@ pub async fn chat_completions_image(
     model: &str,
     prompt: &str,
     jpeg_bytes: &[u8],
-) -> Result<String, String> {
+) -> Result<String, AppError> {
     let url = format!(
         "{}/v1beta/models/{}:generateContent?key={}",
-        norm_base(base_url),
+        http::norm_base(base_url, STRIP_SUFFIXES),
         model,
         api_key
     );
     let body = serde_json::json!({
         "contents": [{"parts": [
             {"text": prompt},
-            {"inlineData": {"mimeType": "image/jpeg", "data": b64(jpeg_bytes)}}
+            {"inlineData": {"mimeType": "image/jpeg", "data": http::b64(jpeg_bytes)}}
         ]}],
         "generationConfig": {"temperature": 0.3, "maxOutputTokens": 4096},
     });
-    let res = client.post(&url).json(&body).send().await.map_err(|e| e.to_string())?;
-    if res.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-        let res2 = client.post(&url).json(&body).send().await.map_err(|e| e.to_string())?;
-        if res2.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err("rate_limited: retry later".to_string());
-        }
-        if !res2.status().is_success() {
-            let st = res2.status();
-            let b = res2.text().await.unwrap_or_default();
-            return Err(err_preview(st, &b));
-        }
-        let v: serde_json::Value = res2.json().await.map_err(|e| e.to_string())?;
-        return extract(&v);
+    let res = http::post_with_retry(|| client.post(&url).json(&body), || {})
+        .await
+        .map_err(|(_, e)| AppError::provider(e.to_string()))?;
+    if http::is_429(res.status()) {
+        return Err(AppError::provider(http::rate_limited()));
     }
     if !res.status().is_success() {
         let st = res.status();
         let b = res.text().await.unwrap_or_default();
-        return Err(err_preview(st, &b));
+        return Err(AppError::provider(http::err_preview(st, &b)));
     }
-    let v: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
+    let v: serde_json::Value = res.json().await.map_err(AppError::from)?;
     extract(&v)
 }
 
-fn extract(v: &serde_json::Value) -> Result<String, String> {
+fn extract(v: &serde_json::Value) -> Result<String, AppError> {
     let parts = v
         .get("candidates")
         .and_then(|c| c.as_array())
@@ -70,24 +50,24 @@ fn extract(v: &serde_json::Value) -> Result<String, String> {
         .and_then(|c| c.get("content"))
         .and_then(|c| c.get("parts"))
         .and_then(|p| p.as_array())
-        .ok_or_else(|| "empty candidates".to_string())?;
+        .ok_or_else(|| AppError::parse("empty candidates".to_string()))?;
     let text: String = parts.iter().filter_map(|p| p.get("text").and_then(|t| t.as_str())).collect();
-    if text.is_empty() { Err("empty candidates".to_string()) } else { Ok(text) }
+    if text.is_empty() { Err(AppError::parse("empty candidates".to_string())) } else { Ok(text) }
 }
 
 pub async fn list_models(
     client: &reqwest::Client,
     base_url: &str,
     api_key: &str,
-) -> Result<Vec<AiModelOption>, String> {
-    let url = format!("{}/v1beta/models?key={}", norm_base(base_url), api_key);
-    let res = client.get(&url).send().await.map_err(|e| e.to_string())?;
+) -> Result<Vec<AiModelOption>, AppError> {
+    let url = format!("{}/v1beta/models?key={}", http::norm_base(base_url, STRIP_SUFFIXES), api_key);
+    let res = client.get(&url).send().await.map_err(AppError::from)?;
     if !res.status().is_success() {
         let st = res.status();
         let b = res.text().await.unwrap_or_default();
-        return Err(err_preview(st, &b));
+        return Err(AppError::provider(http::err_preview(st, &b)));
     }
-    let v: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
+    let v: serde_json::Value = res.json().await.map_err(AppError::from)?;
     let ids: Vec<String> = v
         .get("models")
         .and_then(|m| m.as_array())
@@ -101,10 +81,10 @@ pub async fn validate_minimal(
     base_url: &str,
     api_key: &str,
     model: &str,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let url = format!(
         "{}/v1beta/models/{}:generateContent?key={}",
-        norm_base(base_url),
+        http::norm_base(base_url, STRIP_SUFFIXES),
         model,
         api_key
     );
@@ -112,11 +92,11 @@ pub async fn validate_minimal(
         "contents": [{"parts": [{"text": "Reply with exactly: ok"}]}],
         "generationConfig": {"temperature": 0.0, "maxOutputTokens": 8},
     });
-    let res = client.post(&url).json(&body).send().await.map_err(|e| e.to_string())?;
+    let res = client.post(&url).json(&body).send().await.map_err(AppError::from)?;
     if !res.status().is_success() {
         let st = res.status();
         let b = res.text().await.unwrap_or_default();
-        return Err(err_preview(st, &b));
+        return Err(AppError::provider(http::err_preview(st, &b)));
     }
     Ok(())
 }

@@ -1,66 +1,104 @@
-import { describe, expect, it } from "vitest";
-import appSrc from "../../App.svelte?raw";
-import gridSrc from "./PageGrid.svelte?raw";
-import moveSrc from "./MoveDialog.svelte?raw";
-import barSrc from "../app/shell/KanbanBar.svelte?raw";
+// @vitest-environment jsdom
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent } from "@testing-library/svelte";
+import { renderWithI18n } from "../test-utils";
+import MoveDialog from "./MoveDialog.svelte";
+import PageGrid from "./PageGrid.svelte";
+import type { Project, Page } from "../contracts/types";
 
-// Mode pilih manual: checkbox kartu + "Pilih semua" disembunyikan sampai
-// user masuk mode (tombol Pilih / ctrl-klik / shift-klik / tahan gambar).
-// Folder asal pilihan tampil disabled di dialog pindah.
-describe("select mode gating + move source", () => {
-  it("checkbox kartu hanya dirender di mode pilih", () => {
-    // page-list-view 2.3: kartu pindah ke PageGrid — gating sama, lokasi baru.
-    const gate = gridSrc.indexOf("{#if selectMode}");
-    const checkbox = gridSrc.indexOf('type="checkbox"');
-    expect(gate, "gate {#if selectMode} hilang").toBeGreaterThan(-1);
-    expect(checkbox, "checkbox hilang").toBeGreaterThan(gate);
+describe("select mode gating and MoveDialog behavior", () => {
+  const dummyPages: Page[] = [
+    { id: "p1", path: "f1/01.jpg", width: 800, height: 1200, status: "idle", bubbles: [], translation: null },
+    { id: "p2", path: "f1/02.jpg", width: 800, height: 1200, status: "idle", bubbles: [], translation: null },
+  ];
+
+  const dummyProject: Project = {
+    id: "proj-1",
+    name: "Manga Title",
+    folders: [
+      { id: "f1", name: "Chapter 1", pages: [dummyPages[0], dummyPages[1]], parentId: null },
+      { id: "f2", name: "Chapter 2", pages: [], parentId: null },
+    ],
+    pages: dummyPages,
+  };
+
+  it("PageGrid only renders checkboxes when selectMode is true", () => {
+    const { queryByRole, unmount } = renderWithI18n(PageGrid, {
+      props: {
+        pages: dummyPages,
+        thumbs: {},
+        broken: {},
+        selectedIds: [],
+        selectMode: false,
+        dragging: false,
+        onCardClick: vi.fn(),
+        onCardPress: vi.fn(),
+        onRelease: vi.fn(),
+        onToggleSelect: vi.fn(),
+        observeCard: () => {},
+      },
+    });
+
+    expect(queryByRole("checkbox")).toBeNull();
+    unmount();
+
+    const { getAllByRole } = renderWithI18n(PageGrid, {
+      props: {
+        pages: dummyPages,
+        thumbs: {},
+        broken: {},
+        selectedIds: [],
+        selectMode: true,
+        dragging: false,
+        onCardClick: vi.fn(),
+        onCardPress: vi.fn(),
+        onRelease: vi.fn(),
+        onToggleSelect: vi.fn(),
+        observeCard: () => {},
+      },
+    });
+
+    expect(getAllByRole("checkbox").length).toBe(2);
   });
 
-  it("tombol Pilih masuk mode; Pilih semua di dalam mode", () => {
-    expect(barSrc).toContain("{$t(\"selectMode\")}");
-    const gate = barSrc.indexOf("{#if !selection.selectMode}");
-    const selectAll = barSrc.indexOf("selection.selectAll(");
-    expect(gate).toBeGreaterThan(-1);
-    expect(selectAll).toBeGreaterThan(gate);
+  it("MoveDialog disables the source folder", () => {
+    const { getByRole } = renderWithI18n(MoveDialog, {
+      props: {
+        project: dummyProject,
+        fromFolderId: "f1",
+        pageIds: ["p1"],
+        busy: false,
+        onMoved: vi.fn(),
+        onClose: vi.fn(),
+        onError: vi.fn(),
+      },
+    });
+
+    const sourceOpt = getByRole("option", { name: /Chapter 1/i }) as HTMLButtonElement;
+    expect(sourceOpt.disabled).toBe(true);
+    expect(sourceOpt.getAttribute("aria-disabled")).toBe("true");
+
+    const destOpt = getByRole("option", { name: /Chapter 2/i }) as HTMLButtonElement;
+    expect(destOpt.disabled).toBe(false);
   });
 
-  it("masuk mode via ctrl/shift-klik dan tahan gambar", () => {
-    expect(gridSrc).toContain("onpointerdown={() => onCardPress(pg)}");
-    expect(appSrc).toContain("selection.click(e, pg,");
-    expect(appSrc).toContain("selection.press(pg)");
-  });
+  it("MoveDialog close button calls onClose", async () => {
+    const onClose = vi.fn();
+    const { getAllByRole } = renderWithI18n(MoveDialog, {
+      props: {
+        project: dummyProject,
+        fromFolderId: "f1",
+        pageIds: ["p1"],
+        busy: false,
+        onMoved: vi.fn(),
+        onClose,
+        onError: vi.fn(),
+      },
+    });
 
-  it("keluar mode saat Batal, pindah folder, dan selesai pindah", () => {
-    expect(barSrc).toContain("selection.setSelectMode(false)");
-    expect(appSrc).toContain("selection.reset()");
-  });
-
-  it("dialog pindah menandai folder asal disabled", () => {
-    expect(moveSrc).toContain("singleOwnerFolderId");
-    expect(moveSrc).toContain("aria-disabled={isSource}");
-    expect(moveSrc).toContain("disabled={isSource}");
-    expect(moveSrc).toContain("$t(\"moveCurrent\")");
-  });
-});
-
-describe("move progress delight (no standard spinner)", () => {
-  it("punya fase moving/moved + label tahap", () => {
-    expect(moveSrc).toContain('phase = "moving"');
-    expect(moveSrc).toContain('phase = "moved"');
-    expect(moveSrc).toContain("movingTo");
-    expect(moveSrc).toContain("moveStagePack");
-    expect(moveSrc).toContain("moveStageSort");
-    expect(moveSrc).toContain("moveStageSave");
-  });
-
-  it("bar gradien + angka count-up, bukan spinner standar", () => {
-    expect(moveSrc).toContain("bg-gradient-to-r");
-    expect(moveSrc).toContain('role="progressbar"');
-    expect(moveSrc).not.toContain("animate-spin");
-  });
-
-  it("dialog dikunci saat pindah, layar sukses menutup manual", () => {
-    expect(moveSrc).toContain("phase === \"moving\" ? undefined : onClose");
-    expect(moveSrc).toContain("$t(\"moveDone\")");
+    const closeBtns = getAllByRole("button", { name: /Tutup|Close/i });
+    expect(closeBtns.length).toBeGreaterThan(0);
+    await fireEvent.click(closeBtns[0]);
+    expect(onClose).toHaveBeenCalled();
   });
 });

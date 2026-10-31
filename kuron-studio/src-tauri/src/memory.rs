@@ -36,7 +36,7 @@ pub fn search_memory(state: &tauri::State<'_, AppState>, query: &str, limit: i32
 }
 
 /// Inti murni (tanpa State) agar unit-testable.
-fn search_store(store: &crate::commands::project::ProjectStore, query: &str, limit: i32) -> Vec<TmHit> {
+fn search_store(store: &crate::store::ProjectStore, query: &str, limit: i32) -> Vec<TmHit> {
     let q = query.trim().to_lowercase();
     if q.is_empty() {
         return Vec::new();
@@ -80,7 +80,8 @@ fn search_store(store: &crate::commands::project::ProjectStore, query: &str, lim
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commands::project::{Page, PageStatus, Project, ProjectStore};
+    use crate::store::ProjectStore;
+    use crate::domain::{Page, PageStatus, Project};
     use crate::translation::{BubbleTranslation, PageTranslation};
 
     fn bt(i: usize, o: &str, t: &str) -> BubbleTranslation {

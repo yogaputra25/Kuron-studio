@@ -1,0 +1,7 @@
+{
+  "gemini": "https://generativelanguage.googleapis.com",
+  "openAi": "https://api.openai.com/v1",
+  "metaAi": "https://api.meta.ai/v1",
+  "cohere": "https://api.cohere.ai",
+  "custom": ""
+}

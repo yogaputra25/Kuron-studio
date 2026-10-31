@@ -51,7 +51,7 @@ pub fn qa_check(
     state: State<'_, AppState>,
     project_id: String,
 ) -> Result<Vec<QaIssue>, String> {
-    check_project(&state, &project_id)
+    Ok(check_project(&state, &project_id)?)
 }
 
 /// M5-6: export project (projects.json slice + daftar file gambar) ke zip
@@ -62,11 +62,11 @@ pub fn share_project(
     project_id: String,
     path: String,
 ) -> Result<String, String> {
-    let store = state.store.lock().map_err(|e| e.to_string())?;
+    let store = crate::error::lock_or_err(&state.store)?;
     let proj = store
         .projects
         .get(&project_id)
-        .ok_or_else(|| format!("project not found: {project_id}"))?
+        .ok_or_else(|| crate::error::AppError::project_not_found(&project_id))?
         .clone();
     drop(store);
     let pages = proj.sorted_all_pages();

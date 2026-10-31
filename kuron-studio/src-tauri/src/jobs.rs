@@ -1,0 +1,164 @@
+//! JobRegistry: dedup + konkurensi terkendali + cancel untuk batch translate (#55).
+//!
+//! Registry hidup per panggilan `translate_batch`:
+//!
+//! - `admit` mendup `page_ids` dalam satu batch (duplikat langsung lapor
+//!   busy tanpa claim). Antar-batch tetap dijaga `claim_page` via store.
+//! - `semaphore` membatasi POST LLM paralel (default 3, sama seperti
+//!   semaphore inline lama di `commands::batch`).
+//! - `cancel` / `is_cancelled` meneruskan flag `AppState` — satu-satunya
+//!   sumber kebenaran cancel. Bentuk `AppState` TIDAK diubah (lane ini
+//!   tidak memindah `cancel`/`prev_status` keluar).
+
+use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
+
+use tokio::sync::Semaphore;
+
+use crate::AppState;
+
+/// Batas POST LLM paralel batch.
+pub const DEFAULT_BATCH_CONCURRENCY: usize = 3;
+
+pub struct JobRegistry {
+    permits: Arc<Semaphore>,
+    inflight: Mutex<HashSet<String>>,
+}
+
+impl JobRegistry {
+    pub fn new(concurrency: usize) -> Self {
+        Self {
+            permits: Arc::new(Semaphore::new(concurrency.max(1))),
+            inflight: Mutex::new(HashSet::new()),
+        }
+    }
+
+    /// Daftarkan job; `false` = page ini sudah ada di batch (duplikat) —
+    /// caller JANGAN prepare, langsung lapor busy. Job yang diakui (`true`)
+    /// WAJIB `release` setelah selesai (sukses maupun gagal).
+    pub fn admit(&self, page_id: &str) -> bool {
+        self.inflight
+            .lock()
+            .map(|mut s| s.insert(page_id.to_string()))
+            .unwrap_or(false)
+    }
+
+    /// Lepaskan job (selesai/gagal-prepare). Tidak menyentuh flag cancel —
+    /// flag milik `AppState`, bukan registry.
+    pub fn release(&self, page_id: &str) {
+        if let Ok(mut s) = self.inflight.lock() {
+            s.remove(page_id);
+        }
+    }
+
+    /// Izin paralelisme untuk worker (`acquire_owned` per worker).
+    pub fn semaphore(&self) -> Arc<Semaphore> {
+        Arc::clone(&self.permits)
+    }
+
+    /// Teruskan permintaan batal ke flag `AppState`.
+    pub fn cancel(&self, state: &AppState, page_id: &str) {
+        state.request_cancel(page_id);
+    }
+
+    pub fn is_cancelled(&self, state: &AppState, page_id: &str) -> bool {
+        state.is_cancelled(page_id)
+    }
+
+    pub fn inflight_count(&self) -> usize {
+        self.inflight.lock().map(|s| s.len()).unwrap_or(0)
+    }
+}
+
+impl Default for JobRegistry {
+    fn default() -> Self {
+        Self::new(DEFAULT_BATCH_CONCURRENCY)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::commands::detect::DetectState;
+    use crate::domain::{Page, PageStatus, Project};
+    use crate::store::ProjectStore;
+
+    fn test_state() -> AppState {
+        let dir = std::env::temp_dir().join(format!(
+            "kuron-jobs-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let mut store = ProjectStore::load(dir.clone()).unwrap();
+        let mut proj = Project::new("ch".into());
+        proj.folders[0].pages.push(Page {
+            id: "p0".into(),
+            path: "ch/001.png".into(),
+            width: 800,
+            height: 1200,
+            status: PageStatus::Detected,
+            bubbles: vec![],
+            translation: None,
+        });
+        store.projects.insert("p".into(), proj);
+        AppState {
+            store: Mutex::new(store),
+            detect: DetectState::default(),
+            http: reqwest::Client::new(),
+            db: Mutex::new(rusqlite::Connection::open_in_memory().unwrap()),
+            previews: Mutex::new(crate::preview_cache::PreviewCaches::new()),
+            cancel: Mutex::new(HashSet::new()),
+            prev_status: Mutex::new(std::collections::HashMap::new()),
+            data_dir: dir,
+        }
+    }
+
+    #[test]
+    fn admit_dedup_dan_release() {
+        let reg = JobRegistry::default();
+        assert!(reg.admit("p0"));
+        // Duplikat dalam batch yang sama ditolak.
+        assert!(!reg.admit("p0"));
+        assert_eq!(reg.inflight_count(), 1);
+        // Page lain tetap diakui.
+        assert!(reg.admit("p1"));
+        assert_eq!(reg.inflight_count(), 2);
+        reg.release("p0");
+        assert_eq!(reg.inflight_count(), 1);
+        // Sesudah release bisa diakui lagi.
+        assert!(reg.admit("p0"));
+    }
+
+    #[test]
+    fn batas_paralel_default_tiga() {
+        let reg = JobRegistry::default();
+        let sem = reg.semaphore();
+        let _p1 = sem.try_acquire().unwrap();
+        let _p2 = sem.try_acquire().unwrap();
+        let _p3 = sem.try_acquire().unwrap();
+        assert!(sem.try_acquire().is_err(), "izin ke-4 harus ditolak");
+    }
+
+    #[test]
+    fn new_nol_tetap_minimal_satu() {
+        let reg = JobRegistry::new(0);
+        assert!(reg.semaphore().try_acquire().is_ok());
+    }
+
+    #[test]
+    fn cancel_meneruskan_flag_appstate() {
+        let reg = JobRegistry::default();
+        let st = test_state();
+        assert!(reg.admit("p0"));
+        assert!(!reg.is_cancelled(&st, "p0"));
+        reg.cancel(&st, "p0");
+        assert!(reg.is_cancelled(&st, "p0"));
+        // Idempotent + release tak mencabut cancel (flag milik AppState).
+        reg.cancel(&st, "p0");
+        reg.release("p0");
+        assert!(reg.is_cancelled(&st, "p0"));
+    }
+}

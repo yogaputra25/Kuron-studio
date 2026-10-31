@@ -1,17 +1,7 @@
-use base64::Engine;
+use crate::error::AppError;
 
 use super::config::{vision_capable, AiProviderType};
-
-fn data_url(jpeg: &[u8]) -> String {
-    let b64 = base64::engine::general_purpose::STANDARD.encode(jpeg);
-    format!("data:image/jpeg;base64,{b64}")
-}
-
-fn err_preview(status: reqwest::StatusCode, body: &str) -> String {
-    let p: String = body.chars().take(200).collect();
-    format!("http {status}: {p}")
-}
-
+use super::http;
 /// Catat request/response HTTP sebagai JSON Lines. Tanpa header auth — hanya
 /// status + body terpotong, jadi body error dari proxy lokal bisa dibaca utuh
 /// di log.
@@ -47,60 +37,49 @@ async fn post_chat(
     prompt: &str,
     jpeg: &[u8],
     max_tokens: u32,
-) -> Result<String, String> {
-    let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+) -> Result<String, AppError> {
+    let url = format!("{}/chat/completions", http::norm_base(base_url, &[]));
     let body = serde_json::json!({
         "model": model,
         "messages": [{"role": "user", "content": [
             {"type": "text", "text": prompt},
-            {"type": "image_url", "image_url": {"url": data_url(jpeg)}}
+            {"type": "image_url", "image_url": {"url": http::data_url("image/jpeg", jpeg)}}
         ]}],
         "temperature": 0.3,
         "max_tokens": max_tokens,
     });
-    let res = client
-        .post(&url)
-        .bearer_auth(api_key)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| {
+    let res = http::post_with_retry(
+        || {
+            client
+                .post(&url)
+                .bearer_auth(api_key)
+                .json(&body)
+        },
+        || crate::logging::warn("http_429_retry_once", serde_json::json!({ "url": &url })),
+    )
+    .await
+    .map_err(|(attempt, e)| {
+        if attempt == 0 {
             crate::logging::error(
                 "http_send_failed",
                 serde_json::json!({
                     "url": &url, "model": model, "error": crate::logging::redact(&e.to_string()),
                 }),
             );
-            format!("send ke {url} gagal: {e}")
-        })?;
-    if res.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
-        crate::logging::warn("http_429_retry_once", serde_json::json!({ "url": &url }));
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-        let res2 = client
-            .post(&url)
-            .bearer_auth(api_key)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
-        if res2.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            trace("chat_completions_retry", &url, res2.status(), "");
-            return Err("rate_limited: retry later".to_string());
+            AppError::provider(format!("send ke {url} gagal: {e}"))
+        } else {
+            AppError::provider(e.to_string())
         }
-        if !res2.status().is_success() {
-            let st = res2.status();
-            let b = res2.text().await.unwrap_or_default();
-            trace("chat_completions_retry", &url, st, &b);
-            return Err(err_preview(st, &b));
-        }
-        let v: serde_json::Value = res2.json().await.map_err(|e| e.to_string())?;
-        return extract_content(&v);
+    })?;
+    if http::is_429(res.status()) {
+        trace("chat_completions_retry", &url, res.status(), "");
+        return Err(AppError::provider(http::rate_limited()));
     }
     if !res.status().is_success() {
         let st = res.status();
         let b = res.text().await.unwrap_or_default();
         trace("chat_completions", &url, st, &b);
-        return Err(err_preview(st, &b));
+        return Err(AppError::provider(http::err_preview(st, &b)));
     }
     let v: serde_json::Value = res
         .json()
@@ -110,12 +89,12 @@ async fn post_chat(
                 "http_json_decode_failed",
                 serde_json::json!({ "url": &url, "error": crate::logging::redact(&e.to_string()) }),
             );
-            e.to_string()
+            AppError::parse(e.to_string())
         })?;
     extract_content(&v)
 }
 
-fn extract_content(v: &serde_json::Value) -> Result<String, String> {
+fn extract_content(v: &serde_json::Value) -> Result<String, AppError> {
     v.get("choices")
         .and_then(|c| c.as_array())
         .and_then(|a| a.first())
@@ -123,7 +102,7 @@ fn extract_content(v: &serde_json::Value) -> Result<String, String> {
         .and_then(|m| m.get("content"))
         .map(content_to_string)
         .filter(|s| !s.is_empty())
-        .ok_or_else(|| "empty choices".to_string())
+        .ok_or_else(|| AppError::parse("empty choices".to_string()))
 }
 
 pub async fn chat_completions_image(
@@ -133,7 +112,7 @@ pub async fn chat_completions_image(
     model: &str,
     prompt: &str,
     jpeg_bytes: &[u8],
-) -> Result<String, String> {
+) -> Result<String, AppError> {
     post_chat(client, base_url, api_key, model, prompt, jpeg_bytes, 4096).await
 }
 
@@ -142,8 +121,8 @@ pub async fn list_models(
     base_url: &str,
     api_key: &str,
     provider: AiProviderType,
-) -> Result<Vec<super::config::AiModelOption>, String> {
-    let base = base_url.trim_end_matches('/');
+) -> Result<Vec<super::config::AiModelOption>, AppError> {
+    let base = http::norm_base(base_url, &[]);
     let url = format!("{base}/models");
     let res = client
         .get(&url)
@@ -155,15 +134,15 @@ pub async fn list_models(
                 "list_models_send_failed",
                 serde_json::json!({ "url": &url, "error": crate::logging::redact(&e.to_string()) }),
             );
-            format!("request ke {url} gagal: {e}")
+            AppError::provider(format!("request ke {url} gagal: {e}"))
         })?;
     if !res.status().is_success() {
         let st = res.status();
         let b = res.text().await.unwrap_or_default();
         trace("list_models", &url, st, &b);
-        return Err(err_preview(st, &b));
+        return Err(AppError::provider(http::err_preview(st, &b)));
     }
-    let v: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
+    let v: serde_json::Value = res.json().await.map_err(AppError::from)?;
     let ids: Vec<String> = v
         .get("data")
         .and_then(|d| d.as_array())
@@ -177,9 +156,9 @@ pub async fn validate_minimal(
     base_url: &str,
     api_key: &str,
     model: &str,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     // Tiny text-only probe (no image bytes needed).
-    let base = base_url.trim_end_matches('/');
+    let base = http::norm_base(base_url, &[]);
     let url = format!("{base}/chat/completions");
     let body = serde_json::json!({
         "model": model,
@@ -187,11 +166,11 @@ pub async fn validate_minimal(
         "temperature": 0.0,
         "max_tokens": 8,
     });
-    let res = client.post(&url).bearer_auth(api_key).json(&body).send().await.map_err(|e| e.to_string())?;
+    let res = client.post(&url).bearer_auth(api_key).json(&body).send().await.map_err(AppError::from)?;
     if !res.status().is_success() {
         let st = res.status();
         let b = res.text().await.unwrap_or_default();
-        return Err(err_preview(st, &b));
+        return Err(AppError::provider(http::err_preview(st, &b)));
     }
     Ok(())
 }

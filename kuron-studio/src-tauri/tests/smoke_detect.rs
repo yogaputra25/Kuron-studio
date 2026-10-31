@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use image::{Rgb, RgbImage};
-use kuron_studio_lib::detector::DetectorState;
+use kuron_studio_lib::render::detector::DetectorState;
 
 fn model_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/models/bubble.onnx")

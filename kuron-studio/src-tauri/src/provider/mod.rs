@@ -1,10 +1,13 @@
 pub mod cohere;
 pub mod config;
 pub mod gemini;
+pub mod http;
 pub mod openai;
+pub mod repo;
+
+use crate::error::AppError;
 
 pub use config::{effective_model, is_vision_capable, AiModelOption, AiProviderType, ProviderRecord};
-
 // ponytail: keyring milik M4 (tanpa keyring dep di sini).
 // ponytail: factory = match satu produk; trait object bila provider ke-4 butuh dispatch dinamis.
 
@@ -14,7 +17,7 @@ pub async fn translate_image(
     rec: &ProviderRecord,
     prompt: &str,
     jpeg: &[u8],
-) -> Result<String, String> {
+) -> Result<String, AppError> {
     let base = rec.effective_base_url();
     match rec.provider_type {
         AiProviderType::Gemini => gemini::chat_completions_image(client, &base, &rec.api_key, &rec.model, prompt, jpeg).await,
@@ -26,7 +29,7 @@ pub async fn translate_image(
 pub async fn list_models(
     client: &reqwest::Client,
     rec: &ProviderRecord,
-) -> Result<Vec<AiModelOption>, String> {
+) -> Result<Vec<AiModelOption>, AppError> {
     let base = rec.effective_base_url();
     match rec.provider_type {
         AiProviderType::Gemini => gemini::list_models(client, &base, &rec.api_key).await,
@@ -38,7 +41,7 @@ pub async fn list_models(
 pub async fn validate(
     client: &reqwest::Client,
     rec: &ProviderRecord,
-) -> Result<(), String> {
+) -> Result<(), AppError> {
     let base = rec.effective_base_url();
     match rec.provider_type {
         AiProviderType::Gemini => gemini::validate_minimal(client, &base, &rec.api_key, &rec.model).await,

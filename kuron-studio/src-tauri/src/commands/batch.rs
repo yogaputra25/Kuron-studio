@@ -3,10 +3,12 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::commands::translate::{
-    CANCELLED_MSG, apply_cached, backoff_translate, cache_lookup, cancel_or_fail, claim_page, effective_glossary,
-    fail_page, load_provider, load_snapshot, map_text, persist_translation, store_result, PagePrep,
-    PageWork, PrepOpts,
+    backoff_translate, cancel_or_fail, claim_page, effective_glossary, fail_page,
+    load_provider, load_snapshot, persist_translation, prepare_page, restore_cancelled,
+    translate_prep, PagePrep, PrepOpts, ProviderBinding,
 };
+use crate::error::AppError;
+use crate::jobs::{DEFAULT_BATCH_CONCURRENCY, JobRegistry};
 use crate::parser::preview_200;
 use crate::prompt::{append_custom, append_glossary, build_mosaic_prompt, TranslateStyle};
 use crate::translation::PageTranslation;
@@ -79,33 +81,7 @@ pub struct TranslateProgress {
 /// Hasil satu worker: dibawa lewat mpsc, di-emit + dipersist di sisi penerima.
 struct PageOutcome {
     page_id: String,
-    result: Result<PageTranslation, String>,
-}
-
-/// Terjemahkan satu halaman penuh dari PageWork (dipakai worker batch).
-/// Never panics: semua Err jadi PageOutcome::Err oleh caller.
-async fn run_work(
-    state: &AppState,
-    prep: &PagePrep,
-    work: &PageWork,
-) -> Result<PageTranslation, String> {
-    if let Some(payload) = cache_lookup(state, &prep.cache_key)? {
-        return apply_cached(state, &prep.page_id, &payload, prep.prev.as_ref());
-    }
-    let text = backoff_translate(state, &prep.page_id, &work.client, &work.rec, &work.prompt, &work.jpeg)
-        .await
-        .map_err(|e| cancel_or_fail(state, &prep.page_id, e))?;
-    let page_t = match map_text(prep, &text) {
-        Ok(p) => p,
-        Err(first) => {
-            let text2 = backoff_translate(state, &prep.page_id, &work.client, &work.rec, &work.prompt, &work.jpeg)
-                .await
-                .map_err(|e| cancel_or_fail(state, &prep.page_id, e))?;
-            map_text(prep, &text2).map_err(|_| cancel_or_fail(state, &prep.page_id, first))?
-        }
-    };
-    store_result(state, prep, &page_t)?;
-    Ok(page_t)
+    result: Result<PageTranslation, AppError>,
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -118,12 +94,21 @@ pub async fn translate_batch(
     if total == 0 {
         return Ok(vec![]);
     }
-    // Fase 1 (sekuensial, murah): snapshot+claim+prepare tiap halaman.
-    // Halaman yang gagal prepare langsung jadi progress gagal.
-    let mut works: Vec<(PagePrep, PageWork)> = Vec::new();
+    // Fase 1 (sekuensial, murah): dedup registry + snapshot+claim+prepare.
+    // Duplikat dalam batch langsung jadi progress gagal ("busy", tanpa claim);
+    // yang gagal prepare juga + klaim registry dilepas.
+    let registry = Arc::new(JobRegistry::new(DEFAULT_BATCH_CONCURRENCY));
+    let mut works: Vec<(PagePrep, ProviderBinding)> = Vec::new();
     let mut pending: Vec<PageOutcome> = Vec::new();
     for id in &input.page_ids {
-        match crate::commands::translate::prepare_page(
+        if !registry.admit(id) {
+            pending.push(PageOutcome {
+                page_id: id.clone(),
+                result: Err(AppError::busy(id)),
+            });
+            continue;
+        }
+        match prepare_page(
             state.inner(),
             PrepOpts {
                 page_id: id,
@@ -140,33 +125,35 @@ pub async fn translate_batch(
         )
         .await
         {
-            Ok(prep) => {
-                let work = PageWork::from(&prep);
-                works.push((prep, work));
+            Ok((prep, binding)) => works.push((prep, binding)),
+            Err(e) => {
+                registry.release(id);
+                pending.push(PageOutcome {
+                    page_id: id.clone(),
+                    result: Err(e),
+                });
             }
-            Err(e) => pending.push(PageOutcome {
-                page_id: id.clone(),
-                result: Err(e),
-            }),
         }
     }
 
-    // Fase 2: mpsc + semaphore 3 untuk POST LLM. State dipindah per-worker
-    // via clone AppHandle + try_state (Mutex di dalam AppState aman di-share).
+    // Fase 2: mpsc + semaphore registry untuk POST LLM. State dipindah
+    // per-worker via clone AppHandle + try_state (Mutex di dalam AppState
+    // aman di-share). Pre-flight cancel di translate_prep: job antre yang
+    // dibatalkan restore tanpa POST.
     let (tx, mut rx) = tokio::sync::mpsc::channel::<PageOutcome>(total.max(1));
-    let sem = Arc::new(tokio::sync::Semaphore::new(3));
-    for (prep, work) in works {
+    let permits = registry.semaphore();
+    for (prep, binding) in works {
         let tx = tx.clone();
-        let sem = sem.clone();
+        let reg = Arc::clone(&registry);
+        let permits = Arc::clone(&permits);
         let handle = app.clone();
         tokio::spawn(async move {
-            let _permit = sem.acquire_owned().await;
+            let _permit = permits.acquire_owned().await;
             let state_ref: State<'_, AppState> = handle.state();
-            let outcome = PageOutcome {
-                page_id: prep.page_id.clone(),
-                result: run_work(state_ref.inner(), &prep, &work).await,
-            };
-            let _ = tx.send(outcome).await;
+            let page_id = prep.page_id.clone();
+            let result = translate_prep(state_ref.inner(), &prep, &binding).await;
+            reg.release(&page_id);
+            let _ = tx.send(PageOutcome { page_id, result }).await;
         });
     }
     drop(tx);
@@ -199,10 +186,10 @@ pub async fn translate_batch(
     Ok(ok_pages)
 }
 
-fn outcome_msg(r: &Result<PageTranslation, String>) -> String {
+fn outcome_msg(r: &Result<PageTranslation, AppError>) -> String {
     match r {
         Ok(t) => format!("{} bubble ({})", t.bubbles.len(), t.model),
-        Err(e) => e.clone(),
+        Err(e) => e.to_string(),
     }
 }
 
@@ -250,13 +237,13 @@ pub async fn retry_bubble(
     let style = TranslateStyle::from_str(&input.style);
     let target = &snap.bubbles[input.bubble_index];
     let page_bytes = std::fs::read(&snap.path)
-        .map_err(|e| fail_page(state.inner(), &input.page_id, format!("read: {e}")))?;
+        .map_err(|e| fail_page(state.inner(), &input.page_id, AppError::io(format!("read: {e}"))))?;
     let chip = target.clone();
     let jpeg = tauri::async_runtime::spawn_blocking(move || {
-        crate::image_ops::build_mosaic(&page_bytes, &[chip], crate::commands::translate::quality_of(&input.mosaic_quality))
+        crate::render::image_ops::build_mosaic(&page_bytes, &[chip], crate::commands::translate::quality_of(&input.mosaic_quality))
     })
     .await
-    .map_err(|e| format!("image task: {e}"))
+    .map_err(|e| AppError::io(format!("image task: {e}")))
     .and_then(|r| r)
     .map_err(|e| fail_page(state.inner(), &input.page_id, e))?;
 
@@ -274,7 +261,7 @@ pub async fn retry_bubble(
         .await
         .map_err(|e| cancel_or_fail(state.inner(), &input.page_id, e))?;
     let results = crate::parser::parse_mosaic_json(&text)
-        .map_err(|e| cancel_or_fail(state.inner(), &input.page_id, format!("parse retry failed: {e} ({})", preview_200(&text))))?;
+        .map_err(|e| cancel_or_fail(state.inner(), &input.page_id, AppError::parse(format!("parse retry failed: {e} ({})", preview_200(&text)))))?;
     let r = results
         .first()
         .map(|(_, r)| r.clone())
@@ -324,10 +311,9 @@ pub async fn retry_bubble(
     }
     let merged = crate::translation::preserve_user_edits_except(merged, &prev, input.bubble_index);
     // Cancel pasca-POST: hasil retry yg keburu jadi DIBUANG (sadar 1 token),
-    // status pulih pra-klaim, tanpa persist.
     if state.inner().is_cancelled(&input.page_id) {
-        let _ = crate::commands::translate::restore_cancelled(state.inner(), &input.page_id);
-        return Err(CANCELLED_MSG.to_string());
+        let _ = restore_cancelled(state.inner(), &input.page_id);
+        return Err(AppError::cancelled().into());
     }
     persist_translation(state.inner(), &input.page_id, &merged)?;
     Ok(merged)

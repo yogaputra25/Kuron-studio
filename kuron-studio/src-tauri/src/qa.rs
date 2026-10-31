@@ -5,6 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
+use crate::error::{lock_or_err, AppError};
 use crate::translation::PageTranslation;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -21,7 +22,7 @@ fn file_of(path: &str) -> &str {
     path.split(['/', '\\']).next_back().unwrap_or(path)
 }
 
-/// Panjang wajar: metrik renderer bersama (export::text_overflows) —
+/// Panjang wajar: metrik renderer bersama (render::page::text_overflows) —
 /// bungkus kata + susut skala seperti paint_patch, bukan hitung char kasar.
 /// SFX: original mengandung
 /// pola SFX umum (katakana/ganda-konsonan panjang) tapi skipSfx=false
@@ -76,9 +77,9 @@ pub fn check_page(
         let rel_ref = rel.as_deref();
         let overflow = match &b.layout {
             Some(l) if !l.lines.is_empty() => {
-                crate::commands::export::layout_overflows(l, b.w, b.h, rel_ref)
+                crate::render::page::layout_overflows(l, b.w, b.h, rel_ref)
             }
-            _ => crate::commands::export::text_overflows(&b.translated, b.w, b.h, rel_ref),
+            _ => crate::render::page::text_overflows(&b.translated, b.w, b.h, rel_ref),
         };
         if overflow {
             out.push(QaIssue {
@@ -109,12 +110,12 @@ fn looks_sfx(s: &str) -> bool {
 }
 
 /// Seluruh project → issues diurut file, bubble.
-pub fn check_project(state: &tauri::State<'_, AppState>, project_id: &str) -> Result<Vec<QaIssue>, String> {
-    let store = state.store.lock().map_err(|e| e.to_string())?;
+pub fn check_project(state: &tauri::State<'_, AppState>, project_id: &str) -> Result<Vec<QaIssue>, AppError> {
+    let store = lock_or_err(&state.store)?;
     let proj = store
         .projects
         .get(project_id)
-        .ok_or_else(|| format!("project not found: {project_id}"))?;
+        .ok_or_else(|| AppError::project_not_found(project_id))?;
     let pages = proj.sorted_all_pages();
     let mut out = Vec::new();
     for pg in &pages {

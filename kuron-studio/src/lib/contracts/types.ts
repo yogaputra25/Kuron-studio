@@ -1,5 +1,7 @@
 import type { TextLayout } from "../editor/text/textLayout";
 import type { TranslateOpts } from "../provider/translateOpts";
+import extensions from "./extensions.json";
+import providers from "./providers.json";
 
 export type { TextLayout };
 
@@ -43,27 +45,16 @@ export interface Project {
 }
 
 // --- M0: import contract (values, bukan type) ---
-// Wajib sinkron dengan `IMAGE_EXTS` / `is_archive` di
-// src-tauri/src/commands/project.rs — dicek image-ext-contract.test.ts yang
-// membaca dua-duanya. Jangan tambah ekstensi di sini saja: kalau formatnya
+// SATU sumber kebenaran = `extensions.json` di folder ini (diimpor langsung,
+// bukan disalin). Backend (`commands/project.rs`) membaca file yang sama via
+// `include_str!`; jangan tambah ekstensi di satu sisi saja — kalau formatnya
 // tidak bisa di-decode, import diam-diam jadi halaman rusak.
-export const IMAGE_EXTS = [
-  "jpg",
-  "jpeg",
-  "jpe",
-  "jfif",
-  "png",
-  "webp",
-  "bmp",
-  "gif",
-  "tiff",
-  "tif",
-] as const;
+export const IMAGE_EXTS: readonly string[] = extensions.image;
 
-export const ARCHIVE_EXTS = ["zip", "cbz"] as const;
+export const ARCHIVE_EXTS: readonly string[] = extensions.archive;
 // pdf-import: dikenali backend via is_pdf() terpisah (output = jpg/png,
-// jadi TAK masuk IMAGE_EXTS). Sinkron dengan is_pdf di project.rs.
-export const PDF_EXTS = ["pdf"] as const;
+// jadi TAK masuk IMAGE_EXTS). Sinkron via `extensions.json`.
+export const PDF_EXTS: readonly string[] = extensions.pdf;
 
 export interface ImportResult {
   pages: Page[];
@@ -215,15 +206,10 @@ export const PROVIDER_TYPES: { value: AiProviderType; label: string; needsKey: b
   { value: "custom", label: "Custom", needsKey: true },
 ];
 
-// Must match Rust AiProviderType::default_base_url exactly: Rust appends
-// endpoint paths (/v1beta/models, /v2/chat, ...) so bases stay origin-level.
-export const DEFAULT_BASE_URLS: Record<AiProviderType, string> = {
-  gemini: "https://generativelanguage.googleapis.com",
-  openAi: "https://api.openai.com/v1",
-  metaAi: "https://api.meta.ai/v1",
-  cohere: "https://api.cohere.ai",
-  custom: "",
-};
+// SATU sumber kebenaran = `providers.json` (diimpor langsung). Backend
+// (`AiProviderType::default_base_url`) membaca file yang sama; Rust menambah
+// endpoint path (/v1beta/models, /v2/chat, ...) jadi base tetap origin-level.
+export const DEFAULT_BASE_URLS: Record<AiProviderType, string> = { ...providers };
 
 export const TRANSLATE_STYLES: { value: TranslateStyle; label: string }[] = [
   { value: "standard", label: "Standard" },

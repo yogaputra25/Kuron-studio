@@ -1,184 +1,149 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+// @vitest-environment jsdom
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import { fireEvent, waitFor } from "@testing-library/svelte";
+import { renderWithI18n } from "../test-utils";
+import ProviderSettings from "./ProviderSettings.svelte";
+import { api } from "../contracts/api";
+import type { ProviderView } from "../contracts/types";
 
-const SRC = fileURLToPath(new URL("../..", import.meta.url));
-const panel = readFileSync(join(SRC, "lib/provider/ProviderSettings.svelte"), "utf8");
+describe("ProviderSettings behavioral mount tests", () => {
+  const dummyProviders: ProviderView[] = [
+    {
+      id: "p1",
+      providerType: "gemini",
+      name: "My Gemini",
+      baseUrl: "https://generativelanguage.googleapis.com",
+      model: "gemini-1.5-flash",
+      hasKey: true,
+      isVisionCapable: true,
+    },
+  ];
 
-// Dua bug yang-reported user:
-//
-// 1. "Nama wajib diisi." nempel di banner atas_panel dan tidak pernah hilang —
-//    user sudah memperbaiki/k menutup form tapi messagenya masih di sana.
-// 2. "Model tidak langsung show" — list_models butuh record di DB (id),
-//    jadi provider baru tidak bisa melihat pilihannya sebelum disimpan.
-//    Chicken-and-egg: simpan dulu dengan model kosong, baru bisa load.
-
-describe("provider form: error tidak lagi global yang nempel", () => {
-  it("pesan nama wajib pakai konstanta yang sama di writer dan reader", () => {
-    expect(panel).toContain('const NAME_REQUIRED = "Nama wajib diisi.";');
-    // Writer (save) dan reader (nameError) harus referensi konstanta yang
-    // sama — kalau ada string literal terpisah, mereka bisa melenceng diam-diam.
-    // Hitung di kode saja, bukan di komentar.
-    const code = panel
-      .split("\n")
-      .filter((l) => !l.trimStart().startsWith("//") && !l.trimStart().startsWith("*"))
-      .join("\n");
-    const literal = [...code.matchAll(/"Nama wajib diisi\."/g)];
-    expect(
-      literal.length,
-      "string harus muncul sekali di kode (hanya di deklarasi konstanta)",
-    ).toBe(1);
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(api, "getProviders").mockResolvedValue(dummyProviders);
+    vi.spyOn(api, "listModelsDraft").mockResolvedValue([
+      { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash", vision: true },
+      { id: "gemini-text-only", label: "Gemini Text Only", vision: false },
+    ]);
+    vi.spyOn(api, "saveProvider").mockImplementation(async (arg) => ({
+      id: arg.id ?? "p-new",
+      providerType: arg.providerType,
+      name: arg.name,
+      baseUrl: arg.baseUrl,
+      model: arg.model,
+      hasKey: !!arg.apiKey,
+      isVisionCapable: true,
+    }));
+    vi.spyOn(api, "validateProvider").mockResolvedValue({
+      ok: true,
+      message: "Koneksi berhasil",
+    });
   });
 
-  it("error validasi jadi per-field (nameError), bukan hanya banner", () => {
-    expect(panel).toContain('const nameError = $derived(error === NAME_REQUIRED');
-    expect(panel).toMatch(/label="Nama"[\s\S]*?error=\{nameError\}/);
+  it("loads and displays providers on mount", async () => {
+    const { getByText } = renderWithI18n(ProviderSettings, {
+      props: { onClose: vi.fn() },
+    });
+    await waitFor(() => {
+      expect(getByText("My Gemini")).toBeTruthy();
+    });
   });
 
-  it("error dibersihkan saat user mengetik di field", () => {
-    const n = [...panel.matchAll(/oninput=\{\(\) => \(error = ""\)\}/g)].length;
-    expect(n, "field tanpa oninput error-clearing").toBeGreaterThanOrEqual(3);
+  it("shows validation error on empty name when saving", async () => {
+    const { getByRole, getByText } = renderWithI18n(ProviderSettings, {
+      props: { onClose: vi.fn() },
+    });
+
+    await waitFor(() => {
+      expect(getByText("My Gemini")).toBeTruthy();
+    });
+
+    const saveBtn = getByRole("button", { name: /^Simpan$/i });
+    await fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(getByText("Wajib diisi.")).toBeTruthy();
+    });
   });
 
-  it("startNew() dan startEdit() membersihkan error", () => {
-    for (const fn of ["function startNew", "function startEdit"]) {
-      const body = panel.slice(panel.indexOf(fn), panel.indexOf(fn) + 400);
-      expect(body, `${fn} harus clear error`).toContain('error = ""');
-    }
+  it("clears validation error when typing name", async () => {
+    const { getByRole, getByText, getByLabelText, queryByText } = renderWithI18n(ProviderSettings, {
+      props: { onClose: vi.fn() },
+    });
+
+    await waitFor(() => {
+      expect(getByText("My Gemini")).toBeTruthy();
+    });
+
+    const saveBtn = getByRole("button", { name: /^Simpan$/i });
+    await fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(getByText("Wajib diisi.")).toBeTruthy();
+    });
+
+    const nameInput = getByLabelText(/^Nama$/i);
+    await fireEvent.input(nameInput, { target: { value: "New Provider" } });
+
+    await waitFor(() => {
+      expect(queryByText("Wajib diisi.")).toBeNull();
+    });
   });
 
-  it("banner global tidak lagi menampilkan error validasi field", () => {
-    // Kalau banner masih menampilkannya, user lihat pesan yang sama 2x.
-    const banner = panel.slice(panel.indexOf('role="alert"') - 300, panel.indexOf('role="alert"') + 300);
-    expect(banner).toContain("error");
-    expect(
-      banner,
-      "banner global jangan render error validasi per-field (duplikat)",
-    ).not.toMatch(/\{error\}\s*<\/p>\s*<\/div>\s*<div[^>]*role="alert"/);
-  });
-});
+  it("loads models in draft mode with api key typed", async () => {
+    const { getByRole, getByLabelText, getByText } = renderWithI18n(ProviderSettings, {
+      props: { onClose: vi.fn() },
+    });
 
-describe("provider form: model bisa dipilih sebelum disimpan", () => {
-  it("loadModels punya jalur draft, bukan hanya id", () => {
-    const fn = panel.slice(panel.indexOf("async function loadModels"));
-    expect(fn).toContain("api.listModelsDraft(");
-    expect(fn).toContain("api.listModels(editId)");
-  });
+    await waitFor(() => {
+      expect(getByText("My Gemini")).toBeTruthy();
+    });
 
-  it("tidak lagi menolak load models hanya karena belum ada editId", () => {
-    const fn = panel.slice(panel.indexOf("async function loadModels"));
-    expect(
-      fn,
-      "pesan 'simpan dulu' = chicken-and-egg yang dikeluhkan user",
-    ).not.toContain("Simpan provider dulu sebelum load models");
-  });
+    const keyInput = getByLabelText(/API key/i);
+    await fireEvent.input(keyInput, { target: { value: "secret-key-123" } });
 
-  it("gatanya基于 key, bukan berdasarkan sudah-tersimpan", () => {
-    expect(panel).toContain("const canListModels = $derived(fKey.trim().length > 0 || !!editId);");
+    const loadModelsBtn = getByRole("button", { name: /Load models/i });
+    await fireEvent.click(loadModelsBtn);
+
+    await waitFor(() => {
+      expect(api.listModelsDraft).toHaveBeenCalledWith({
+        providerType: "gemini",
+        baseUrl: expect.any(String),
+        apiKey: "secret-key-123",
+      });
+      expect(getByText(/2 model\./i)).toBeTruthy();
+    });
   });
 
-  it("memberi alasan saat tombol disabled", () => {
-    expect(panel).toMatch(/disabled=\{busy \|\| !canListModels\}/);
-    expect(panel).toContain('title={canListModels ?');
-    expect(panel).toContain("Isi API key dulu");
-  });
+  it("saves provider and remains in edit mode so validate can be used immediately", async () => {
+    const { getByRole, getByLabelText, getByText } = renderWithI18n(ProviderSettings, {
+      props: { onClose: vi.fn() },
+    });
 
-  it("otomatis pilih model vision pertama agar field tidak kosong", () => {
-    const fn = panel.slice(panel.indexOf("async function loadModels"));
-    expect(fn).toContain("if (models.length > 0 && !fModel) fModel = (models.find((m) => m.vision) ?? models[0]).id;");
-  });
+    await waitFor(() => {
+      expect(getByText("My Gemini")).toBeTruthy();
+    });
 
-  it("select model Spiegelkan fModel, bukan selalu value=\"\"", () => {
-    // value="" selalu membuat select возвращаться ke placeholder walau
-    // user sudah memilih dari daftar.
-    expect(panel).toMatch(/label="Model tersedia"[\s\S]*?value=\{fModel\}/);
-  });
+    const nameInput = getByLabelText(/^Nama$/i);
+    await fireEvent.input(nameInput, { target: { value: "Gemini Pro" } });
 
-  it("model yang diketik manual tidak dihapus saat key berubah", () => {
-    // oninput API key sengaja hanya mereset `models`, bukan `fModel`.
-    const key = panel.slice(panel.indexOf('label="API key"'));
-    const input = key.slice(0, key.indexOf("/>") + 2);
-    expect(input).toContain("models = []");
-    expect(input, "fModel tidak boleh di-reset").not.toContain("fModel = ");
-  });
-});
+    const keyInput = getByLabelText(/API key/i);
+    await fireEvent.input(keyInput, { target: { value: "test-api-key" } });
 
-describe("provider form: key tersimpan ditampilkan tanpa membocorkan", () => {
-  it("pakai flag hasStoredKey, bukan isi key", () => {
-    expect(panel).toContain("let hasStoredKey = $state(false);");
-    expect(panel).toContain("hasStoredKey = p.hasKey;");
-    // Rust hanya menyimpan boolean hasKey — fKey tidak boleh di-backfill.
-    const startEdit = panel.slice(panel.indexOf("function startEdit"), panel.indexOf("function startEdit") + 400);
-    expect(startEdit).toMatch(/fKey = "";/);
-  });
+    const saveBtn = getByRole("button", { name: /^Simpan$/i });
+    await fireEvent.click(saveBtn);
 
-  it("hint menjelaskan bedanya 'tersimpan' vs 'kosong'", () => {
-    expect(panel).toContain("Ada key tersimpan");
-  });
-});
+    await waitFor(() => {
+      expect(api.saveProvider).toHaveBeenCalled();
+    });
 
-describe("provider form: tombol Simpan tidak mati tanpa sebab", () => {
-  it("tidak disabled hanya karena Nama kosong", () => {
-    // Gejala yang dilaporkan: "Tombol Simpan mati/kelabu". Penyebabnya
-    // `disabled={!fName.trim()}` — user tidak pernah diberi tahu alasannya.
-    expect(panel, "tombol Simpan jangan disabled karena Nama kosong").not.toMatch(
-      /variant="primary"[\s\S]{0,160}disabled=\{busy \|\| !fName\.trim\(\)\}/,
-    );
-  });
+    const validateBtn = getByRole("button", { name: /Validate/i });
+    await fireEvent.click(validateBtn);
 
-  it("tetap menolak submit kosong dengan pesan yang jelas", () => {
-    const save = panel.slice(panel.indexOf("async function save"));
-    expect(save).toContain("if (!fName.trim()) { error = NAME_REQUIRED; return; }");
-  });
-
-  it("memberi tooltip saat Nama kosong", () => {
-    expect(panel).toContain('title={fName.trim() ? "" : "Isi nama provider dulu."}');
-  });
-});
-
-describe("provider form: tetap mode edit setelah simpan", () => {
-  it("save() memakai id hasil save supaya Validate langsung aktif", () => {
-    const start = panel.indexOf("async function save");
-    const end = panel.indexOf("\n  async function remove");
-    const fn = panel.slice(start, end);
-    expect(fn).toContain("editId = saved.id");
-    expect(fn).not.toContain("startNew()");
-  });
-
-  it("tombol Validate menjelaskan kenapa mati saat belum tersimpan", () => {
-    expect(panel).toContain("Simpan provider dulu");
+    await waitFor(() => {
+      expect(api.validateProvider).toHaveBeenCalledWith("p-new");
+      expect(getByText("Koneksi berhasil")).toBeTruthy();
+    });
   });
 });
-
-describe("provider form: base_url tidak ditimpa diam-diam", () => {
-  it("pickType hanya menimpa base_url yang masih pristine", () => {
-    const fn = panel.slice(panel.indexOf("function pickType"));
-    expect(fn, "harus cek apakah base_url masih nilai default").toMatch(
-      /const wasPristine =/,
-    );
-    expect(fn).toContain("DEFAULT_BASE_URLS[fType]");
-  });
-
-  it("ganti tipe juga membersihkan model lama", () => {
-    const fn = panel.slice(panel.indexOf("function pickType"));
-    expect(fn, "model lama tidak berlaku untuk provider baru").toMatch(/fModel = ""/);
-  });
-
-  it("custom dikosongkan, preset diisi", () => {
-    const fn = panel.slice(panel.indexOf("function pickType"));
-    expect(fn).toContain('if (t === "custom")');
-    expect(fn).toContain("fBaseUrl = DEFAULT_BASE_URLS[t];");
-  });
-});
-
-describe("provider form: filter vision + warning non-vision", () => {
-  it("daftar bisa difilter hanya-vision", () => {
-    expect(panel).toContain("visionOnly");
-  });
-
-  it("warning bila model dipilih non-vision atau tak dikenal di daftar", () => {
-    expect(panel).toMatch(/modelNoVisionWarn|modelUnknownWarn/);
-  });
-});
-

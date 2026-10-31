@@ -1,37 +1,38 @@
 import { describe, expect, it } from "vitest";
-import projectRs from "../../../src-tauri/src/commands/project.rs?raw";
 import { ARCHIVE_EXTS, IMAGE_EXTS, PDF_EXTS } from "./types";
+import extensions from "./extensions.json";
 import dialogsSrc from "../app/dialogs.ts?raw";
 
-// Cegah dialog picker dan backend_import menerima daftar format berbeda.
-// Kalau melebar, user bisa pilih file yang import-nya ditolak diam-diam;
-// kalau menyempit, file valid jadi tidak bisa dipilih sama sekali.
-//
-// Rust adalah sumber kebenaran (crate `image` yang menentukan apa yang bisa
-// di-decode), jadi test ini membandingkan TS → Rust, bukan sebaliknya.
-// Bentuk sumber dibaca via `?raw` supaya tidak perlu parser.
+// Kontrak lintas bahasa, sumber = `extensions.json` — TANPA membaca source
+// Rust (tidak ada `?raw` ke `.rs`, tidak ada path `src-tauri/`):
+// - TS (`types.ts`) mengimpor JSON langsung (bukan salinan),
+// - Rust (`commands/project.rs`) membaca JSON yang sama via `include_str!` +
+//   `OnceLock` (dipin test Rust `extensions_match_json_contract` +
+//   `image_format_support_is_real`),
+// - test ini memastikan pemakaian TS tetap sinkron dengan JSON.
 
-const RUST_IMAGE_EXTS = /const IMAGE_EXTS: \[&str; \d+\] = \[([^\]]*)\]/.exec(projectRs);
-const RUST_ARCHIVE_EXTS = /matches!\(ext\.to_ascii_lowercase\(\)\.as_str\(\), ([^)]*)\)/.exec(
-  projectRs,
-);
-
-function literalList(raw: string): string[] {
-  return [...raw.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-}
-
-describe("image/archive extension contract (TS picker == Rust import filter)", () => {
-  it("parses the Rust constants", () => {
-    expect(RUST_IMAGE_EXTS, "IMAGE_EXTS not found in project.rs").not.toBeNull();
-    expect(RUST_ARCHIVE_EXTS, "is_archive ext list not found in project.rs").not.toBeNull();
+describe("image/archive extension contract (TS picker == JSON)", () => {
+  it("JSON memuat daftar yang diharapkan", () => {
+    expect([...extensions.image].sort()).toEqual([
+      "bmp",
+      "gif",
+      "jfif",
+      "jpe",
+      "jpeg",
+      "jpg",
+      "png",
+      "tif",
+      "tiff",
+      "webp",
+    ]);
+    expect([...extensions.archive]).toEqual(["zip", "cbz"]);
+    expect([...extensions.pdf]).toEqual(["pdf"]);
   });
 
-  it("IMAGE_EXTS matches", () => {
-    expect([...IMAGE_EXTS].sort()).toEqual(literalList(RUST_IMAGE_EXTS![1]).sort());
-  });
-
-  it("ARCHIVE_EXTS matches", () => {
-    expect([...ARCHIVE_EXTS].sort()).toEqual(literalList(RUST_ARCHIVE_EXTS![1]).sort());
+  it("IMAGE_EXTS/ARCHIVE_EXTS/PDF_EXTS == JSON", () => {
+    expect([...IMAGE_EXTS]).toEqual([...extensions.image]);
+    expect([...ARCHIVE_EXTS]).toEqual([...extensions.archive]);
+    expect([...PDF_EXTS]).toEqual([...extensions.pdf]);
   });
 
   it("no duplicates", () => {
@@ -40,12 +41,10 @@ describe("image/archive extension contract (TS picker == Rust import filter)", (
     }
   });
 
-  it("pdf-import: backend is_pdf + dialog PDF sinkron, IMAGE_EXTS tak berubah", () => {
-    // Backend kenali pdf via is_pdf() terpisah (output = jpg/png).
-    expect(projectRs).toMatch(/fn is_pdf\(/);
-    expect(projectRs).toContain('"pdf"');
-    expect(projectRs).toContain("extract_pdf_pages");
-    // TS: PDF_EXTS terpisah, tak masuk IMAGE_EXTS (output-nya yang gambar).
+  it("pdf-import: PDF_EXTS terpisah, tak masuk IMAGE_EXTS; dialog tawarkan PDF", () => {
+    // Backend kenali pdf via is_pdf() terpisah (output = jpg/png) — bentuknya
+    // dijaga key `pdf` tersendiri di JSON + test Rust
+    // `pdf_recognized_but_not_image_or_archive`.
     expect([...PDF_EXTS]).toEqual(["pdf"]);
     expect([...IMAGE_EXTS]).not.toContain("pdf");
     // Dialog tawarkan filter PDF documents (sejak FE-7: di dialogs.ts).

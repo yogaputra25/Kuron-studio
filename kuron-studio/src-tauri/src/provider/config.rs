@@ -1,4 +1,5 @@
 use serde::{Deserialize, Deserializer, Serialize};
+use std::sync::OnceLock;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -45,16 +46,34 @@ impl AiProviderType {
         }
     }
 
+    /// Salinan `src/lib/contracts/providers.json` — SATU sumber kebenaran
+    /// untuk base URL preset. Frontend (`types.ts`) impor file yang sama.
     pub fn default_base_url(&self) -> &'static str {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct ProviderBaseUrls {
+            gemini: String,
+            open_ai: String,
+            meta_ai: String,
+            cohere: String,
+            custom: String,
+        }
+        static BASE_URLS: OnceLock<ProviderBaseUrls> = OnceLock::new();
+        let b: &'static ProviderBaseUrls = BASE_URLS.get_or_init(|| {
+            serde_json::from_str(include_str!("../../../src/lib/contracts/providers.json"))
+                .expect("contracts/providers.json harus valid")
+        });
         match self {
-            Self::Gemini => "https://generativelanguage.googleapis.com",
-            Self::OpenAi => "https://api.openai.com/v1",
-            Self::MetaAi => "https://api.meta.ai/v1",
-            Self::Cohere => "https://api.cohere.ai",
-            Self::Custom => "",
+            Self::Gemini => &b.gemini,
+            Self::OpenAi => &b.open_ai,
+            Self::MetaAi => &b.meta_ai,
+            Self::Cohere => &b.cohere,
+            Self::Custom => &b.custom,
         }
     }
 
+    /// Hanya dipakai test (`urls` di bawah) — URL nyata dirakit inline di tiap provider.
+    #[cfg(test)]
     pub fn models_url(&self, base: &str) -> String {
         match self {
             Self::Gemini => format!("{base}/v1beta/models"),
@@ -230,6 +249,24 @@ mod tests {
         assert_eq!(effective_model(&rec, Some("")), "simpanan");
         assert_eq!(effective_model(&rec, Some("  ")), "simpanan");
         assert_eq!(effective_model(&rec, Some("baru")), "baru");
+    }
+
+    #[test]
+    fn default_base_url_matches_json_contract() {
+        // Kontrak lintas bahasa: nilai runtime == `providers.json` apa adanya.
+        let v: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../src/lib/contracts/providers.json"
+        ))
+        .unwrap();
+        for (t, k) in [
+            (AiProviderType::Gemini, "gemini"),
+            (AiProviderType::OpenAi, "openAi"),
+            (AiProviderType::MetaAi, "metaAi"),
+            (AiProviderType::Cohere, "cohere"),
+            (AiProviderType::Custom, "custom"),
+        ] {
+            assert_eq!(t.default_base_url(), v[k].as_str().unwrap(), "{k}");
+        }
     }
 
     #[test]

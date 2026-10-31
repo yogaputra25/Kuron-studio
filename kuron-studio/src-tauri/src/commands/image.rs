@@ -1,12 +1,12 @@
 use std::time::{Instant, UNIX_EPOCH};
 
-use base64::Engine;
 use image::ExtendedColorType;
 use tauri::State;
 
+use crate::error::AppError;
 use crate::logging;
 use crate::preview_cache::{
-    THUMB_TIER_MAX_SIDE, ensure_preview_table, preview_get, preview_key, preview_set,
+    THUMB_TIER_MAX_SIDE, preview_get, preview_key, preview_set,
 };
 use crate::AppState;
 
@@ -37,9 +37,9 @@ pub(crate) fn render_preview_jpeg(
     max_side: u32,
     filter: image::imageops::FilterType,
     quality: u8,
-) -> Result<Vec<u8>, String> {
-    let bytes = std::fs::read(path).map_err(|e| format!("read failed: {e}"))?;
-    let img = image::load_from_memory(&bytes).map_err(|e| format!("decode failed: {e}"))?;
+) -> Result<Vec<u8>, AppError> {
+    let bytes = std::fs::read(path).map_err(|e| AppError::io(format!("read failed: {e}")))?;
+    let img = image::load_from_memory(&bytes).map_err(|e| AppError::parse(format!("decode failed: {e}")))?;
     let (w, h) = (img.width(), img.height());
     let thumb = if w.max(h).max(1) > max_side {
         let scale = max_side as f32 / w.max(h) as f32;
@@ -55,14 +55,13 @@ pub(crate) fn render_preview_jpeg(
     let (tw, th) = (rgb.width(), rgb.height());
     let mut jpeg = Vec::new();
     let mut enc = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, quality);
-    enc.encode(rgb.as_raw(), tw, th, ExtendedColorType::Rgb8)
-        .map_err(|e| e.to_string())?;
+    enc.encode(rgb.as_raw(), tw, th, ExtendedColorType::Rgb8)?;
     Ok(jpeg)
 }
 
 /// Versi file untuk kunci cache: (mtime detik, ukuran byte).
-fn file_version(path: &str) -> Result<(i64, u64), String> {
-    let meta = std::fs::metadata(path).map_err(|e| format!("read failed: {e}"))?;
+fn file_version(path: &str) -> Result<(i64, u64), AppError> {
+    let meta = std::fs::metadata(path).map_err(|e| AppError::io(format!("read failed: {e}")))?;
     let mtime = meta
         .modified()
         .ok()
@@ -91,16 +90,13 @@ pub async fn get_image_preview(
                 "preview_cache_hit",
                 serde_json::json!({ "tier": if persist_tier { "thumb" } else { "full" }, "bytes": jpeg.len() }),
             );
-            return Ok(format!(
-                "data:image/jpeg;base64,{}",
-                base64::engine::general_purpose::STANDARD.encode(&jpeg)
-            ));
+            return Ok(crate::provider::http::data_url("image/jpeg", &jpeg));
         }
     }
     // 2. SQLite persisten (hanya tier grid; full 1600 sesi-saja).
+    // Tabel dijamin `db::migrate` saat startup — tanpa ensure per-query.
     if persist_tier {
-        let db = state.db.lock().map_err(|e| e.to_string())?;
-        ensure_preview_table(&db)?;
+        let db = crate::error::lock_or_err(&state.db)?;
         if let Some(jpeg) = preview_get(&db, &key, max_side)? {
             drop(db);
             if let Ok(mut pc) = state.previews.lock() {
@@ -110,10 +106,7 @@ pub async fn get_image_preview(
                 "preview_cache_hit",
                 serde_json::json!({ "tier": "thumb-persist", "bytes": jpeg.len() }),
             );
-            return Ok(format!(
-                "data:image/jpeg;base64,{}",
-                base64::engine::general_purpose::STANDARD.encode(&jpeg)
-            ));
+            return Ok(crate::provider::http::data_url("image/jpeg", &jpeg));
         }
     }
     // 3. Decode penuh (diukur untuk baseline 1.1).
@@ -138,10 +131,7 @@ pub async fn get_image_preview(
             let _ = preview_set(&db, &key, max_side, &path_for_store, mtime, size, &jpeg);
         }
     }
-    Ok(format!(
-        "data:image/jpeg;base64,{}",
-        base64::engine::general_purpose::STANDARD.encode(&jpeg)
-    ))
+    Ok(crate::provider::http::data_url("image/jpeg", &jpeg))
 }
 
 #[cfg(test)]

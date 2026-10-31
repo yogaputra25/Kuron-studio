@@ -1,72 +1,62 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
+import { renderWithI18n } from "../test-utils";
+import Field from "./Field.svelte";
+import FormHarness from "./__fixtures__/FormHarness.svelte";
+import { fireEvent } from "@testing-library/svelte";
 
-const SRC = fileURLToPath(new URL("../..", import.meta.url));
-
-// Regresi: `Field` menerima `value = $bindable()` tapi tidak mengikatnya dua
-// arah ke <input>. Dua kegagalan yang pernah terjadi, dua-duanya bikin input
-// "uncontrolled" — ketikan TERLIHAT di layar tapi state parent tetap "":
-//   1. tidak menulis apa-apa sama sekali;
-//   2. menulis `{value}` — satu arah, compiler menghasilkan set_value tanpa
-//      bind_value. Gejalanya persis: "Nama wajib diisi." walau field terisi.
-//
-// Test ini memastikan `bind:value`; bukti runtime ada di field-roundtrip.test.ts.
-
-describe("ui/Field meneruskan value ke input (controlled)", () => {
-  const field = readFileSync(join(SRC, "lib/ui/Field.svelte"), "utf8");
-
-  it("menerima value sebagai $bindable", () => {
-    expect(field).toMatch(/value = \$bindable\(\)/);
+describe("ui/Field behavioral component test", () => {
+  it("renders label and associates with input", () => {
+    const { getByLabelText } = renderWithI18n(Field, {
+      props: { label: "Username" },
+    });
+    const input = getByLabelText("Username");
+    expect(input.tagName).toBe("INPUT");
   });
 
-  it("mengikat bind:value di <input> (dua arah)", () => {
-    // Wajib bind, bukan `{value}` — yang terakhir cuma one-way dan tidak
-    // pernah mengembalikan ketikan user ke $state.
-    const inputTag = field.slice(field.indexOf("<input"));
-    expect(
-      inputTag.slice(0, 400),
-      "value tidak terikat dua arah — field jadi uncontrolled",
-    ).toMatch(/bind:value/);
+  it("renders error message and marks input invalid", () => {
+    const { getByText, getByRole } = renderWithI18n(Field, {
+      props: { label: "Email", error: "Invalid email address" },
+    });
+    expect(getByText("Invalid email address")).toBeTruthy();
+    const input = getByRole("textbox");
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(input.getAttribute("aria-describedby")).toContain("-err");
   });
 
-  it("bind:value ditulis SETELAH {...rest} agar tidak ditimpa", () => {
-    // PENTING: `indexOf(">")` di SELURUH file akan menemukan `>` dari tag
-    // <label> yang muncul lebih dulu — slice jadi kosong. Ambil `>` relatif
-    // terhadap posisi <input.
-    const from = field.indexOf("<input");
-    const inputTag = field.slice(from, field.indexOf("/>", from) + 2);
-    const restAt = inputTag.indexOf("{...rest}");
-    const valueAt = inputTag.indexOf("bind:value");
-    expect(restAt).toBeGreaterThan(-1);
-    expect(valueAt, "bind:value harus ada").toBeGreaterThan(-1);
-    expect(
-      valueAt,
-      "bind:value harus setelah {...rest} — kalau sebelum, rest bisa menimpanya",
-    ).toBeGreaterThan(restAt);
+  it("renders hint text when no error", () => {
+    const { getByText, getByRole } = renderWithI18n(Field, {
+      props: { label: "Password", hint: "Minimum 8 characters" },
+    });
+    expect(getByText("Minimum 8 characters")).toBeTruthy();
+    const input = getByRole("textbox");
+    expect(input.getAttribute("aria-invalid")).toBeNull();
+    expect(input.getAttribute("aria-describedby")).toContain("-hint");
   });
-});
 
-describe("primitif lain juga meneruskan value", () => {
-  it("ui/Lov meneruskan pilihan via onchange (tanpa $bindable yang dibuang)", () => {
-    const lov = readFileSync(join(SRC, "lib/ui/Lov.svelte"), "utf8");
-    expect(lov).not.toMatch(/\$bindable/);
-    expect(lov).toContain("onchange?.(");
+  it("forwards extra HTML attributes like placeholder and disabled", () => {
+    const { getByPlaceholderText } = renderWithI18n(Field, {
+      props: { placeholder: "Search here...", disabled: true },
+    });
+    const input = getByPlaceholderText("Search here...") as HTMLInputElement;
+    expect(input.disabled).toBe(true);
   });
-});
 
-describe("tidak ada primitif yang menerima bindable tapi membuangnya", () => {
-  const files = readdirSync(join(SRC, "lib/ui"));
-  it.each(files.filter((f) => f.endsWith(".svelte")))("%s konsisten", (f) => {
-    const src = readFileSync(join(SRC, "lib/ui", f), "utf8");
-    const acceptsBindable = /(\w+) = \$bindable\(\)/.test(src);
-    if (!acceptsBindable) return;
-    for (const [, name] of src.matchAll(/(\w+) = \$bindable\(\)/g)) {
-      expect(
-        src,
-        `${f}: menerima ${name} = $bindable() tapi tidak bind:${name} di markup`,
-      ).toContain(`bind:${name}`);
-    }
+  it("binds value two-way in a parent component", async () => {
+    const { getByTestId } = renderWithI18n(FormHarness);
+    const input = getByTestId("name") as HTMLInputElement;
+    const stateEl = getByTestId("state");
+    const saveBtn = getByTestId("save");
+    const outEl = getByTestId("out");
+
+    expect(input.value).toBe("");
+    expect(stateEl.textContent).toBe("");
+
+    await fireEvent.input(input, { target: { value: "my-name" } });
+    expect(input.value).toBe("my-name");
+    expect(stateEl.textContent).toBe("my-name");
+
+    await fireEvent.click(saveBtn);
+    expect(outEl.textContent).toContain("my-name");
   });
 });

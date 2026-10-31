@@ -1,7 +1,7 @@
 use image::{GenericImage, RgbImage};
 
 use crate::bubble::BubbleBox;
-
+use crate::error::AppError;
 /// Kualitas mosaic — mirror `MosaicQuality` Kuron (cap + JPEG quality).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MosaicQuality {
@@ -78,12 +78,12 @@ fn draw_label(canvas: &mut RgbImage, index: usize, y0: u32, width: u32) {
     }
 }
 
-fn encode_jpeg_rgb(rgb: &RgbImage, quality: u8) -> Result<Vec<u8>, String> {
+fn encode_jpeg_rgb(rgb: &RgbImage, quality: u8) -> Result<Vec<u8>, AppError> {
     let (w, h) = rgb.dimensions();
     let mut out = Vec::new();
     let mut enc = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, quality);
     enc.encode(rgb.as_raw(), w, h, image::ExtendedColorType::Rgb8)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| AppError::parse(e.to_string()))?;
     Ok(out)
 }
 
@@ -93,15 +93,14 @@ pub fn build_mosaic(
     page_bytes: &[u8],
     bubbles: &[BubbleBox],
     quality: MosaicQuality,
-) -> Result<Vec<u8>, String> {
+) -> Result<Vec<u8>, AppError> {
     if bubbles.is_empty() {
-        return Err("no bubbles — pakai fallback compress_page".to_string());
+        return Err(AppError::parse("no bubbles — pakai fallback compress_page"));
     }
     let page = image::load_from_memory(page_bytes)
-        .map_err(|e| format!("decode: {e}"))?
+        .map_err(|e| AppError::parse(format!("decode: {e}")))?
         .to_rgb8();
     let (pw, ph) = page.dimensions();
-
     let mut chips: Vec<RgbImage> = Vec::with_capacity(bubbles.len());
     for b in bubbles {
         let pad_x = (b.w as f32 * 0.2) as i32;
@@ -123,7 +122,7 @@ pub fn build_mosaic(
         ));
     }
     if chips.is_empty() {
-        return Err("semua bubble di luar bounds".to_string());
+        return Err(AppError::parse("semua bubble di luar bounds"));
     }
 
     let total_w = chips.iter().map(|c| c.width()).max().unwrap_or(64);
@@ -141,7 +140,7 @@ pub fn build_mosaic(
         let x_off = (total_w - chip.width()) / 2;
         mosaic
             .copy_from(chip, x_off, y)
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| AppError::parse(e.to_string()))?;
         y += chip.height() + ROW_GAP;
     }
 
@@ -159,9 +158,9 @@ pub fn build_mosaic(
 }
 
 /// Fallback Kuron 1:1 — longest side 1280, JPEG85.
-pub fn compress_page(page_bytes: &[u8]) -> Result<Vec<u8>, String> {
+pub fn compress_page(page_bytes: &[u8]) -> Result<Vec<u8>, AppError> {
     let page = image::load_from_memory(page_bytes)
-        .map_err(|e| format!("decode: {e}"))?
+        .map_err(|e| AppError::parse(format!("decode: {e}")))?
         .to_rgb8();
     let (w, h) = page.dimensions();
     let longest = w.max(h).max(1);
@@ -177,26 +176,6 @@ pub fn compress_page(page_bytes: &[u8]) -> Result<Vec<u8>, String> {
         page
     };
     encode_jpeg_rgb(&out, 85)
-}
-
-/// Long-strip split — potong tiap max_chunk_h px, JPEG90 per chunk.
-pub fn chunk_webtoon(page_bytes: &[u8], max_chunk_h: u32) -> Result<Vec<Vec<u8>>, String> {
-    let page = image::load_from_memory(page_bytes)
-        .map_err(|e| format!("decode: {e}"))?
-        .to_rgb8();
-    let (w, h) = page.dimensions();
-    if max_chunk_h == 0 {
-        return Err("max_chunk_h nol".to_string());
-    }
-    let mut out = Vec::new();
-    let mut y = 0;
-    while y < h {
-        let ch = (h - y).min(max_chunk_h);
-        let crop = image::imageops::crop_imm(&page, 0, y, w, ch).to_image();
-        out.push(encode_jpeg_rgb(&crop, 90)?);
-        y += ch;
-    }
-    Ok(out)
 }
 
 #[cfg(test)]
@@ -276,16 +255,5 @@ mod tests {
         let out = compress_page(&png).unwrap();
         let img = image::load_from_memory(&out).unwrap();
         assert_eq!((img.width(), img.height()), (1280, 640));
-    }
-
-    #[test]
-    fn chunk_splits_rows() {
-        let png = solid_png(100, 3000, [30, 200, 30]);
-        let chunks = chunk_webtoon(&png, 1000).unwrap();
-        assert_eq!(chunks.len(), 3);
-        for c in &chunks {
-            let img = image::load_from_memory(c).unwrap();
-            assert_eq!(img.height(), 1000);
-        }
     }
 }

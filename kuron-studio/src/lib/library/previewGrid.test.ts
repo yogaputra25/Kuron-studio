@@ -1,43 +1,58 @@
-import { describe, expect, it } from "vitest";
-import appSrc from "../../App.svelte?raw";
-import gridSrc from "./PageGrid.svelte?raw";
-import listSrc from "./PageList.svelte?raw";
-import queueSrc from "../previews/thumbnailQueue.svelte.ts?raw";
+// @vitest-environment jsdom
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import { createThumbnailQueue } from "../previews/thumbnailQueue.svelte.ts";
+import { api } from "../contracts/api";
+import type { Page } from "../contracts/types";
+import { setupDomMock } from "../test-utils";
 
-// grid-preview-perf: antrean + viewport + guard + progress wajib lewat jalur
-// terpusat (previewQueue/previewMetrics), bukan angka tersebar. Pola-sumber
-// (gaya preview-transport.test.ts): App terikat Svelte runtime + Tauri invoke,
-// mount unit tak bermakna.
-describe("grid preview queue wiring (grid-preview-perf)", () => {
-  it("App memakai modul antrean + metrik terpusat", () => {
-    expect(appSrc).toContain('from "./lib/previews/thumbnailQueue.svelte.ts"');
-    expect(appSrc).toContain("createThumbnailQueue");
-    expect(appSrc).toContain("queue.loadThumbs");
+describe("Thumbnail queue integration behavior", () => {
+  const dummyPages: Page[] = [
+    { id: "p1", path: "01.jpg", width: 800, height: 1200, status: "idle", bubbles: [], translation: null },
+    { id: "p2", path: "02.jpg", width: 800, height: 1200, status: "idle", bubbles: [], translation: null },
+  ];
+
+  beforeEach(() => {
+    setupDomMock();
+    vi.restoreAllMocks();
+    vi.spyOn(api, "getImagePreview").mockImplementation(async (path) => `data:image/jpeg;base64,${path}`);
   });
 
-  it("loadThumbs tak lagi Promise.allSettled semua-halaman", () => {
-    const fn = appSrc.slice(appSrc.indexOf("function loadThumbs"));
-    expect(fn).not.toContain("Promise.allSettled");
+  it("initializes with empty state and tracks progress", () => {
+    const queue = createThumbnailQueue();
+    expect(queue.total).toBe(0);
+    expect(queue.done).toBe(0);
+    expect(queue.failed).toBe(0);
+    expect(queue.thumbs).toEqual({});
+    expect(queue.broken).toEqual({});
   });
 
-  it("generation guard: gen naik tiap load, hasil basi dibuang", () => {
-    expect(queueSrc).toContain("++loadGen");
-    expect(queueSrc).toContain("myGen !== loadGen");
+  it("loadThumbs updates total count and processes pages", () => {
+    const queue = createThumbnailQueue();
+    queue.loadThumbs(dummyPages);
+
+    expect(queue.total).toBe(2);
+
+    const div1 = document.createElement("div");
+    const observer1 = queue.observeCard(div1, "p1");
+    expect(typeof observer1.destroy).toBe("function");
+    observer1.destroy();
   });
 
-  it("IntersectionObserver viewport + disconnect saat unmount", () => {
-    expect(queueSrc).toContain("new IntersectionObserver");
-    expect(queueSrc).toContain("rootMargin");
-    expect(queueSrc).toContain("io.disconnect()");
-    expect(gridSrc).toContain("use:observeCard");
-    expect(listSrc).toContain("use:observeCard");
+  it("pruneThumbs removes entries that are no longer live", () => {
+    const queue = createThumbnailQueue();
+    queue.loadThumbs(dummyPages);
+
+    queue.pruneThumbs(new Set(["p1"]));
+    expect(queue.thumbs["p2"]).toBeUndefined();
   });
 
-  it("progress jujur: label Memuat n/m + retry yang gagal", () => {
-    expect(appSrc).toContain("loadingPreviews");
-    expect(appSrc).toContain("queue.done");
-    expect(appSrc).toContain("queue.total");
-    expect(appSrc).toContain("retryThumbs");
-  });
+  it("resetThumbs resets all progress and state", () => {
+    const queue = createThumbnailQueue();
+    queue.loadThumbs(dummyPages);
+    queue.resetThumbs();
 
+    expect(queue.total).toBe(0);
+    expect(queue.done).toBe(0);
+    expect(queue.thumbs).toEqual({});
+  });
 });

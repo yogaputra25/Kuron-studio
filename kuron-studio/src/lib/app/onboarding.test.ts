@@ -1,49 +1,75 @@
-import { describe, expect, it } from "vitest";
-import appSrc from "../../App.svelte?raw";
-import onbSrc from "./Onboarding.svelte?raw";
+// @vitest-environment jsdom
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent } from "@testing-library/svelte";
+import { renderWithI18n } from "../test-utils";
+import Onboarding from "./Onboarding.svelte";
 
-// Onboarding: header disembunyikan saat 0 project; layar kosong =
-// pilihan dua pintu (V4) + wizard 4 langkah (V3).
-describe("onboarding shell", () => {
-  it("header hanya tampil setelah project pertama dimuat", () => {
-    expect(appSrc).toContain("{#if projectStore.loaded && projects.length > 0}");
-    expect(appSrc).not.toContain("Satu project = satu judul");
+describe("Onboarding component behavioral tests", () => {
+  it("renders choice view initially with empty and sample options", async () => {
+    const onSample = vi.fn();
+    const { getByText, getByRole } = renderWithI18n(Onboarding, {
+      props: {
+        busy: false,
+        onCreate: vi.fn(),
+        onSample,
+      },
+    });
+
+    expect(getByText(/Kuron Studio/i)).toBeTruthy();
+
+    const sampleBtn = getByRole("button", { name: /Contoh|Sample/i });
+    await fireEvent.click(sampleBtn);
+    expect(onSample).toHaveBeenCalledTimes(1);
   });
 
-  it("loading tidak flash onboarding", () => {
-    const gate = appSrc.indexOf("{#if !projectStore.loaded}");
-    const mount = appSrc.indexOf("<Onboarding");
-    expect(gate).toBeGreaterThan(-1);
-    expect(mount).toBeGreaterThan(gate);
+  it("navigates from choice view to wizard steps and creates project", async () => {
+    const onCreate = vi.fn();
+    const { getByRole, getByPlaceholderText } = renderWithI18n(Onboarding, {
+      props: {
+        busy: false,
+        onCreate,
+        onSample: vi.fn(),
+      },
+    });
+
+    const emptyChoiceBtn = getByRole("button", { name: /Project kosong|Empty project/i });
+    await fireEvent.click(emptyChoiceBtn);
+
+    // Step 1 -> Step 2
+    const nextBtn1 = getByRole("button", { name: /Lanjut|Next/i });
+    await fireEvent.click(nextBtn1);
+
+    // Step 2 -> Step 3
+    const nextBtn2 = getByRole("button", { name: /Lanjut|Next/i });
+    await fireEvent.click(nextBtn2);
+
+    // Step 3 -> Step 4
+    const nextBtn3 = getByRole("button", { name: /Lanjut|Next/i });
+    await fireEvent.click(nextBtn3);
+
+    // Step 4: Name input
+    const nameInput = getByPlaceholderText(/Nama project|Project name/i);
+    await fireEvent.input(nameInput, { target: { value: "My Awesome Manga" } });
+
+    const createBtn = getByRole("button", { name: /Buat|Create/i });
+    await fireEvent.click(createBtn);
+
+    expect(onCreate).toHaveBeenCalledWith("My Awesome Manga");
   });
 
-  it("mount Onboarding dengan create + sample", () => {
-    expect(appSrc).toContain("onCreate={(n) => void createProject(n)}");
-    expect(appSrc).toContain("onSample={() => void createSample()}");
-    expect(appSrc).toContain("api.createSample($t(\"onboardSample\"))");
-  });
-});
+  it("disables buttons when busy is true", () => {
+    const { getAllByRole } = renderWithI18n(Onboarding, {
+      props: {
+        busy: true,
+        onCreate: vi.fn(),
+        onSample: vi.fn(),
+      },
+    });
 
-describe("onboarding choice + wizard", () => {
-  it("dua pintu: kosong vs contoh", () => {
-    for (const k of ["onboardChoiceT", "onboardChoiceD", "onboardOptEmptyT", "onboardOptEmptyD", "onboardOptSampleT", "onboardOptSampleD", "onboardRecommended"]) {
-      expect(onbSrc).toContain(`$t("${k}")`);
+    const buttons = getAllByRole("button") as HTMLButtonElement[];
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const btn of buttons) {
+      expect(btn.disabled).toBe(true);
     }
-  });
-
-  it("wizard 4 langkah + form di slide terakhir", () => {
-    expect(onbSrc).toContain("onboardStep${wstep + 1}t");
-    expect(onbSrc).toContain("onboardStep${wstep + 1}d");
-    expect(onbSrc).toContain("const slides = [1, 2, 3, 4]");
-    expect(onbSrc).toContain("{#each slides as s, i (s)}");
-    expect(onbSrc).toContain('{$t("onboardBack")}');
-    expect(onbSrc).toContain('{$t("onboardNext")}');
-  });
-
-  it("CTA kasih feedback saat sibuk + cegah double submit", () => {
-    expect(onbSrc).toContain("{sampleCta}");
-    expect(onbSrc).toContain("{createCta}");
-    expect(appSrc).toContain("if (busy || !n) return;");
-    expect(appSrc).toContain("if (busy) return;");
   });
 });

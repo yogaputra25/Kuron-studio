@@ -1,0 +1,5 @@
+{
+  "image": ["jpg", "jpeg", "jpe", "jfif", "png", "webp", "bmp", "gif", "tiff", "tif"],
+  "archive": ["zip", "cbz"],
+  "pdf": ["pdf"]
+}

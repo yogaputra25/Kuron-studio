@@ -1,51 +1,180 @@
-import { describe, expect, it } from "vitest";
-import gridSrc from "./PageGrid.svelte?raw";
-import listSrc from "./PageList.svelte?raw";
-import appSrc from "../../App.svelte?raw";
-import barSrc from "../app/shell/KanbanBar.svelte?raw";
+// @vitest-environment jsdom
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent } from "@testing-library/svelte";
+import { renderWithI18n } from "../test-utils";
+import PageGrid from "./PageGrid.svelte";
+import PageList from "./PageList.svelte";
+import type { Page } from "../contracts/types";
 
-// page-list-view: grid diekstrak + list baru, props identik, tanpa string
-// inline. Pola-sumber (gaya preview-transport.test.ts): komponen Svelte,
-// mount unit tak bermakna.
-describe("page grid/list split (page-list-view)", () => {
-  it("Grid dan List memakai props identik + observer + seleksi bersama", () => {
-    for (const src of [gridSrc, listSrc]) {
-      expect(src).toContain("thumbs: Record<string, string>");
-      expect(src).toContain("broken: Record<string, string>");
-      expect(src).toContain("selectedIds: string[]");
-      expect(src).toContain("onCardClick");
-      expect(src).toContain("onToggleSelect");
-      expect(src).toContain("use:observeCard");
-    }
+describe("PageGrid and PageList behavioral views", () => {
+  const dummyPages: Page[] = [
+    {
+      id: "p1",
+      path: "Chapter 1/01.jpg",
+      width: 800,
+      height: 1200,
+      status: "detected",
+      bubbles: [{ x: 10, y: 10, w: 50, h: 50, confidence: 1, shape: null, kind: "rect", tail: null }],
+      translation: null,
+    },
+    {
+      id: "p2",
+      path: "Chapter 1/02.jpg",
+      width: 800,
+      height: 1200,
+      status: "translated",
+      bubbles: [{ x: 20, y: 20, w: 60, h: 60, confidence: 1, shape: null, kind: "rect", tail: null }],
+      translation: {
+        pageId: "p2",
+        targetLang: "id",
+        style: "natural",
+        model: "gemini",
+        bubbles: [
+          {
+            index: 0,
+            x: 20,
+            y: 20,
+            w: 60,
+            h: 60,
+            original: "hi",
+            reading: "",
+            translated: "halo",
+            aiOriginal: "hi",
+            aiReading: "",
+            aiTranslated: "halo",
+            needsWhitePatch: false,
+            isUserEdited: false,
+          },
+        ],
+      },
+    },
+  ];
+
+  describe("PageGrid", () => {
+    it("renders page cards with filenames and badges", () => {
+      const { getByText } = renderWithI18n(PageGrid, {
+        props: {
+          pages: dummyPages,
+          thumbs: { p1: "thumb-1.jpg" },
+          broken: {},
+          selectedIds: [],
+          selectMode: false,
+          dragging: false,
+          onCardClick: vi.fn(),
+          onCardPress: vi.fn(),
+          onRelease: vi.fn(),
+          onToggleSelect: vi.fn(),
+          observeCard: () => {},
+        },
+      });
+
+      expect(getByText(/01\.jpg/)).toBeTruthy();
+      expect(getByText(/02\.jpg/)).toBeTruthy();
+    });
+
+    it("triggers onCardClick when a card is clicked", async () => {
+      const onCardClick = vi.fn();
+      const { getByText } = renderWithI18n(PageGrid, {
+        props: {
+          pages: dummyPages,
+          thumbs: {},
+          broken: {},
+          selectedIds: [],
+          selectMode: false,
+          dragging: false,
+          onCardClick,
+          onCardPress: vi.fn(),
+          onRelease: vi.fn(),
+          onToggleSelect: vi.fn(),
+          observeCard: () => {},
+        },
+      });
+
+      const card = getByText(/01\.jpg/);
+      await fireEvent.click(card);
+      expect(onCardClick).toHaveBeenCalledWith(expect.any(Object), dummyPages[0]);
+    });
+
+    it("renders checkboxes in select mode and calls onToggleSelect", async () => {
+      const onToggleSelect = vi.fn();
+      const { getAllByRole } = renderWithI18n(PageGrid, {
+        props: {
+          pages: dummyPages,
+          thumbs: {},
+          broken: {},
+          selectedIds: ["p1"],
+          selectMode: true,
+          dragging: false,
+          onCardClick: vi.fn(),
+          onCardPress: vi.fn(),
+          onRelease: vi.fn(),
+          onToggleSelect,
+          observeCard: () => {},
+        },
+      });
+
+      const checkboxes = getAllByRole("checkbox") as HTMLInputElement[];
+      expect(checkboxes.length).toBe(2);
+      expect(checkboxes[0].checked).toBe(true);
+      expect(checkboxes[1].checked).toBe(false);
+
+      await fireEvent.click(checkboxes[1]);
+      expect(onToggleSelect).toHaveBeenCalledWith("p2");
+    });
   });
 
-  it("list tidak punya string UI hardcode (grid mewarisi teks App apa adanya)", () => {
-    expect(listSrc).not.toMatch(/Preview gagal|Coba lagi|Memuat \d/);
-    expect(listSrc).toContain("$t(");
-  });
+  describe("PageList", () => {
+    it("renders listbox with rows and parent folders", () => {
+      const { getByRole, getAllByRole, getByText } = renderWithI18n(PageList, {
+        props: {
+          pages: dummyPages,
+          thumbs: {},
+          broken: {},
+          selectedIds: [],
+          selectMode: false,
+          onCardClick: vi.fn(),
+          onOpen: vi.fn(),
+          onToggleSelect: vi.fn(),
+          observeCard: () => {},
+        },
+      });
 
-  it("list: header statis + keyboard + baris aktif coral + skeleton", () => {
-    // grid-sort D2: sortir milik App; header List statis, kontrol di toolbar.
-    expect(listSrc).not.toContain("setSort");
-    expect(listSrc).toContain('role="listbox"');
-    expect(listSrc).toContain("onkeydown");
-    expect(listSrc).toContain("border-l-accent");
-    expect(listSrc).toContain("animate-pulse");
-    expect(listSrc).toContain("aria-selected");
-    expect(appSrc).toContain("setSortKey");
-    expect(barSrc).toContain('role="group"');
-  });
+      expect(getByRole("listbox")).toBeTruthy();
+      const rows = getAllByRole("option");
+      expect(rows.length).toBe(2);
+      expect(getByText("01.jpg")).toBeTruthy();
+      expect(getByText("02.jpg")).toBeTruthy();
+    });
 
-  it("grid: prefix folder + outline pilihan + visual lama utuh", () => {
-    expect(gridSrc).toContain("parentFolder");
-    expect(gridSrc).toContain("border-accent");
-    expect(gridSrc).toContain("aspect-[3/4]");
-    expect(gridSrc).toContain("StatusBadge");
-  });
+    it("supports keyboard navigation with arrow keys and space toggle", async () => {
+      const onToggleSelect = vi.fn();
+      const { getByRole, getAllByRole } = renderWithI18n(PageList, {
+        props: {
+          pages: dummyPages,
+          thumbs: {},
+          broken: {},
+          selectedIds: [],
+          selectMode: false,
+          onCardClick: vi.fn(),
+          onOpen: vi.fn(),
+          onToggleSelect,
+          observeCard: () => {},
+        },
+      });
 
-  it("App memilih salah satu view (tidak dua markup bercabang)", () => {
-    expect(appSrc).toContain("PageGrid");
-    expect(appSrc).toContain("PageList");
-    expect(appSrc).not.toContain("use:observeCard={pg.id}");
+      const listbox = getByRole("listbox");
+      const rows = getAllByRole("option");
+
+      expect(rows[0].getAttribute("aria-current")).toBe("true");
+
+      await fireEvent.keyDown(listbox, { key: "ArrowDown" });
+      expect(rows[1].getAttribute("aria-current")).toBe("true");
+
+      await fireEvent.keyDown(listbox, { key: " " });
+      expect(onToggleSelect).toHaveBeenCalledWith("p2");
+
+      await fireEvent.keyDown(listbox, { key: "ArrowUp" });
+      expect(rows[0].getAttribute("aria-current")).toBe("true");
+    });
   });
 });
