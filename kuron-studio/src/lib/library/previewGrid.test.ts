@@ -9,10 +9,10 @@ import listSrc from "./PageList.svelte?raw";
 // mount unit tak bermakna.
 describe("grid preview queue wiring (grid-preview-perf)", () => {
   it("App memakai modul antrean + metrik terpusat", () => {
-    expect(appSrc).toContain('from "./lib/previewQueue"');
+    expect(appSrc).toContain('from "./lib/previews/previewQueue"');
     expect(appSrc).toContain("pickNext");
     expect(appSrc).toContain("PREVIEW_CONCURRENCY");
-    expect(appSrc).toContain('from "./lib/previewMetrics"');
+    expect(appSrc).toContain('from "./lib/previews/previewMetrics"');
     expect(appSrc).toContain("summarizePreviews");
   });
 

@@ -32,8 +32,8 @@
   import type { DetectProgress as DetectProgressEv } from "./lib/contracts/types";
   import DiagnosticsPanel from "./lib/app/DiagnosticsPanel.svelte";
   import { onInvoke } from "./lib/contracts/log";
-  import { PREFETCH_MARGIN, PREVIEW_CONCURRENCY, pickNext } from "./lib/previewQueue";
-  import { summarizePreviews, type PreviewSample } from "./lib/previewMetrics";
+  import { PREFETCH_MARGIN, PREVIEW_CONCURRENCY, pickNext } from "./lib/previews/previewQueue";
+  import { summarizePreviews, type PreviewSample } from "./lib/previews/previewMetrics";
 
   let projects = $state<Project[]>([]);
   /** false sampai daftar project pertama selesai dimuat (cegah flash onboarding). */
