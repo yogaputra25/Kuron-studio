@@ -1,6 +1,7 @@
 <script lang="ts">
   import { open, save } from "@tauri-apps/plugin-dialog";
   import { api } from "../contracts/api";
+  import { toBatchInput, toRetryBubbleInput } from "../provider/translateOpts";
   import { t } from "../app/i18n";
   import type { BatchOpts, ExportFormat, Project } from "../contracts/types";
   import { allPages, folderPath, subtreePages } from "../library/library";
@@ -100,17 +101,7 @@
     if (!opts?.providerId) { error = "Pilih provider dulu (buka editor satu halaman)."; return; }
     busy = true; error = "";
     try {
-      await api.translateBatch({
-        pageIds: [pageId],
-        providerId: opts.providerId,
-        targetLang: opts.targetLang,
-        style: opts.style,
-        skipSfx: opts.skipSfx,
-        mosaicQuality: opts.mosaicQuality,
-        readingDirection: opts.readingDirection,
-        ...(opts.customPrompt ? { customPrompt: opts.customPrompt } : {}),
-        ...(opts.model ? { model: opts.model } : {}),
-      });
+      await api.translateBatch(toBatchInput(opts, { pageIds: [pageId], providerId: opts.providerId, readingDirection: opts.readingDirection }));
       onRefresh();
     } catch (e) {
       error = String(e);
@@ -141,18 +132,7 @@
     if (!opts?.providerId) { error = "Pilih provider dulu (buka editor satu halaman)."; return; }
     busy = true; error = "";
     try {
-      await api.retryBubble({
-        pageId,
-        bubbleIndex,
-        providerId: opts.providerId,
-        targetLang: opts.targetLang,
-        style: opts.style,
-        skipSfx: opts.skipSfx,
-        mosaicQuality: opts.mosaicQuality,
-        readingDirection: opts.readingDirection,
-        ...(opts.customPrompt ? { customPrompt: opts.customPrompt } : {}),
-        ...(opts.model ? { model: opts.model } : {}),
-      });
+      await api.retryBubble(toRetryBubbleInput(opts, { pageId, bubbleIndex, providerId: opts.providerId, readingDirection: opts.readingDirection }));
       onRefresh();
     } catch (e) {
       error = String(e);

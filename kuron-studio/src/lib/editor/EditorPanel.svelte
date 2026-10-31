@@ -9,7 +9,7 @@
   import TranslatePanel from "../provider/TranslatePanel.svelte";
   import { rev, shouldApplyBubbles, shouldApplyTranslation } from "./useSyncedPage.svelte";
   import { useDraftText } from "./useDraftText.svelte";
-  import type { TranslateOpts } from "../provider/TranslatePanel.svelte";
+  import type { TranslateOpts } from "../provider/translateOpts";
   import { chipNumbers, clampBubble } from "./bubble";
   import { mergeUserEdits, syncGeometryToTranslation } from "./translation";
   import { computeTextLayout } from "./text/textLayout";
@@ -60,11 +60,12 @@
   // M2 translation state.
   let translation = $state<PageTranslation | null>(null);
   let providerId = $state("");
-  let lastOpts = $state<TranslateOpts | null>(null);
+  /** Satu-satunya pemilik opts translate (FE-6): panel lain terima referensi. */
+  let opts = $state<TranslateOpts | null>(null);
   let appVersion = $state("");
   // Label bahasa ikut target aktual, bukan hardcoded sepasang bahasa (#26
   // follow-up: user ID→EN melihat label JP di original dan ID di terjemahan).
-  const trgLang = $derived(translation?.targetLang || lastOpts?.targetLang || "id");
+  const trgLang = $derived(translation?.targetLang || opts?.targetLang || "id");
   const trgLabel = $derived(TARGET_LANGS.find((l) => l.value === trgLang)?.label ?? trgLang);
   let savingTr = $state(false);
   let glossMsg = $state("");
@@ -319,7 +320,7 @@
     const idx = bubbles.map((_, i) => i);
     if (new Set(idx).size !== idx.length) { error = "Index bubble duplikat — simpan bubble dulu."; return; }
     const empty = {
-      pageId: page.id, targetLang: lastOpts?.targetLang ?? "id", style: lastOpts?.style ?? "standard", model: "",
+      pageId: page.id, targetLang: opts?.targetLang ?? "id", style: opts?.style ?? "standard", model: "",
       bubbles: bubbles.map((b, i) => ({
         index: i, x: b.x, y: b.y, w: b.w, h: b.h, shape: b.shape,
         original: "", reading: "", translated: "",
@@ -670,8 +671,8 @@ function setBubbleFontSize(v: number | null) {
             bubblesCount={bubbles.length}
             {readingDir}
             {originals}
-            onProviderChange={(id) => { providerId = id; if (lastOpts) onBatchOpts({ providerId: id, opts: lastOpts }); }}
-            onOptsChange={(o) => { lastOpts = o; onBatchOpts({ providerId, opts: o }); }}
+            onProviderChange={(id) => { providerId = id; if (opts) onBatchOpts({ providerId: id, opts }); }}
+            onOptsChange={(o) => { opts = o; onBatchOpts({ providerId, opts: o }); }}
             onTranslated={onTranslated}
             onError={(m) => {
               error = m;

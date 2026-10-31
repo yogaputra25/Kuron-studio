@@ -1,4 +1,5 @@
 import type { TextLayout } from "../editor/text/textLayout";
+import type { TranslateOpts } from "../provider/translateOpts";
 
 export type { TextLayout };
 
@@ -250,16 +251,11 @@ export interface GlossaryEntry {
   createdAt: number;
 }
 
-export interface BatchOpts {
+/** Satu bentuk dengan TranslateOpts + identitas batch (FE-6 translate-opts). */
+export type BatchOpts = TranslateOpts & {
   providerId: string;
-  targetLang: string;
-  style: TranslateStyle;
-  skipSfx: boolean;
-  mosaicQuality: MosaicQuality;
   readingDirection: ReadingDirection;
-  customPrompt: string;
-  model: string;
-}
+};
 
 export interface TranslateBatchInput {
   pageIds: string[];

@@ -7,15 +7,8 @@
   import Button from "../ui/Button.svelte";
   import Lov from "../ui/Lov.svelte";
 
-  export interface TranslateOpts {
-    targetLang: string;
-    style: TranslateStyle;
-    skipSfx: boolean;
-    mosaicQuality: MosaicQuality;
-    customPrompt: string;
-    /** Model per-run (sesi-saja); kosong = fallback simpanan provider. */
-    model: string;
-  }
+  import type { TranslateOpts } from "./translateOpts";
+  import { toTranslateArgs } from "./translateOpts";
 
   interface Props {
     pageId: string;
@@ -96,18 +89,10 @@
     busy = true; cancelled = false; info = "";
     const t0 = performance.now();
     try {
-      const t = await api.translatePage({
-        pageId,
-        providerId,
-        targetLang,
-        style,
-        skipSfx,
-        mosaicQuality,
-        readingDirection: readingDir,
-        ...(glossary.trim() ? { glossary: glossary.trim() } : {}),
-        ...(customPrompt.trim() ? { customPrompt: customPrompt.trim() } : {}),
-        ...(model.trim() ? { model: model.trim() } : {}),
-      });
+      const t = await api.translatePage(toTranslateArgs(
+        { targetLang, style, skipSfx, mosaicQuality, customPrompt, model },
+        { pageId, providerId, readingDirection: readingDir, glossary },
+      ));
       if (cancelled) return; // response telat pasca-Batal: buang, tanpa persist ganda
       info = `${t.model} · ${t.bubbles.length} bubble · ${((performance.now() - t0) / 1000).toFixed(1)}s`;
       onTranslated(t);
