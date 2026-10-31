@@ -20,7 +20,7 @@
   import type { Lang, Theme } from "./lib/app/i18n";
   import type { BatchOpts, Page, Project, ReadingDirection } from "./lib/contracts/types";
   import { ARCHIVE_EXTS, IMAGE_EXTS, PDF_EXTS } from "./lib/contracts/types";
-  import { allPages, childrenOf, folderPath, groupKanban, hasNesting, projectStats, rangeSelect, subtreePages, subtreeStats } from "./lib/library/library";
+  import { allPages, childrenOf, folderPath, groupKanban, hasNesting, projectStats, subtreePages, subtreeStats } from "./lib/library/library";
   import Button from "./lib/ui/Button.svelte";
   import { fileName, sortPagesByBubbles, sortPagesByName, sortPagesByStatus } from "./lib/library/status";
   import FolderChip from "./lib/library/FolderChip.svelte";
@@ -35,6 +35,7 @@
   import { PREFETCH_MARGIN, PREVIEW_CONCURRENCY, pickNext } from "./lib/previews/previewQueue";
   import { summarizePreviews, type PreviewSample } from "./lib/previews/previewMetrics";
   import { createProjectStore } from "./lib/library/projectStore.svelte.ts";
+  import { createSelection, orderIds } from "./lib/library/selection.svelte.ts";
 
   const projectStore = createProjectStore();
   const projects = $derived(projectStore.projects);
@@ -44,13 +45,8 @@
   let folderId = $state<string | "all">("all");
   let kanban = $state<"all" | "todo" | "doing" | "done" | "failed">("all");
   let folderName = $state("");
-  /** Halaman terpilih (multi-select untuk pindah folder). */
-  let selectedIds = $state<string[]>([]);
-  let selAnchor = $state<string | null>(null);
-  /** Mode pilih manual: checkbox + "Pilih semua" baru muncul di mode ini. */
-  let selectMode = $state(false);
-  let holdTimer: ReturnType<typeof setTimeout> | null = null;
-  let heldSelect = false;
+  /** Seleksi multi-halaman: state milik modul, App hanya merangkai. */
+  const selection = createSelection();
   let showMove = $state(false);
   let showProjMenu = $state(false);
   // detect-ux-pack 3.1: satu tombol Import + menu pola switcher.
@@ -435,70 +431,15 @@
     openError = "";
   }
 
-  /** Seleksi ikut konteks: ganti project/folder = mulai dari kosong. */
+  /** Seleksi ikut konteks: ganti project/folder = mulai dari kosong (D3). */
   $effect(() => {
     const _scope = projectStore.currentId + "|" + folderId;
     void _scope;
-    selectedIds = [];
-    selAnchor = null;
-    selectMode = false;
+    selection.reset();
   });
 
-  function toggleSelect(id: string) {
-    selectedIds = selectedIds.includes(id)
-      ? selectedIds.filter((x) => x !== id)
-      : [...selectedIds, id];
-    selAnchor = id;
-  }
-
-  /** Pilih semua halaman yang tampil (ikut filter folder + kanban). */
-  function selectAll() {
-    selectedIds = visiblePages.map((p) => p.id);
-    selAnchor = null;
-  }
-
-  function cancelHold() {
-    if (holdTimer !== null) {
-      clearTimeout(holdTimer);
-      holdTimer = null;
-    }
-  }
-
-  /** Tahan gambar ±0.5 dtk = masuk mode pilih + pilih kartu itu (pola mobile). */
-  function onCardPress(pg: Page) {
-    if (selectMode) return;
-    heldSelect = false;
-    cancelHold();
-    holdTimer = setTimeout(() => {
-      heldSelect = true;
-      selectMode = true;
-      if (!selectedIds.includes(pg.id)) {
-        selectedIds = [...selectedIds, pg.id];
-        selAnchor = pg.id;
-      }
-    }, 500);
-  }
-
   function onCardClick(e: MouseEvent, pg: Page) {
-    if (heldSelect) {
-      // Lepas-tahan setelah long-press: jangan buka editor.
-      heldSelect = false;
-      return;
-    }
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
-      selectMode = true;
-      toggleSelect(pg.id);
-    } else if (e.shiftKey && selAnchor) {
-      e.preventDefault();
-      selectMode = true;
-      const order = sortPagesByName(visiblePages).map((p) => p.id);
-      const range = rangeSelect(order, selAnchor, pg.id);
-      selectedIds = [...new Set([...selectedIds, ...range])];
-      selAnchor = pg.id;
-    } else {
-      openEditor(pg);
-    }
+    if (!selection.click(e, pg, orderIds(visiblePages))) openEditor(pg);
   }
 
   function onSaved(updated: Page) {
@@ -648,7 +589,10 @@
       }
     });
     // onMount tidak boleh async di Svelte 5 — return cleanup langsung.
-    return offInvoke;
+    return () => {
+      offInvoke();
+      selection.dispose();
+    };
   });
 </script>
 
@@ -1009,11 +953,11 @@
           {key === "all" ? $t("allFolders") : $t(key === "todo" ? "kanbanTodo" : key === "doing" ? "kanbanDoing" : key === "done" ? "kanbanDone" : "kanbanFailed")} · {n}
         </button>
       {/each}
-      {#if !selectMode}
+      {#if !selection.selectMode}
         <Button
           variant="default"
           size="sm"
-          onclick={() => (selectMode = true)}
+          onclick={() => selection.setSelectMode(true)}
           disabled={busy || visiblePages.length === 0}
         >{$t("selectMode")}</Button>
       {:else}
@@ -1021,11 +965,11 @@
         <Button
           variant="default"
           size="sm"
-          onclick={selectAll}
-          disabled={busy || visiblePages.length === 0 || visiblePages.every((p) => selectedIds.includes(p.id))}
+          onclick={() => selection.selectAll(visiblePages.map((p) => p.id))}
+          disabled={busy || visiblePages.length === 0 || visiblePages.every((p) => selection.selectedIds.includes(p.id))}
         >{$t("selectAll")} ({visiblePages.length})</Button>
-        {#if selectedIds.length === 0}
-          <Button variant="ghost" size="sm" onclick={() => (selectMode = false)}>{$t("close")}</Button>
+        {#if selection.selectedIds.length === 0}
+          <Button variant="ghost" size="sm" onclick={() => selection.setSelectMode(false)}>{$t("close")}</Button>
         {/if}
       {/if}
       <div class="ml-auto flex overflow-hidden rounded-md border border-line" role="tablist" aria-label="{$t('gridView')} / {$t('listView')}">
@@ -1055,11 +999,11 @@
         {/each}
       </div>
     </section>
-    {#if selectedIds.length > 0}
+    {#if selection.selectedIds.length > 0}
       <div class="tnum mx-5 mt-3 flex items-center gap-2 rounded-md border border-line bg-surface-2 px-3 py-1.5 text-xs" role="status" transition:fly={{ y: -8, duration: 180 }}>
-        <span class="font-semibold">{$t("selectedCount").replace("{n}", String(selectedIds.length))}</span>
+        <span class="font-semibold">{$t("selectedCount").replace("{n}", String(selection.selectedIds.length))}</span>
         <Button variant="default" size="sm" onclick={() => (showMove = true)} disabled={busy}>{$t("moveTo")}</Button>
-        <Button variant="ghost" size="sm" onclick={() => { selectedIds = []; selAnchor = null; selectMode = false; }}>{$t("clearSelection")}</Button>
+        <Button variant="ghost" size="sm" onclick={() => selection.reset()}>{$t("clearSelection")}</Button>
       </div>
     {/if}
     {#if thumbTotal > 0 && thumbDone < thumbTotal}
@@ -1077,13 +1021,13 @@
         pages={orderedPages}
         {thumbs}
         {broken}
-        {selectedIds}
-        {selectMode}
+        selectedIds={selection.selectedIds}
+        selectMode={selection.selectMode}
         {dragging}
         onCardClick={(e, pg) => onCardClick(e, pg)}
-        onCardPress={(pg) => onCardPress(pg)}
-        onRelease={cancelHold}
-        onToggleSelect={(id) => toggleSelect(id)}
+        onCardPress={(pg) => selection.press(pg)}
+        onRelease={() => selection.cancelHold()}
+        onToggleSelect={(id) => selection.toggleSelect(id)}
         observeCard={observeCard}
       />
     {:else}
@@ -1091,11 +1035,11 @@
         pages={orderedPages}
         {thumbs}
         {broken}
-        {selectedIds}
-        {selectMode}
+        selectedIds={selection.selectedIds}
+        selectMode={selection.selectMode}
         onCardClick={(e, pg) => onCardClick(e, pg)}
         onOpen={(pg) => openEditor(pg)}
-        onToggleSelect={(id) => toggleSelect(id)}
+        onToggleSelect={(id) => selection.toggleSelect(id)}
         observeCard={observeCard}
       />
     {/if}
@@ -1149,7 +1093,7 @@
     <MoveDialog
       project={cur}
       fromFolderId={folderId}
-      pageIds={selectedIds}
+      pageIds={selection.selectedIds}
       {busy}
       onClose={() => (showMove = false)}
       onError={(msg) => (error = msg)}
@@ -1163,9 +1107,7 @@
           for (const id of Object.keys(thumbs)) if (!live.has(id)) delete thumbs[id];
           for (const id of Object.keys(fullUrls)) if (!live.has(id)) delete fullUrls[id];
           for (const id of Object.keys(broken)) if (!live.has(id)) delete broken[id];
-          selectedIds = [];
-          selAnchor = null;
-          selectMode = false;
+          selection.reset();
           thumbs = { ...thumbs };
           fullUrls = { ...fullUrls };
           broken = { ...broken };
@@ -1181,7 +1123,7 @@
     <ReviewGrid
       project={cur}
       opts={batchOpts}
-      selectedIds={selectedIds}
+      selectedIds={selection.selectedIds}
       onRefresh={() => { void refreshProject(cur.id); }}
       onClose={() => (showReview = false)}
     />

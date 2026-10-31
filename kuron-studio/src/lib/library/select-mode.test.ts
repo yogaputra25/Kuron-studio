@@ -17,19 +17,21 @@ describe("select mode gating + move source", () => {
 
   it("tombol Pilih masuk mode; Pilih semua di dalam mode", () => {
     expect(appSrc).toContain("{$t(\"selectMode\")}");
-    const gate = appSrc.indexOf("{#if !selectMode}");
-    const selectAll = appSrc.indexOf("onclick={selectAll}");
+    const gate = appSrc.indexOf("{#if !selection.selectMode}");
+    const selectAll = appSrc.indexOf("selection.selectAll(");
     expect(gate).toBeGreaterThan(-1);
     expect(selectAll).toBeGreaterThan(gate);
   });
 
   it("masuk mode via ctrl/shift-klik dan tahan gambar", () => {
     expect(gridSrc).toContain("onpointerdown={() => onCardPress(pg)}");
-    expect(appSrc).toContain("selectMode = true;");
+    expect(appSrc).toContain("selection.click(e, pg,");
+    expect(appSrc).toContain("selection.press(pg)");
   });
 
   it("keluar mode saat Batal, pindah folder, dan selesai pindah", () => {
-    expect(appSrc).toContain("selAnchor = null; selectMode = false;");
+    expect(appSrc).toContain("selection.reset()");
+    expect(appSrc).toContain("selection.setSelectMode(false)");
   });
 
   it("dialog pindah menandai folder asal disabled", () => {
