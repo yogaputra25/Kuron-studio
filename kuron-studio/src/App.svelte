@@ -4,11 +4,10 @@
   import { open } from "@tauri-apps/plugin-dialog";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
 
-  import iconUrl from "../icon.svg";
   import { isMobile } from "./lib/app/device";
   import { api } from "./lib/contracts/api";
-  import UpdateButton from "./lib/app/UpdateButton.svelte";
   import AlertBanners from "./lib/app/shell/AlertBanners.svelte";
+  import AppHeader from "./lib/app/shell/AppHeader.svelte";
   import BatchPanel from "./lib/provider/BatchPanel.svelte";
   import EditorPanel from "./lib/editor/EditorPanel.svelte";
   import GlossaryPanel from "./lib/provider/GlossaryPanel.svelte";
@@ -16,8 +15,7 @@
   import ReviewGrid from "./lib/export/ReviewGrid.svelte";
   import PageGrid from "./lib/library/PageGrid.svelte";
   import PageList from "./lib/library/PageList.svelte";
-  import { lang, t, theme } from "./lib/app/i18n";
-  import type { Lang, Theme } from "./lib/app/i18n";
+  import { t, theme } from "./lib/app/i18n";
   import type { BatchOpts, Page, Project, ReadingDirection } from "./lib/contracts/types";
   import { ARCHIVE_EXTS, IMAGE_EXTS, PDF_EXTS } from "./lib/contracts/types";
   import { allPages, childrenOf, folderPath, groupKanban, hasNesting, projectStats, subtreePages } from "./lib/library/library";
@@ -30,7 +28,6 @@
   import FolderBar from "./lib/app/shell/FolderBar.svelte";
   import KanbanBar from "./lib/app/shell/KanbanBar.svelte";
   import ProjectCard from "./lib/app/shell/ProjectCard.svelte";
-  import ProjectSwitcher from "./lib/app/shell/ProjectSwitcher.svelte";
   import DetectProgress from "./lib/detection/DetectProgress.svelte";
   import { createDetectRun } from "./lib/detection/detectRun.svelte.ts";
   import DiagnosticsPanel from "./lib/app/DiagnosticsPanel.svelte";
@@ -51,8 +48,7 @@
   /** Seleksi multi-halaman: state milik modul, App hanya merangkai. */
   const selection = createSelection();
   let showMove = $state(false);
-  // detect-ux-pack 3.1: satu tombol Import + menu pola switcher.
-  let showImportMenu = $state(false);
+  // detect-ux-pack 3.1: satu tombol Import + menu pola switcher (state di AppHeader).
   let fullUrls = $state<Record<string, string>>({});
   /** Antrean thumbnail: state milik modul, App hanya merangkai. */
   const queue = createThumbnailQueue();
@@ -151,8 +147,6 @@
     kanban === "all" ? [...kanbanGroups.todo, ...kanbanGroups.doing, ...kanbanGroups.done, ...kanbanGroups.failed] : kanbanGroups[kanban],
   );
   const selectedPage = $derived(allPages(current ?? { id: "", name: "", folders: [] } as Project).find((p) => p.id === selectedId) ?? null);
-  /** Halaman yang preview-nya gagal → jumlah tombol "Bersihkan". */
-  const brokenCount = $derived(Object.keys(queue.broken).length);
 
   async function refresh() {
     try {
@@ -169,9 +163,6 @@
   $effect(() => {
     document.documentElement.dataset.theme = $theme;
   });
-  const cycleLang = () => {
-    lang.update((v: Lang) => (v === "id" ? "en" : v === "en" ? "zh" : "id"));
-  };
 
   // Antrean thumbnail milik modul previews/thumbnailQueue (FE-2).
   function loadThumbs(projectId: string) {
@@ -475,134 +466,28 @@
 
 <main class="flex min-h-screen flex-col bg-bg text-ink" data-theme={$theme}>
   {#if projectStore.loaded && projects.length > 0}
-  <header class="sticky top-0 z-30 border-b border-line bg-surface/80 backdrop-blur-md">
-    <div class="flex items-center gap-2 px-4 pt-2">
-      <img src={iconUrl} alt="Kuron Studio" class="size-6 shrink-0" />
-      <h1 class="font-display shrink-0 text-base font-semibold tracking-tight">Kuron Studio</h1>
-      <p class="hidden text-[11px] text-ink-3 sm:block">{$t("appTagline")}</p>
-    </div>
-    <div class="flex flex-wrap items-center gap-2 px-4 py-2">
-    {#if projects.length > 0}
-      <ProjectSwitcher current={current} {projects} onPick={(id) => openProject(id)} />
-    {/if}
-
-    <div class="ml-auto flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto sm:flex-none sm:flex-wrap sm:overflow-visible">
-      <Button variant="ghost" size="sm" class="font-mono" onclick={() => (readingDir = readingDir === "rtl" ? "ltr" : "rtl")} title="Urutan baca bubble">
-        {readingDir === "rtl" ? "RTL→" : "←LTR"}
-      </Button>
-      <Button variant="ghost" size="icon" onclick={() => theme.update((v: Theme) => (v === "dark" ? "light" : "dark"))} title="Tema gelap/terang" aria-label="Tema gelap/terang">
-        {$theme === "dark" ? "◐" : "◑"}
-      </Button>
-      <Button variant="ghost" size="icon" class="font-mono" onclick={cycleLang} title="Bahasa / Language / 语言" aria-label="Ganti bahasa">
-        {$lang.toUpperCase()}
-      </Button>
-
-      {#if !isMobile}<div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>{/if}
-
-      <Button variant="ghost" size="sm" onclick={() => (showProviders = true)}>{$t("providers")}</Button>
-      {#if !isMobile}<UpdateButton />{/if}
-      <Button
-        variant="ghost"
-        size="sm"
-        onclick={() => (showBatch = true)}
-        disabled={!current || !batchOpts?.providerId}
-        title={batchOpts?.providerId ? "Batch translate" : "Buka satu halaman di editor + pilih provider dulu"}
-      >{$t("batch")}</Button>
-      <Button variant="ghost" size="sm" onclick={() => (showGlossary = true)}>{$t("glossary")}</Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        onclick={() => (showReview = true)}
-        disabled={!current}
-      >{$t("resultsExport")}</Button>
-
-      <div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>
-
-      <Button
-        variant="primary"
-        size="sm"
-        onclick={detectAll}
-        disabled={!current || busy || scopedPages.length === 0}
-      >{$t("detectAll")}</Button>
-      <div
-        class="relative"
-        onfocusout={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) showImportMenu = false; }}
-      >
-        <Button
-          variant="default"
-          size="sm"
-          onclick={() => (showImportMenu = !showImportMenu)}
-          onkeydown={(e) => { if (e.key === "Escape") showImportMenu = false; }}
-          disabled={!current || busy}
-          aria-haspopup="menu"
-          aria-expanded={showImportMenu}
-        >⬆ {$t("importAction")} ▾</Button>
-        {#if showImportMenu}
-          <div
-            class="absolute top-full z-50 mt-1 w-44 overflow-hidden rounded-md border border-line-strong bg-surface-2 py-1"
-            role="menu"
-            aria-label={$t("importAction")}
-          >
-            {#if !isMobile}
-              <button
-                class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-raised"
-                role="menuitem"
-                onclick={() => { showImportMenu = false; void importFolder(); }}
-                onkeydown={(e) => {
-                  if (e.key === "Escape") showImportMenu = false;
-                  if (e.key === "ArrowDown") (e.currentTarget.nextElementSibling as HTMLElement | null)?.focus();
-                }}
-              >📁 {$t("importFolder")}</button>
-            {/if}
-            <button
-              class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-raised"
-              role="menuitem"
-              onclick={() => { showImportMenu = false; void importFiles(); }}
-              onkeydown={(e) => {
-                if (e.key === "Escape") showImportMenu = false;
-                // iOS: folder picker tidak ada (FolderPickerNotImplemented) —
-                // opsi folder disembunyikan total, bukan disabled.
-                if (e.key === "ArrowUp") (e.currentTarget.previousElementSibling as HTMLElement | null)?.focus();
-              }}
-            >🖼️ {$t("importFiles")}</button>
-          </div>
-        {/if}
-      </div>
-
-      {#if !isMobile}<div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>{/if}
-
-      {#if !isMobile}<Button
-        variant="default"
-        size="sm"
-        onclick={cleanPages}
-        disabled={!current || busy || brokenCount === 0}
-        title={brokenCount > 0 ? `${brokenCount} halaman preview gagal` : $t("nothingToClean")}
-      >
-        {#if brokenCount > 0}<span class="tnum text-danger">{brokenCount}</span>{/if}
-        {$t("cleanImages")}
-      </Button>{/if}
-      <Button
-        variant="danger"
-        size="sm"
-        onclick={deleteProject}
-        disabled={!current || busy}
-        title={$t("confirmDeleteProject")}
-      >{$t("deleteProject")}</Button>
-
-      {#if !isMobile}<div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>{/if}
-
-      {#if !isMobile}<Button
-        variant={lastInvokeError ? "danger" : "ghost"}
-        size="icon"
-        onclick={() => (showDiagnostics = true)}
-        title={lastInvokeError
-          ? `${lastInvokeError.command}: ${lastInvokeError.error}`
-          : "Diagnostics & log"}
-        aria-label="Diagnostics"
-      >⚙</Button>{/if}
-    </div>
-    </div>
-  </header>
+    <AppHeader
+      {current}
+      {projects}
+      {busy}
+      {readingDir}
+      {batchOpts}
+      {lastInvokeError}
+      brokenCount={queue.failed}
+      canDetect={!!current && scopedPages.length > 0}
+      onToggleReadingDir={() => (readingDir = readingDir === "rtl" ? "ltr" : "rtl")}
+      onProviders={() => (showProviders = true)}
+      onBatch={() => (showBatch = true)}
+      onGlossary={() => (showGlossary = true)}
+      onResults={() => (showReview = true)}
+      onDetect={detectAll}
+      onImportFolder={() => void importFolder()}
+      onImportFiles={() => void importFiles()}
+      onClean={() => void cleanPages()}
+      onDelete={() => void deleteProject()}
+      onOpenDiagnostics={() => (showDiagnostics = true)}
+      onPickProject={(id) => openProject(id)}
+    />
   {/if}
 
   <AlertBanners
