@@ -255,3 +255,11 @@ menyentuh baris lama).
 - App.svelte 1198->679 baris; target <350 tak tercapai (sisa script orkestrasi + markup dashboard/grid) -> ranah FE-4/FE-5/FE-11.
 - Gates: pnpm test 480, svelte-check 0. Rust tak tersentuh.
 - Sisa: 3.2 smoke manual (user).
+
+## 2026-10-31 - editor-panel-split: 8/9 (4.2 smoke manual menunggu user)
+
+- 7 unit editor: TranslationCard, GeometryControls, EditorToolbar (PaneMode pindah ke sini), EditorPanes (shared-spread + bindable refs, CanvasApi), Divider (ui/), hook useDraftText (+5 unit test), useSyncedPage (rev/structurallyEqual +9 unit test, dokumen pemilik bubbles), usePanelResize.
+- EditorPanel.svelte 1088->720 baris; target <300 tak tercapai (sisa = orkestrasi save/detect/batch, markup sidebar, 3 view-model $derived komposisi) -> butuh unit lanjutan, di luar scope.
+- Gates: pnpm test 500, svelte-check 0. Rust tak tersentuh. Satu commit hijau (per-unit tak direkonstruksi jujur dari satu tree).
+- Deviasi tercatat di tasks.md: string-test di-repoint bukan dihapus (unit tak mencakup wiring); PaneMode diimpor dari EditorToolbar; CanvasApi Pick<> untuk refs.
+- Sisa: 4.2 smoke manual (user) — ketik/debounce/IME/Esc, resize/collapse/snap, toolbar 12 kontrol, split pane.
