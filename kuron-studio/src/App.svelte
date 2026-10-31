@@ -27,8 +27,8 @@
   import MoveDialog from "./lib/library/MoveDialog.svelte";
   import Onboarding from "./lib/app/Onboarding.svelte";
   import Snackbar from "./lib/ui/Snackbar.svelte";
-  import DetectProgress from "./lib/DetectProgress.svelte";
-  import { initialDetectState, reduceDetectProgress, type DetectState } from "./lib/detectProgress";
+  import DetectProgress from "./lib/detection/DetectProgress.svelte";
+  import { initialDetectState, reduceDetectProgress, type DetectState } from "./lib/detection/detectProgress";
   import type { DetectProgress as DetectProgressEv } from "./lib/contracts/types";
   import DiagnosticsPanel from "./lib/app/DiagnosticsPanel.svelte";
   import { onInvoke } from "./lib/contracts/log";
