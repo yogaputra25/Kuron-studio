@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import exportRs from "../../src-tauri/src/commands/export.rs?raw";
+import exportRs from "../../../src-tauri/src/commands/export.rs?raw";
 import {
   BODY_MIN_FRAC,
   LAYOUT_FONT_STEP,
@@ -7,8 +7,8 @@ import {
   LAYOUT_MAX_FONT,
   LAYOUT_MIN_FONT,
   LAYOUT_PADDING,
-} from "./textLayout";
-import { OVERLAY_FONT_STACK, OVERLAY_FONT_STYLE } from "./textMeasure";
+} from "../textLayout";
+import { OVERLAY_FONT_STACK, OVERLAY_FONT_STYLE } from "../textMeasure";
 
 // Rumus layout hidup di dua bahasa: `textLayout.ts` (kanvas memutuskan) dan
 // `export.rs` (jalur fallback saat `layout` belum tersimpan). Begitu angkanya

@@ -6,7 +6,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import Konva from "konva";
-  import type { BubbleBox, BubbleTranslation, ReadingDirection, Tool } from "../lib/types";
+  import type { BubbleBox, BubbleTranslation, ReadingDirection, Tool } from "../lib/contracts/types";
   import { chipNumbers, clampBubble } from "../lib/bubble";
   import { computeTextLayout, lineBands } from "../lib/textLayout";
   /** Shape absolut (px halaman) -> relatif bubble untuk layout teks. */

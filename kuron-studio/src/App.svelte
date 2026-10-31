@@ -7,7 +7,7 @@
   import { listen } from "@tauri-apps/api/event";
   import iconUrl from "../icon.svg";
   import { isMobile } from "./lib/device";
-  import { api } from "./lib/api";
+  import { api } from "./lib/contracts/api";
   import UpdateButton from "./lib/UpdateButton.svelte";
   import BatchPanel from "./lib/BatchPanel.svelte";
   import EditorPanel from "./lib/EditorPanel.svelte";
@@ -18,8 +18,8 @@
   import PageList from "./lib/PageList.svelte";
   import { lang, t, theme } from "./lib/i18n";
   import type { Lang, Theme } from "./lib/i18n";
-  import type { BatchOpts, Page, Project, ReadingDirection } from "./lib/types";
-  import { ARCHIVE_EXTS, IMAGE_EXTS, PDF_EXTS } from "./lib/types";
+  import type { BatchOpts, Page, Project, ReadingDirection } from "./lib/contracts/types";
+  import { ARCHIVE_EXTS, IMAGE_EXTS, PDF_EXTS } from "./lib/contracts/types";
   import { allPages, childrenOf, folderPath, groupKanban, hasNesting, projectStats, rangeSelect, subtreePages, subtreeStats } from "./lib/library";
   import Button from "./lib/ui/Button.svelte";
   import { fileName, sortPagesByBubbles, sortPagesByName, sortPagesByStatus } from "./lib/status";
@@ -29,9 +29,9 @@
   import Snackbar from "./lib/ui/Snackbar.svelte";
   import DetectProgress from "./lib/DetectProgress.svelte";
   import { initialDetectState, reduceDetectProgress, type DetectState } from "./lib/detectProgress";
-  import type { DetectProgress as DetectProgressEv } from "./lib/types";
+  import type { DetectProgress as DetectProgressEv } from "./lib/contracts/types";
   import DiagnosticsPanel from "./lib/DiagnosticsPanel.svelte";
-  import { onInvoke } from "./lib/log";
+  import { onInvoke } from "./lib/contracts/log";
   import { PREFETCH_MARGIN, PREVIEW_CONCURRENCY, pickNext } from "./lib/previewQueue";
   import { summarizePreviews, type PreviewSample } from "./lib/previewMetrics";
 

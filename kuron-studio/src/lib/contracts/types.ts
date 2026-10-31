@@ -1,4 +1,4 @@
-import type { TextLayout } from "./textLayout";
+import type { TextLayout } from "../textLayout";
 
 export type { TextLayout };
 

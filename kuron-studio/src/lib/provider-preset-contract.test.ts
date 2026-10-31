@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import configRs from "../../src-tauri/src/provider/config.rs?raw";
-import { DEFAULT_BASE_URLS, PROVIDER_TYPES } from "./types";
+import { DEFAULT_BASE_URLS, PROVIDER_TYPES } from "./contracts/types";
 
 // Preset base URL duplikat di Rust (AiProviderType::default_base_url) dan
 // TS (DEFAULT_BASE_URLS). Kalau menyimpang, user dapat endpoint beda

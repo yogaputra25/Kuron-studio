@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 // kedua sisi selaras, dan memaksa pin eksak supaya `pnpm update` tidak bisa
 // menggeser salah satu sisi sendirian.
 
-const ROOT = fileURLToPath(new URL("..", import.meta.url));
+const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const REPO = join(ROOT, "..");
 
 /** Pasangan crate Rust ↔ paket npm yang dibandingkan oleh CLI Tauri. */

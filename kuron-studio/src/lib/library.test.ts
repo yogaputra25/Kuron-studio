@@ -15,7 +15,7 @@ import {
   subtreePages,
   subtreeStats,
 } from "./library";
-import type { Page, Project } from "./types";
+import type { Page, Project } from "./contracts/types";
 
 const pg = (id: string, status: Page["status"]): Page => ({
   id,

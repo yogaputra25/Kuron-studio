@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import { scale } from "svelte/transition";
-  import { api } from "./api";
+  import { api } from "./contracts/api";
   import { t } from "./i18n";
   import { childrenOf, folderById, folderPath, singleOwnerFolderId, subtreeStats } from "./library";
-  import type { MoveResult } from "./types";
-  import type { Project } from "./types";
+  import type { MoveResult } from "./contracts/types";
+  import type { Project } from "./contracts/types";
   import Button from "./ui/Button.svelte";
   import Panel from "./ui/Panel.svelte";
 

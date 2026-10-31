@@ -1,4 +1,4 @@
-import type { ChapterFolder, Page, PageStatus, Project } from "./types";
+import type { ChapterFolder, Page, PageStatus, Project } from "./contracts/types";
 import { sortPagesByName } from "./status";
 
 export const DEFAULT_FOLDER_NAME = "default";

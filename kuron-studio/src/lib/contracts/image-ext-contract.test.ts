@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import projectRs from "../../src-tauri/src/commands/project.rs?raw";
+import projectRs from "../../../src-tauri/src/commands/project.rs?raw";
 import { ARCHIVE_EXTS, IMAGE_EXTS, PDF_EXTS } from "./types";
-import appSrc from "../App.svelte?raw";
+import appSrc from "../../App.svelte?raw";
 
 // Cegah dialog picker dan backend_import menerima daftar format berbeda.
 // Kalau melebar, user bisa pilih file yang import-nya ditolak diam-diam;

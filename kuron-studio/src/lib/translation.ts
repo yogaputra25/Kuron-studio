@@ -1,4 +1,4 @@
-import type { BubbleBox, BubbleTranslation } from "./types";
+import type { BubbleBox, BubbleTranslation } from "./contracts/types";
 import { needsWhitePatch } from "./bubble";
 import type { TextLayout } from "./textLayout";
 

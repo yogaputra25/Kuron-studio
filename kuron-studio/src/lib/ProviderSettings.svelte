@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { api } from "./api";
+  import { api } from "./contracts/api";
   import { t } from "./i18n";
-  import { DEFAULT_BASE_URLS, PROVIDER_TYPES } from "./types";
-  import type { AiModelOption, AiProviderType, ProviderView } from "./types";
+  import { DEFAULT_BASE_URLS, PROVIDER_TYPES } from "./contracts/types";
+  import type { AiModelOption, AiProviderType, ProviderView } from "./contracts/types";
   import Button from "./ui/Button.svelte";
   import Field from "./ui/Field.svelte";
   import Panel from "./ui/Panel.svelte";

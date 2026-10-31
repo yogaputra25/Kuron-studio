@@ -1,4 +1,4 @@
-import type { Page, PageStatus } from "./types";
+import type { Page, PageStatus } from "./contracts/types";
 
 /**
  * Warna + label status. Satu sumber kebenaran: `ui/StatusBadge.svelte` yang

@@ -1,6 +1,6 @@
 // Agregasi event detect_progress → state overlay (detect-ux-pack D2).
 // Murni, unit-testable — meniru reduceProgress (batch.ts).
-import type { DetectProgress } from "./types";
+import type { DetectProgress } from "./contracts/types";
 
 export interface DetectFailure {
   pageId: string;

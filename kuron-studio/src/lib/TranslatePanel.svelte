@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { api } from "./api";
-  import { TARGET_LANGS, TRANSLATE_STYLES } from "./types";
-  import type { AiModelOption, MosaicQuality, PageTranslation, ProviderView, ReadingDirection, TranslateStyle } from "./types";
+  import { api } from "./contracts/api";
+  import { TARGET_LANGS, TRANSLATE_STYLES } from "./contracts/types";
+  import type { AiModelOption, MosaicQuality, PageTranslation, ProviderView, ReadingDirection, TranslateStyle } from "./contracts/types";
   import { t } from "./i18n";
   import Button from "./ui/Button.svelte";
   import Lov from "./ui/Lov.svelte";

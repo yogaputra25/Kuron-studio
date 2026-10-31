@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { chipNumbers, clampBubble, readingOrder } from "./bubble";
-import type { BubbleBox } from "./types";
+import type { BubbleBox } from "./contracts/types";
 
 const b = (x: number, y: number, w = 60, h = 40): BubbleBox => ({
   x, y, w, h, confidence: 1, shape: null, kind: "rect", tail: null,

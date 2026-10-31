@@ -2,7 +2,7 @@
   import { listen } from "@tauri-apps/api/event";
   import { getVersion } from "@tauri-apps/api/app";
   import { onDestroy, onMount } from "svelte";
-  import { api } from "../lib/api";
+  import { api } from "../lib/contracts/api";
   import CanvasEditor from "../lib/CanvasEditor.svelte";
   import TranslatePanel from "../lib/TranslatePanel.svelte";
   import type { TranslateOpts } from "../lib/TranslatePanel.svelte";
@@ -10,8 +10,8 @@
   import { mergeUserEdits, syncGeometryToTranslation } from "../lib/translation";
   import { computeTextLayout } from "../lib/textLayout";
   import { textMeasure } from "../lib/textMeasure";
-  import type { BubbleBox, Page, PageTranslation, ReadingDirection, Tool } from "../lib/types";
-  import { TARGET_LANGS } from "../lib/types";
+  import type { BubbleBox, Page, PageTranslation, ReadingDirection, Tool } from "../lib/contracts/types";
+  import { TARGET_LANGS } from "../lib/contracts/types";
   import { allPages } from "./library";
   import { t } from "./i18n";
   import { statusAfterBubbleSave, statusAfterTranslationSave, translationComplete } from "./status";

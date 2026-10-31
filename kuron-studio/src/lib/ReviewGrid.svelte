@@ -1,8 +1,8 @@
 <script lang="ts">
   import { open, save } from "@tauri-apps/plugin-dialog";
-  import { api } from "./api";
+  import { api } from "./contracts/api";
   import { t } from "./i18n";
-  import type { BatchOpts, ExportFormat, Project } from "./types";
+  import type { BatchOpts, ExportFormat, Project } from "./contracts/types";
   import { allPages, folderPath, subtreePages } from "./library";
   import { isMobile } from "./device";
   import Button from "./ui/Button.svelte";
