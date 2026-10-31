@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import batchSrc from "./BatchPanel.svelte?raw";
 import panelSrc from "./TranslatePanel.svelte?raw";
-import reviewSrc from "../ReviewGrid.svelte?raw";
+import reviewSrc from "../export/ReviewGrid.svelte?raw";
 
 // Kontrak change reset-translation §4 cancel (opsi B), diverifikasi statis
 // dari sumber (pola sama seperti reset-translation.test.ts): assert pola kode.

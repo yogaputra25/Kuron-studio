@@ -13,7 +13,7 @@
   import EditorPanel from "./lib/editor/EditorPanel.svelte";
   import GlossaryPanel from "./lib/provider/GlossaryPanel.svelte";
   import ProviderSettings from "./lib/provider/ProviderSettings.svelte";
-  import ReviewGrid from "./lib/ReviewGrid.svelte";
+  import ReviewGrid from "./lib/export/ReviewGrid.svelte";
   import PageGrid from "./lib/library/PageGrid.svelte";
   import PageList from "./lib/library/PageList.svelte";
   import { lang, t, theme } from "./lib/app/i18n";
