@@ -26,7 +26,7 @@
   import FolderChip from "./lib/library/FolderChip.svelte";
   import MoveDialog from "./lib/library/MoveDialog.svelte";
   import Onboarding from "./lib/app/Onboarding.svelte";
-  import Snackbar from "./lib/ui/Snackbar.svelte";
+  import AlertBanners from "./lib/app/shell/AlertBanners.svelte";
   import DetectProgress from "./lib/detection/DetectProgress.svelte";
   import { createDetectRun } from "./lib/detection/detectRun.svelte.ts";
   import DiagnosticsPanel from "./lib/app/DiagnosticsPanel.svelte";
@@ -677,29 +677,13 @@
   </header>
   {/if}
 
-  {#if lastInvokeError}
-    <p
-      role="alert"
-      class="flex items-center gap-2 border-b border-danger-soft bg-danger-soft px-5 py-1.5 text-xs text-danger"
-    >
-      <span class="font-mono">{lastInvokeError.command}</span>
-      <span class="min-w-0 flex-1 truncate" title={lastInvokeError.error}>
-        {lastInvokeError.error}
-      </span>
-      <Button variant="default" size="sm" onclick={() => (showDiagnostics = true)}>
-        Detail
-      </Button>
-    </p>
-  {/if}
-
-  {#if error}
-    <p role="alert" class="border-b border-warn-soft bg-warn-soft px-5 py-2 text-sm text-warn">{error}</p>
-  {/if}
-  {#if info}
-    {#key info}
-      <Snackbar message={info} onClose={() => (info = "")} />
-    {/key}
-  {/if}
+  <AlertBanners
+    {lastInvokeError}
+    {error}
+    {info}
+    onOpenDiagnostics={() => (showDiagnostics = true)}
+    onClearInfo={() => (info = "")}
+  />
 
   {#if !projectStore.loaded}
     <div class="flex flex-1 items-center justify-center p-10" aria-hidden="true">
