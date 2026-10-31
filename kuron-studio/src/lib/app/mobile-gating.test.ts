@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import appSrc from "../../App.svelte?raw";
 import headSrc from "./shell/AppHeader.svelte?raw";
-import gridSrc from "../export/ReviewGrid.svelte?raw";
+import gridSrc from "../export/ExportActions.svelte?raw";
 // Mobile bukan target penuh — tapi header desktop dilarang bocor ke layar
 // kecil: folder picker iOS tidak ada (dialog plugin throw
 // FolderPickerNotImplemented), updater/process capability desktop-only.
@@ -44,7 +44,7 @@ describe("mobile header gating (iOS/Android)", () => {
     expect(appSrc).toContain("emptyHintMobile");
   });
 
-  it("ReviewGrid menolak export folder (png/psd) di mobile", () => {
+  it("ExportActions menolak export folder (png/psd) di mobile", () => {
     expect(gridSrc).toContain('from "../app/device"');
     expect(gridSrc).toContain("isMobile");
     expect(gridSrc).toContain("belum didukung di iOS");

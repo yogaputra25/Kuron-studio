@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import batchSrc from "./BatchPanel.svelte?raw";
 import panelSrc from "./TranslatePanel.svelte?raw";
 import optsSrc from "./translateOpts.ts?raw";
-import reviewSrc from "../export/ReviewGrid.svelte?raw";
+import exportStateSrc from "../export/exportState.svelte.ts?raw";
 
 // Kontrak change reset-translation §4 cancel (opsi B), diverifikasi statis
 // dari sumber (pola sama seperti reset-translation.test.ts): assert pola kode.
@@ -53,11 +53,11 @@ describe("translate model per-run (LOV sesi-saja)", () => {
 
 describe("translate model per-run (forwarding batch/retry)", () => {
   it("batch + retry teruskan model dari opts", () => {
-    // Sejak FE-6: BatchPanel + ReviewGrid lewat konverter; forwarding model
+    // Sejak review-grid-split: BatchPanel + exportState lewat konverter;
     // dikunci unit translateOpts.test.ts.
     expect(batchSrc).toContain("toBatchInput(opts,");
-    expect(reviewSrc).toContain("toBatchInput(opts,");
-    expect(reviewSrc).toContain("toRetryBubbleInput(opts,");
+    expect(exportStateSrc).toContain("toBatchInput(opts,");
+    expect(exportStateSrc).toContain("toRetryBubbleInput(opts,");
   });
 });
 
