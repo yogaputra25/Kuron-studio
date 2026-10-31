@@ -1,3 +1,5 @@
+import { read, STORAGE_KEYS, write } from "./storage";
+
 // ponytail: deteksi mobile tanpa dep baru — UA cukup untuk menyembunyikan
 // kontrol desktop-only (folder picker, update, diagnostics). Upgrade ke
 // @tauri-apps/plugin-os saat butuh platform pasti (bukan UA sniffing).
@@ -8,7 +10,6 @@ export const isMobile = /iphone|ipad|ipod|android/i.test(
 // Batas lebar (px) di bawahnya layout kolom tablet berlaku. Disatukan di sini
 // supaya breakpoint CSS (md Tailwind = 768px) dan JS sepakat.
 export const TABLET_MAX_W = 768;
-const SIDEBAR_W_KEY = "kuron-sidebar-w:v1";
 
 /** Tablet = viewport sempit + pointer kasar. UA-sniff `isMobile` tetap dipakai
  *  untuk gating tombol desktop-only; fungsi ini hanya untuk perilaku sentuh
@@ -41,25 +42,16 @@ export function watchViewport(cb: () => void): () => void {
   };
 }
 
-/** Lebar sidebar tersimpan (px), sudah di-clamp. Tak ada/invalid → null
- *  (pemanggil pakai default). try/catch: private mode tanpa storage. */
+/** Lebar sidebar tersimpan (px), sudah di-clamp. Tak ada/invalid → fallback
+ *  mentah (kompatibel lama: clamp hanya untuk nilai valid dari storage).
+ *  Parse + try/catch pindah ke app/storage (FE-8 2.2). */
 export function loadSidebarW(min: number, max: number, fallback: number): number {
-  try {
-    if (typeof localStorage === "undefined") return fallback;
-    const raw = localStorage.getItem(SIDEBAR_W_KEY);
-    if (raw === null) return fallback;
-    const v = Math.round(Number(raw));
-    if (!Number.isFinite(v)) return fallback;
-    return Math.min(max, Math.max(min, v));
-  } catch {
-    return fallback;
-  }
+  // NaN = penanda "tak ada/invalid" agar fallback kembali mentah.
+  const v = read(STORAGE_KEYS.sidebarW, Number.NaN);
+  if (!Number.isFinite(v)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(v)));
 }
 
 export function saveSidebarW(w: number): void {
-  try {
-    localStorage.setItem(SIDEBAR_W_KEY, String(Math.round(w)));
-  } catch {
-    /* private mode — lebar sesi ini saja */
-  }
+  write(STORAGE_KEYS.sidebarW, Math.round(w));
 }

@@ -1,37 +1,20 @@
 import { derived, writable } from "svelte/store";
+import { read, STORAGE_KEYS, write } from "./storage";
 
 export type Lang = "en" | "id" | "zh";
 export type Theme = "dark" | "light";
 
-function stored(key: string): string | null {
-  try {
-    return typeof localStorage === "undefined" ? null : localStorage.getItem(key);
-  } catch {
-    return null; // SSR / vitest / private mode tanpa storage.
-  }
-}
-
-const storedLang = stored("kuron-lang") as Lang | null;
-const storedTheme = stored("kuron-theme") as Theme | null;
+const storedLang = read(STORAGE_KEYS.lang, "id");
+const storedTheme = read(STORAGE_KEYS.theme, "dark");
 
 export const lang = writable<Lang>(
   storedLang === "en" || storedLang === "id" || storedLang === "zh" ? storedLang : "id",
 );
 export const theme = writable<Theme>(storedTheme === "light" ? "light" : "dark");
 
-lang.subscribe((v) => {
-  try {
-    localStorage.setItem("kuron-lang", v);
-  } catch {
-    /* private mode */
-  }
-});
+lang.subscribe((v) => { write(STORAGE_KEYS.lang, v); });
 theme.subscribe((v) => {
-  try {
-    localStorage.setItem("kuron-theme", v);
-  } catch {
-    /* private mode */
-  }
+  write(STORAGE_KEYS.theme, v);
   if (typeof document !== "undefined") {
     document.documentElement.dataset.theme = v;
   }
