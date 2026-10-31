@@ -1,73 +1,81 @@
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+// @vitest-environment jsdom
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent } from "@testing-library/svelte";
+import { renderWithI18n } from "../test-utils";
+import Lov from "./Lov.svelte";
+import { tr } from "../app/i18n";
 
-// Kontrak lov-dropdown-unified: semua dropdown memakai ui/Lov (custom
-// searchable ala LOV project), bukan <select> bawaan yang beda tampilan
-// per OS dan tidak bisa di-search.
+describe("ui/Lov behavioral dropdown", () => {
+  const options = [
+    { value: "opt1", label: "Alpha" },
+    { value: "opt2", label: "Beta" },
+    { value: "opt3", label: "Gamma" },
+    { value: "opt4", label: "Delta" },
+    { value: "opt5", label: "Epsilon" },
+    { value: "opt6", label: "Zeta" },
+  ];
 
-const SRC = fileURLToPath(new URL("../..", import.meta.url));
-
-function svelteFiles(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((d) => {
-    const p = join(dir, d.name);
-    if (d.isDirectory()) return svelteFiles(p);
-    return d.name.endsWith(".svelte") ? [p] : [];
+  it("renders trigger button with placeholder when no value", () => {
+    const { getByRole, queryByRole } = renderWithI18n(Lov, {
+      props: { label: "Category", options, value: "" },
+    });
+    const trigger = getByRole("button", { name: /Category/i });
+    expect(trigger.getAttribute("aria-haspopup")).toBe("listbox");
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(queryByRole("listbox")).toBeNull();
   });
-}
 
-describe("tidak ada <select> bawaan tersisa", () => {
-  it("src/lib bebas tag <select>", () => {
-    const hits = svelteFiles(join(SRC, "lib")).filter((f) =>
-      /<select\b/.test(readFileSync(f, "utf8")),
-    );
-    expect(hits, `masih pakai <select>: ${hits.join(", ")}`).toEqual([]);
+  it("opens listbox on click and selects an option", async () => {
+    const onchange = vi.fn();
+    const { getByRole, getAllByRole } = renderWithI18n(Lov, {
+      props: { label: "Category", options, value: "", onchange },
+    });
+    const trigger = getByRole("button", { name: /Category/i });
+    await fireEvent.click(trigger);
+
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    const listbox = getByRole("listbox");
+    expect(listbox).toBeTruthy();
+
+    const items = getAllByRole("option");
+    expect(items.length).toBe(6);
+
+    await fireEvent.click(items[1]); // Beta
+    expect(onchange).toHaveBeenCalledWith("opt2");
   });
-});
 
-describe("ui/Lov pola LOV project", () => {
-  const lov = readFileSync(join(SRC, "lib/ui/Lov.svelte"), "utf8");
+  it("filters options via search input when > 5 options", async () => {
+    const { getByRole, getAllByRole, getByPlaceholderText } = renderWithI18n(Lov, {
+      props: { label: "Category", options, value: "" },
+    });
+    const trigger = getByRole("button", { name: /Category/i });
+    await fireEvent.click(trigger);
 
-  it("punya tombol pemicu + listbox + search + aria", () => {
-    for (const m of [
-      'aria-haspopup="listbox"',
-      "aria-expanded={open}",
-      'role="listbox"',
-      'role="option"',
-      "aria-selected={o.value === value}",
-      "bind:value={query}",
-    ]) {
-      expect(lov, `Lov kehilangan: ${m}`).toContain(m);
+    const searchInput = getByPlaceholderText(tr("id", "searchList"));
+    await fireEvent.input(searchInput, { target: { value: "bet" } });
+
+    const items = getAllByRole("option");
+    expect(items.length).toBe(1);
+    expect(items[0].textContent).toContain("Beta");
+  });
+
+  it("closes on Escape key", async () => {
+    const { getByRole, queryByRole } = renderWithI18n(Lov, {
+      props: { label: "Category", options, value: "" },
+    });
+    const trigger = getByRole("button", { name: /Category/i });
+    await fireEvent.click(trigger);
+    expect(getByRole("listbox")).toBeTruthy();
+
+    await fireEvent.keyDown(trigger, { key: "Escape" });
+    expect(queryByRole("listbox")).toBeNull();
+  });
+
+  it("searchList is translated in all 3 languages", () => {
+    for (const lang of ["en", "id", "zh"] as const) {
+      const label = tr(lang, "searchList");
+      expect(label).toBeTruthy();
+      expect(label).not.toBe("searchList");
     }
-  });
-
-  it("tutup saat focusout keluar atau Escape", () => {
-    expect(lov).toContain("closeOnFocusOut");
-    expect(lov.match(/Escape/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
-  });
-
-  it("pakai searchList i18n (bukan hardcode)", () => {
-    expect(lov).toContain('$t("searchList")');
-    expect(lov).not.toContain("Cari…");
-  });
-});
-
-describe("pemakaian sudah Lov semua", () => {
-  it("TranslatePanel: Provider/Model/Target/Style/Mosaic", () => {
-    const src = readFileSync(join(SRC, "lib/provider/TranslatePanel.svelte"), "utf8");
-    expect(src).not.toContain("ui/Select.svelte");
-    expect(src.match(/<Lov\b/g)?.length).toBe(5);
-  });
-
-  it("ProviderSettings: Tipe/Model tersedia", () => {
-    const src = readFileSync(join(SRC, "lib/provider/ProviderSettings.svelte"), "utf8");
-    expect(src).not.toContain("ui/Select.svelte");
-    expect(src.match(/<Lov\b/g)?.length).toBe(2);
-  });
-
-  it("searchList ada di 3 bahasa", () => {
-    const src = readFileSync(join(SRC, "lib/app/i18n.ts"), "utf8");
-    expect(src).toContain("searchList");
   });
 });

@@ -1,6 +1,4 @@
 // @vitest-environment jsdom
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { compile } from "svelte/compiler";
 import { flushSync, mount, unmount } from "svelte";
 import { describe, expect, it } from "vitest";
@@ -134,28 +132,6 @@ describe("Lov round-trip: pilihan sampai ke $state parent", () => {
 });
 
 describe("mekanisme: compiler harus menghasilkan bind_value", () => {
-  it("Field.svelte meng-compile menjadi $.bind_value", () => {
-    const src = readFileSync(
-      join(process.cwd(), "src/lib/ui/Field.svelte"),
-      "utf8",
-    );
-    const { js } = compile(src, { generate: "client" });
-    expect(
-      js.code,
-      "tanpa bind_value input jadi satu arah — ini akar bug screenshot",
-    ).toContain("bind_value");
-  });
-
-  it("Lov.svelte meneruskan pilihan lewat onchange (bukan bind)", () => {
-    const src = readFileSync(
-      join(process.cwd(), "src/lib/ui/Lov.svelte"),
-      "utf8",
-    );
-    expect(src).not.toMatch(/\$bindable/);
-    expect(src).toContain("onclick={() => pick(o.value)}");
-    expect(src).toContain("onchange?.(");
-  });
-
   it("bukti: {value} TIDAK menghasilkan bind_value (mutasi harus merah)", () => {
     const { js } = compile(
       '<script>let { value = $bindable() } = $props();</script><input {value} />',

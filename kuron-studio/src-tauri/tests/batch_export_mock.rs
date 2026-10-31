@@ -5,7 +5,8 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 
 use image::{Rgb, RgbImage};
-use kuron_studio_lib::commands::export::{export_cbz_bytes, export_json_bytes, render_page_png};
+use kuron_studio_lib::commands::export::{export_cbz_bytes, export_json_bytes};
+use kuron_studio_lib::render::page::render_page_png;
 use kuron_studio_lib::translation::{order_indices, PageTranslation};
 
 fn spawn_mock(body: &'static str, hits: usize) -> String {
@@ -69,12 +70,11 @@ async fn run_batch_10() -> (Vec<PageTranslation>, Vec<(String, usize, bool)>) {
                     shape: None, kind: None, tail: None,
                 };
                 let ordered = order_indices(std::slice::from_ref(&b), "rtl");
-                let results = kuron_studio_lib::parser::parse_mosaic_json(&text)
-                    .map_err(|e| e.to_string())?;
+                let results = kuron_studio_lib::parser::parse_mosaic_json(&text)?;
                 let mapped = kuron_studio_lib::translation::map_mosaic(
                     std::slice::from_ref(&b), &ordered, &results, 400, 600,
                 );
-                Ok::<_, String>(PageTranslation {
+                Ok::<_, kuron_studio_lib::AppError>(PageTranslation {
                     page_id: page_id.clone(),
                     target_lang: "Indonesian".into(),
                     style: "standard".into(),

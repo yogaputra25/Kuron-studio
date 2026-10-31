@@ -4,6 +4,7 @@ pub mod export;
 pub mod extras;
 pub mod glossary;
 pub mod image;
+pub mod import;
 pub mod project;
 pub mod provider;
 pub mod translate;

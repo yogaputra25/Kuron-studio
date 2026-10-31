@@ -30,7 +30,7 @@ Import folder/files/zip → Detect bubble (ONNX, per halaman)
 
 | Folder | Isi |
 |---|---|
-| `contracts/` | `types.ts` (cermin Rust; `IMAGE_EXTS` sinkron `project.rs` via `image-ext-contract.test.ts`), `api.ts` (satu-satunya jembatan invoke; key top-level `snake_case`, field `camelCase`; dijaga `invoke-contract.test.ts`), `log.ts` + 5 contract test |
+| `contracts/` | `types.ts` (impor `*.json` — sumber kebenaran kontrak lintas bahasa; dijaga `image-ext-contract.test.ts` + `provider-preset-contract.test.ts`), `api.ts` (satu-satunya jembatan invoke; key top-level `snake_case`, field `camelCase`; dijaga `invoke-contract.test.ts`), `log.ts` + 5 contract test |
 | `app/` | `i18n.ts` (id/en/zh; `i18n.test.ts` gagal bila key hilang), `device.ts` (deteksi mobile; dijaga `mobile-gating.test.ts`), `Onboarding/DiagnosticsPanel/UpdateButton.svelte` + 5 test shell |
 | `ui/` | 6 primitif (`Button/Field/Lov/Panel/Snackbar/StatusBadge`) + `__fixtures__/` + 7 test |
 | `library/` | `library.ts` (agregat murni), `status.ts`, `PageGrid/PageList/FolderChip/MoveDialog.svelte` + 6 test |
@@ -81,6 +81,38 @@ Import folder/files/zip → Detect bubble (ONNX, per halaman)
   - `extras`: `tm_search` lintas project, `qa_check`,
     `share_project` (zip slice projects.json + gambar), diagnostics/log.
   - `glossary`: CRUD + CSV import/export, dipakai otomatis + manual.
+- **Layer backend & arah dependensi (BE-layer, lane #51–#57):**
+
+  ```
+  domain ← store · db (+repo) · render · provider · jobs · prompt/translation
+    ← commands (boundary tipis; termasuk commands/import/)
+  error dipakai semua layer (internal); AppState + lib.rs merakit semuanya.
+  ```
+
+  | Dari → ke | Aturan |
+  |---|---|
+  | `commands` → `domain`/`store`/`db`/`render`/`provider`/`jobs` | ✅ boundary: parsing arg, panggil layer, kembalikan `Result<T, String>` |
+  | `store`/`db`/`repo`/`render`/`provider` → `domain`, `error` | ✅ ambil tipe + `AppError`; tidak memanggil kembali ke `commands` (rujukan `crate::commands` yang ada hanya di `#[cfg(test)]`/doc) |
+  | `domain` → `store`/`db`/`commands`/I/O | ❌ `domain` hanya tipe data — tanpa I/O, Tauri, HTTP, SQLite; satu-satunya rujukan keluar adalah tipe daun (`bubble`, `translation`) + `error` |
+  | `#[tauri::command]` mengembalikan selain `Result<T, String>` | ❌ konversi `AppError → String` hanya di titik command via `?`/`From` |
+
+  Modul: `domain/` (`page`, `project`, `status`, `tree` — dipindah verbatim
+  dari `commands/project.rs`); `store/` (`ProjectStore` + `atomic.rs`: tulis
+  `*.tmp` + `sync` + `rename`, putar `*.bak`, pulih dari `.bak` saat main
+  korup); `db/` (`migrate` + `SCHEMA_SQL` 4 tabel; repo per-domain tinggal di
+  modul pemilik: `provider/repo.rs`, `glossary/repo.rs`,
+  `preview_cache/repo.rs`); `render/` (`image_ops`, `detector`,
+  `detect_decode`, `outline`, `psd`, `page` teks); `jobs.rs` (`JobRegistry`:
+  dedup + semaphore 3 + cancel milik `AppState`); `error/` (`AppError`
+  thiserror); `provider/` (dispatch `match` + `http.rs` retry-429);
+  `commands/import/` (pakai `crate::domain::` langsung).
+- **Batas kontrak FE↔BE** (dijaga `invoke-contract.test.ts`): dua lapis.
+  Lapis 1 — key top-level invoke `snake_case` persis nama param Rust
+  (`project_id`, `page_ids`). Lapis 2 — field struct `camelCase` via serde
+  `rename_all` (`pageId`, `targetLang`). Konstanta lintas bahasa hanya di
+  `src/lib/contracts/*.json` (`extensions`, `layout`, `providers`): Rust via
+  `include_str!` + `OnceLock`, TS via `import` langsung; test kontrak
+  membandingkan pemakaian lawan JSON, bukan me-regex source lawan.
 - `projects.json`: `Project { id, name, folders[], updatedAt }`,
   `ChapterFolder { id, name, pages[], createdAt, parentId? }`,
   `Page { id, path, w/h, status, bubbles[], translation? }`.
@@ -110,6 +142,11 @@ Satu test: `cargo test <nama>` / `pnpm vitest run <file>`.
 - Frontend = tampilan + state sementara. Backend = file, model, AI,
   antrean. Jangan panggil fs/model dari Svelte langsung.
 - Perubahan kontrak invoke → update `api.ts` + kedua sisi + test kontrak.
+- Konstanta lintas bahasa hanya hidup di `kuron-studio/src/lib/contracts/*.json`
+  (ekstensi import, konstanta layout + font, base URL provider): Rust membaca
+  via `include_str!` + `OnceLock`, TS via `import` langsung; test kontrak di
+  kedua sisi membandingkan pemakaian lawan JSON, tidak pernah me-regex source
+  lawan — jadi file boleh pindah modul tanpa test ikut merah.
 - String UI baru → `i18n.ts` 3 bahasa di commit yang sama.
 
 ## 8. Peta folder repo
@@ -124,3 +161,27 @@ Kuron-studio/
 
 Backlog aktif: #8 (panel resize + mode tablet). #7 selesai: folder
 chapter + dashboard ringkasan + kanban + export per folder.
+
+## 9. ADR & PR checklist
+
+Keputusan arsitektur BE-layer tercatat di `adr/` (satu ADR per
+keputusan): ADR-001 domain keluar dari commands · ADR-002 JSON + atomic
+write · ADR-003 provider `match` bukan trait · ADR-004 opsi translate satu
+perakit · ADR-005 test behavioral bukan source-pattern.
+
+Checklist sebelum PR (semua wajib centang):
+
+- [ ] Gate hijau (= CI): `cd kuron-studio/src-tauri && cargo test &&
+  cargo clippy --all-targets -- -D warnings`, lalu `cd .. && pnpm test &&
+  pnpm check`.
+- [ ] Tanpa secret di diff: API key, password, private/signing key, isi
+  keychain, `.env`. Nemu secret di output (diagnostics, env, log) → tulis
+  `[REDACTED]`.
+- [ ] String UI baru lengkap 3 bahasa (`id`/`en`/`zh`) di `i18n.ts` dalam
+  commit yang sama.
+- [ ] Style hanya token `--ks-*` di `app.css` (dark default + light); tanpa
+  nilai luar token.
+- [ ] Kontrak invoke berubah → `api.ts` + kedua sisi + test kontrak
+  diperbarui; konstanta baru lewat `src/lib/contracts/*.json`.
+- [ ] Perubahan perilaku non-trivial lewat `openspec/`; keputusan arsitektur
+  baru dicatat sebagai ADR di `adr/`.

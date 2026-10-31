@@ -167,53 +167,6 @@ pub fn error(event: &str, fields: serde_json::Value) {
     log(Level::Error, event, fields);
 }
 
-/// Hasil invoke: selalu catat sukses maupun gagal, dengan durasi.
-pub fn invoke_result(
-    command: &str,
-    args: &serde_json::Value,
-    outcome: Result<serde_json::Value, String>,
-    elapsed_ms: u128,
-) -> serde_json::Value {
-    let mut f = serde_json::Map::new();
-    f.insert("command".into(), serde_json::Value::String(command.into()));
-    f.insert("args".into(), redact_value(args));
-    f.insert("elapsed_ms".into(), serde_json::Value::from(elapsed_ms as u64));
-    match &outcome {
-        Ok(v) => {
-            f.insert("ok".into(), serde_json::Value::Bool(true));
-            // Sukses tetap diringkas supaya tidak membanjiri log dengan
-            // base64 thumbnail yang besar.
-            let preview = match v {
-                serde_json::Value::String(s) => format!("<string len={}>", s.len()),
-                other => {
-                    let s = serde_json::to_string(other).unwrap_or_default();
-                    format!("<{} len={}>", type_name(other), s.len())
-                }
-            };
-            f.insert("result".into(), serde_json::Value::String(preview));
-            info("invoke_ok", serde_json::Value::Object(f));
-            v.clone()
-        }
-        Err(e) => {
-            f.insert("ok".into(), serde_json::Value::Bool(false));
-            f.insert("error".into(), serde_json::Value::String(redact(e)));
-            error("invoke_err", serde_json::Value::Object(f));
-            serde_json::Value::String(e.clone())
-        }
-    }
-}
-
-fn type_name(v: &serde_json::Value) -> &'static str {
-    match v {
-        serde_json::Value::Null => "null",
-        serde_json::Value::Bool(_) => "bool",
-        serde_json::Value::Number(_) => "number",
-        serde_json::Value::String(_) => "string",
-        serde_json::Value::Array(_) => "array",
-        serde_json::Value::Object(_) => "object",
-    }
-}
-
 /// Info environment untuk bug report. Tidak ada secret di sini.
 pub fn diagnostics() -> serde_json::Value {
     serde_json::json!({
@@ -268,24 +221,6 @@ mod tests {
             let s = serde_json::to_string(&redact_value(&v)).unwrap();
             assert!(!s.contains("rahasia"), "field `{f}` bocor: {s}");
         }
-    }
-
-    #[test]
-    fn invoke_result_logs_both_outcomes() {
-        let ok = invoke_result(
-            "list_projects",
-            &serde_json::json!({}),
-            Ok(serde_json::json!([])),
-            3,
-        );
-        assert!(ok.is_array());
-        let err = invoke_result(
-            "save_provider",
-            &serde_json::json!({"name": "x", "api_key": "sk-secret"}),
-            Err("boom".into()),
-            5,
-        );
-        assert_eq!(err.as_str(), Some("boom"));
     }
 
     #[test]

@@ -1,3 +1,5 @@
+import layout from "../../contracts/layout.json";
+
 /**
  * Layout teks — SATU sumber untuk kanvas dan export (export-text-parity P1).
  *
@@ -26,10 +28,10 @@ export interface MeasureApi {
   width(line: string, fontSize: number): number;
 }
 
-/** Jarak baris. Dipakai kanvas DAN export; jangan disalin ke tempat lain. */
-export const LAYOUT_LINE_HEIGHT = 1.25;
+/** Jarak baris. Dipakai kanvas DAN export; sumbernya `layout.json`. */
+export const LAYOUT_LINE_HEIGHT: number = layout.lineHeight;
 /** Padding dalam kotak, px halaman. */
-export const LAYOUT_PADDING = 4;
+export const LAYOUT_PADDING: number = layout.padding;
 /**
  * Batas ukuran huruf, px HALAMAN.
  *
@@ -50,9 +52,9 @@ export const LAYOUT_PADDING = 4;
  * Angka-angka ini yang perlu dilihat mata di halaman nyata sebelum dikunci.
  */
 
-export const LAYOUT_MIN_FONT = 10;
-export const LAYOUT_MAX_FONT = 72;
-export const LAYOUT_FONT_STEP = 0.5;
+export const LAYOUT_MIN_FONT: number = layout.minFont;
+export const LAYOUT_MAX_FONT: number = layout.maxFont;
+export const LAYOUT_FONT_STEP: number = layout.fontStep;
 export interface LayoutOpts {
   padding?: number;
   lineHeight?: number;
@@ -135,10 +137,10 @@ function wrapCore(text: string, widthForLine: (i: number) => number, fontSize: n
 
 /** Fraksi lebar chord minimum terhadap chord terlebar agar pita dianggap
  *  badan bubble (bukan ekor). Ekor sempit dikeluarkan dari area teks.
- *  WAJIB sama dengan `BODY_MIN_FRAC` di `commands/export.rs`. */
-export const BODY_MIN_FRAC = 0.35;
+ *  Sumbernya `layout.json` (sama dengan Rust). */
+export const BODY_MIN_FRAC: number = layout.bodyMinFrac;
 /** Langkah sampling vertikal untuk cari badan (px). Sama di dua sisi. */
-const BODY_SCAN_STEP = 2;
+const BODY_SCAN_STEP: number = layout.bodyScanStep;
 
 /** Satu interval dalam polygon pada garis horizontal. */
 export interface PolyChord {

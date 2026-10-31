@@ -17,10 +17,9 @@ Catatan lintas sesi untuk AI assistant. `AGENTS.md` bikin aturan, file ini + `me
 
 ## Fokus
 
-- #17 (OPEN) — progres Detect semua (counter + %), tombol Import gabungan, header logo dua baris.
-- #14 (OPEN) — drawer mobile + pisah UI desktop/tablet vs mobile.
-- #12 (OPEN) — mode Grid dan List daftar halaman.
-- #7 (OPEN, sebagian) — nested folders + move dialog sudah merge (PR #19); sisa tracking todo/done + dashboard.
+- #14 (OPEN) — drawer mobile + pisah UI desktop/tablet vs mobile. Satu-satunya sisa gelombang redesign; baru ada spec (`mobile-home-drawer`), belum implementasi.
+- #29 (OPEN), #38/#39 (epic), #50–#67 (OPEN) — refactor backend + fitur batch/AI; di luar scope kerja Yoga 2026-10-31.
+- Ditutup 2026-10-31 (kerja Yoga, diverifikasi 2026-10-31): #7 folder + MoveDialog, #12 grid/list + #25 sorting, #17 detect-ux, #26/#27 provider + #28 inpaint, #37 epic frontend, #40–#49 (FE-1 domain-move … FE-9 i18n-keys + token ilustrasi).
 
 ## Keputusan
 

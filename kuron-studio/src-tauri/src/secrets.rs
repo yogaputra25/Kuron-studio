@@ -8,14 +8,16 @@
 //! - `delete_key` removes both (keychain NoEntry is fine).
 //! - M4-2: never log the key anywhere in this module.
 
+use crate::error::AppError;
+
 pub const SERVICE: &str = "id.kuron.studio";
 
 pub fn account(provider_id: &str) -> String {
     format!("provider:{provider_id}")
 }
 
-fn entry(provider_id: &str) -> Result<keyring::Entry, String> {
-    keyring::Entry::new(SERVICE, &account(provider_id)).map_err(|e| e.to_string())
+fn entry(provider_id: &str) -> Result<keyring::Entry, AppError> {
+    Ok(keyring::Entry::new(SERVICE, &account(provider_id))?)
 }
 
 /// Read: keychain first, sqlite legacy column as fallback. Never logs key.
@@ -23,7 +25,7 @@ fn entry(provider_id: &str) -> Result<keyring::Entry, String> {
 pub fn read_key(
     provider_id: &str,
     sqlite_fallback: &str,
-) -> Result<String, String> {
+) -> Result<String, AppError> {
     let Ok(e) = entry(provider_id) else {
         return Ok(sqlite_fallback.to_string());
     };
@@ -44,28 +46,28 @@ pub fn has_key(provider_id: &str, sqlite_fallback: &str) -> bool {
 }
 
 /// Save: keychain write-through. Err → caller leaves sqlite empty.
-pub fn save_key(provider_id: &str, api_key: &str) -> Result<(), String> {
-    entry(provider_id)?
-        .set_password(api_key)
-        .map_err(|e| e.to_string())
+pub fn save_key(provider_id: &str, api_key: &str) -> Result<(), AppError> {
+    entry(provider_id)?.set_password(api_key)?;
+    Ok(())
 }
 
-/// Delete both stores; missing keychain entry is not an error.
-pub fn delete_key(
-    conn: &rusqlite::Connection,
-    provider_id: &str,
-) -> Result<(), String> {
+/// Delete keychain credential only — tidak menyentuh DB (issue #58).
+/// Baris sqlite dihapus caller via `crate::provider::repo::delete_provider`
+/// (lihat `commands::provider::delete_provider`).
+pub fn delete_key(provider_id: &str) -> Result<(), AppError> {
     if let Ok(e) = entry(provider_id) {
         match e.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => {}
-            Err(e) => return Err(e.to_string()),
+            Err(e) => return Err(AppError::from(e)),
         }
     }
-    crate::cache::delete_provider(conn, provider_id)
+    Ok(())
 }
 
-/// M4-2: redacted view for logs/UI. Full key never appears; body previews
-/// elsewhere already cap at 200 chars (`err_preview` in provider/*).
+/// M4-2: redacted view untuk test. Full key tidak pernah muncul; body preview
+/// elsewhere sudah cap 200 chars (`err_preview` di provider/*). Hanya dipakai
+/// test — tidak ada pemanggil produksi.
+#[cfg(test)]
 pub fn redacted(key: &str) -> &'static str {
     if key.is_empty() {
         "missing"

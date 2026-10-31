@@ -8,7 +8,7 @@ use std::net::TcpListener;
 
 use image::{Rgb, RgbImage};
 use kuron_studio_lib::bubble::BubbleBox;
-use kuron_studio_lib::commands::export::render_page_png;
+use kuron_studio_lib::render::page::render_page_png;
 use kuron_studio_lib::translation::{order_indices, PageTranslation};
 
 fn spawn_mock(body: &'static str, hits: usize) -> String {

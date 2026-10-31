@@ -5,7 +5,8 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::bubble::{model_search_paths, post_process, sanitize_bubbles, BubbleBox};
-use crate::detector::DetectorState;
+use crate::error::AppError;
+use crate::render::detector::DetectorState;
 use crate::AppState;
 
 /// Status ONNX untuk banner frontend — model belum ada = mode manual penuh.
@@ -101,11 +102,11 @@ pub async fn detect_bubbles(
     let detector = state.detect.detector.clone();
     let path_for_infer = page_path.clone();
     let boxes = tauri::async_runtime::spawn_blocking(move || {
-        let bytes = std::fs::read(&path_for_infer).map_err(|e| format!("read: {e}"))?;
+        let bytes = std::fs::read(&path_for_infer).map_err(|e| AppError::io(format!("read: {e}")))?;
         detector.detect_bytes(&model_path, &bytes)
     })
     .await
-    .map_err(|e| format!("infer task: {e}"))??;
+    .map_err(|e| AppError::io(format!("infer task: {e}")))??;
     // bubble-polygon: isi shape dari outline gambar bila kotak polos.
     // Gagal/tak-cocok = diam, fallback kotak (tak pernah error di sini).
     let mut cleaned = post_process(sanitize_bubbles(boxes));
@@ -114,7 +115,7 @@ pub async fn detect_bubbles(
             if let Ok(img) = image::load_from_memory(&bytes) {
                 let rgb = img.to_rgb8();
                 for b in cleaned.iter_mut().filter(|b| b.shape.is_none()) {
-                    if let Some(poly) = crate::outline::refine_outline(&rgb, b.x, b.y, b.w, b.h) {
+                    if let Some(poly) = crate::render::outline::refine_outline(&rgb, b.x, b.y, b.w, b.h) {
                         b.shape = Some(poly);
                     }
                 }
@@ -227,7 +228,8 @@ mod tests {
         assert_eq!(events[1].page_id, "p2");
         assert_eq!(events[1].message, "decode failed");
     }
-    use crate::commands::project::{Page, PageStatus, Project, ProjectStore};
+    use crate::store::ProjectStore;
+    use crate::domain::{Page, PageStatus, Project};
     use crate::translation::PageTranslation;
 
     fn status_state(status: PageStatus, tr: Option<PageTranslation>) -> AppState {
@@ -312,22 +314,22 @@ pub fn save_bubbles(
     bubbles: Vec<BubbleBox>,
 ) -> Result<Vec<BubbleBox>, String> {
     let cleaned = post_process(sanitize_bubbles(bubbles));
-    persist_bubbles(&state, &page_id, cleaned)
+    Ok(persist_bubbles(&state, &page_id, cleaned)?)
 }
 
-fn page_path_of(state: &State<'_, AppState>, page_id: &str) -> Result<String, String> {
-    let store = state.store.lock().map_err(|e| e.to_string())?;
-    store.page_path(page_id).ok_or_else(|| format!("page not found: {page_id}"))
+fn page_path_of(state: &State<'_, AppState>, page_id: &str) -> Result<String, AppError> {
+    let store = crate::error::lock_or_err(&state.store)?;
+    store.page_path(page_id).ok_or_else(|| AppError::page_not_found(page_id))
 }
 
 fn persist_bubbles(
     state: &AppState,
     page_id: &str,
     cleaned: Vec<BubbleBox>,
-) -> Result<Vec<BubbleBox>, String> {
-    use crate::commands::project::PageStatus as S;
-    let mut store = state.store.lock().map_err(|e| e.to_string())?;
-    let page = store.find_page_mut(page_id).ok_or_else(|| format!("page not found: {page_id}"))?;
+) -> Result<Vec<BubbleBox>, AppError> {
+    use crate::domain::PageStatus as S;
+    let mut store = crate::error::lock_or_err(&state.store)?;
+    let page = store.find_page_mut(page_id).ok_or_else(|| crate::error::AppError::page_not_found(page_id))?;
     page.bubbles = cleaned.clone();
     // Status jujur: halaman berterjemahan tak didemosikan oleh edit geometri;
     // in-flight Translating juga tak disentuh.
@@ -342,17 +344,18 @@ fn persist_bubbles(
     Ok(cleaned)
 }
 
-fn set_page_status(state: State<'_, AppState>, page_id: &str, status: &str) -> Result<(), String> {
-    use crate::commands::project::PageStatus as S;
-    let mut store = state.store.lock().map_err(|e| e.to_string())?;
-    let page = store.find_page_mut(page_id).ok_or_else(|| format!("page not found: {page_id}"))?;
+fn set_page_status(state: State<'_, AppState>, page_id: &str, status: &str) -> Result<(), AppError> {
+    use crate::domain::PageStatus as S;
+    let mut store = crate::error::lock_or_err(&state.store)?;
+    let page = store.find_page_mut(page_id).ok_or_else(|| AppError::page_not_found(page_id))?;
     page.status = match status {
         "detecting" => S::Detecting,
         "idle" => S::Idle,
         "translating" => S::Translating,
         "translated" => S::Translated,
         "failed" => S::Failed,
-        other => return Err(format!("unknown status: {other}")),
+        other => return Err(AppError::parse(format!("unknown status: {other}"))),
     };
-    store.save_public()
+    store.save_public()?;
+    Ok(())
 }

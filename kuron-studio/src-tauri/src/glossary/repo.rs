@@ -1,14 +1,13 @@
-use rusqlite::{params, Connection};
-use serde::{Deserialize, Serialize};
+//! Repository glossary: satu-satunya pemilik akses tabel `glossary`.
+//!
+//! Logika murni (CSV, seleksi relevan) tinggal di `super` (`glossary/mod.rs`).
+//! Skema tabel dimiliki `crate::db`; di sini hanya query.
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GlossaryEntry {
-    pub id: String,
-    pub source: String,
-    pub target: String,
-    pub created_at: i64,
-}
+use rusqlite::{params, Connection};
+
+use crate::error::AppError;
+
+use super::GlossaryEntry;
 
 fn row(r: &rusqlite::Row) -> rusqlite::Result<GlossaryEntry> {
     Ok(GlossaryEntry {
@@ -19,19 +18,17 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<GlossaryEntry> {
     })
 }
 
-pub fn list_entries(conn: &Connection) -> Result<Vec<GlossaryEntry>, String> {
+pub fn list_entries(conn: &Connection) -> Result<Vec<GlossaryEntry>, AppError> {
     let mut stmt = conn
-        .prepare("SELECT id, source, target, created_at FROM glossary ORDER BY created_at DESC, rowid DESC")
-        .map_err(|e| e.to_string())?;
-    let rows = stmt.query_map([], row).map_err(|e| e.to_string())?;
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())
+        .prepare("SELECT id, source, target, created_at FROM glossary ORDER BY created_at DESC, rowid DESC")?;
+    let rows = stmt.query_map([], row)?;
+    Ok(rows.collect::<Result<Vec<_>, _>>()?)
 }
 
-pub fn add_entry(conn: &Connection, source: &str, target: &str) -> Result<GlossaryEntry, String> {
+pub fn add_entry(conn: &Connection, source: &str, target: &str) -> Result<GlossaryEntry, AppError> {
     let (source, target) = (source.trim().to_string(), target.trim().to_string());
     if source.is_empty() || target.is_empty() {
-        return Err("glossary source/target kosong".to_string());
+        return Err(AppError::parse("glossary source/target kosong"));
     }
     let e = GlossaryEntry {
         id: uuid::Uuid::new_v4().to_string(),
@@ -42,18 +39,16 @@ pub fn add_entry(conn: &Connection, source: &str, target: &str) -> Result<Glossa
     conn.execute(
         "INSERT INTO glossary (id, source, target, created_at) VALUES (?1,?2,?3,strftime('%s','now'))",
         params![e.id, e.source, e.target],
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     Ok(get_entry(conn, &e.id)?.unwrap_or(e))
 }
 
-fn get_entry(conn: &Connection, id: &str) -> Result<Option<GlossaryEntry>, String> {
+fn get_entry(conn: &Connection, id: &str) -> Result<Option<GlossaryEntry>, AppError> {
     let mut stmt = conn
-        .prepare("SELECT id, source, target, created_at FROM glossary WHERE id = ?1")
-        .map_err(|e| e.to_string())?;
-    let mut rows = stmt.query(params![id]).map_err(|e| e.to_string())?;
-    match rows.next().map_err(|e| e.to_string())? {
-        Some(r) => Ok(Some(row(r).map_err(|e| e.to_string())?)),
+        .prepare("SELECT id, source, target, created_at FROM glossary WHERE id = ?1")?;
+    let mut rows = stmt.query(params![id])?;
+    match rows.next()? {
+        Some(r) => Ok(Some(row(r)?)),
         None => Ok(None),
     }
 }
@@ -63,27 +58,25 @@ pub fn update_entry(
     id: &str,
     source: &str,
     target: &str,
-) -> Result<GlossaryEntry, String> {
+) -> Result<GlossaryEntry, AppError> {
     let (source, target) = (source.trim().to_string(), target.trim().to_string());
     if source.is_empty() || target.is_empty() {
-        return Err("glossary source/target kosong".to_string());
+        return Err(AppError::parse("glossary source/target kosong"));
     }
     let n = conn
         .execute(
             "UPDATE glossary SET source = ?1, target = ?2 WHERE id = ?3",
             params![source, target, id],
-        )
-        .map_err(|e| e.to_string())?;
+        )?;
     if n == 0 {
-        return Err(format!("glossary not found: {id}"));
+        return Err(AppError::glossary_not_found(id));
     }
-    get_entry(conn, id)?.ok_or_else(|| format!("glossary not found: {id}"))
+    get_entry(conn, id)?.ok_or_else(|| AppError::glossary_not_found(id))
 }
 
-pub fn delete_entry(conn: &Connection, id: &str) -> Result<(), String> {
-    conn.execute("DELETE FROM glossary WHERE id = ?1", params![id])
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+pub fn delete_entry(conn: &Connection, id: &str) -> Result<(), AppError> {
+    conn.execute("DELETE FROM glossary WHERE id = ?1", params![id])?;
+    Ok(())
 }
 
 /// Parse satu baris CSV: `source,target` dengan quote minimal ("a,b", "" escape).
@@ -134,7 +127,7 @@ fn quote_field(s: &str) -> String {
     }
 }
 
-pub fn import_csv(conn: &Connection, csv: &str) -> Result<usize, String> {
+pub fn import_csv(conn: &Connection, csv: &str) -> Result<usize, AppError> {
     let mut n = 0;
     let mut lines = csv.lines();
     // Lewati header opsional `source,target` (case-insensitive).
@@ -153,70 +146,28 @@ pub fn import_csv(conn: &Connection, csv: &str) -> Result<usize, String> {
     Ok(n)
 }
 
-pub fn export_csv(conn: &Connection) -> Result<String, String> {
+pub fn export_csv(conn: &Connection) -> Result<String, AppError> {
     let mut out = String::from("source,target\n");
     // Export stabil abjad agar diff-friendly.
     let mut stmt = conn
-        .prepare("SELECT source, target FROM glossary ORDER BY source, target")
-        .map_err(|e| e.to_string())?;
+        .prepare("SELECT source, target FROM glossary ORDER BY source, target")?;
     let rows = stmt
         .query_map([], |r| {
             let (s, t): (String, String) = (r.get(0)?, r.get(1)?);
             Ok((s, t))
-        })
-        .map_err(|e| e.to_string())?;
+        })?;
     for r in rows {
-        let (s, t) = r.map_err(|e| e.to_string())?;
+        let (s, t) = r?;
         out.push_str(&format!("{},{}\n", quote_field(&s), quote_field(&t)));
     }
     Ok(out)
 }
 
-/// Relevan = source muncul sebagai substring case-insensitive di salah satu
-/// teks bubble; urut created_at desc, max 5. texts kosong → 5 terbaru
-/// (fallback agar auto-inject tetap berguna). Tak ada yang cocok → kosong.
-pub fn select_relevant<'a>(
-    all: &'a [GlossaryEntry],
-    texts: &[String],
-) -> Vec<&'a GlossaryEntry> {
-    if texts.iter().all(|t| t.trim().is_empty()) {
-        return all.iter().take(5).collect();
-    }
-    let lowered: Vec<String> = texts.iter().map(|t| t.to_lowercase()).collect();
-    let mut hits: Vec<&GlossaryEntry> = all
-        .iter()
-        .filter(|e| {
-            let s = e.source.to_lowercase();
-            !s.is_empty() && lowered.iter().any(|t| t.contains(&s))
-        })
-        .collect();
-    hits.sort_by_key(|e| std::cmp::Reverse(e.created_at));
-    hits.truncate(5);
-    hits
-}
-
-pub fn build_block(entries: &[&GlossaryEntry]) -> String {
-    entries
-        .iter()
-        .map(|e| format!("{}={}", e.source.trim(), e.target.trim()))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 /// Blok glossary siap-append ke prompt, atau None bila tak ada yang relevan.
 /// Menerima &Connection agar command tak perlu dua langkah (list lalu pilih).
-pub fn context_for(conn: &Connection, texts: &[String]) -> Result<Option<String>, String> {
+pub fn context_for(conn: &Connection, texts: &[String]) -> Result<Option<String>, AppError> {
     let all = list_entries(conn)?;
-    Ok(context_for_entries(&all, texts))
-}
-
-pub fn context_for_entries(all: &[GlossaryEntry], texts: &[String]) -> Option<String> {
-    let rel = select_relevant(all, texts);
-    if rel.is_empty() {
-        None
-    } else {
-        Some(build_block(&rel))
-    }
+    Ok(super::context_for_entries(&all, texts))
 }
 
 /// Auto-context untuk translate_page/batch: never throws — DB error atau
@@ -227,12 +178,12 @@ pub fn auto_context(conn: &Connection, texts: &[String]) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::*;
     use super::*;
-    use crate::cache::init_db;
 
     fn mem() -> Connection {
         let c = Connection::open_in_memory().unwrap();
-        init_db(&c).unwrap();
+        crate::db::migrate(&c).unwrap();
         c
     }
 
@@ -265,7 +216,7 @@ mod tests {
     fn relevant_limit5_case_insensitive_desc() {
         let c = mem();
         seed(&c, 7);
-        let texts = vec!["S0 dan s1 dan S2 dan s3 dan s4 dan s5 dan s6!".to_string()];
+        let texts = vec!["S0 dan s1 dan S2 dan s3 dan S4 dan s5 dan S6!".to_string()];
         let all = list_entries(&c).unwrap();
         let rel = select_relevant(&all, &texts);
         assert_eq!(rel.len(), 5);

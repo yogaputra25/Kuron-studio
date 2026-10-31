@@ -1,22 +1,25 @@
 pub mod bubble;
 pub mod cache;
+pub mod db;
+pub mod error;
 pub mod memory;
-pub mod outline;
-pub mod psd;
 pub mod qa;
 pub mod secrets;
-pub mod detect_decode;
-pub mod detector;
+pub mod store;
+pub mod domain;
 pub mod glossary;
-pub mod image_ops;
+pub mod jobs;
 pub mod logging;
 pub mod preview_cache;
 pub mod parser;
 pub mod prompt;
 pub mod provider;
+pub mod render;
 pub mod translation;
+pub mod translate;
 pub mod commands;
 
+pub use error::AppError;
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use tauri::Manager;
@@ -32,9 +35,12 @@ use commands::glossary::{
     glossary_list, glossary_update,
 };
 use commands::image::get_image_preview;
+use commands::import::import_pages;
+use crate::domain::PageStatus;
+use crate::store::ProjectStore;
 use commands::project::{
-    PageStatus, ProjectStore, clean_pages, create_folder, create_project, create_sample_project,
-    delete_folder, delete_project, get_project, import_pages, list_projects, move_pages, rename_folder,
+    clean_pages, create_folder, create_project, create_sample_project,
+    delete_folder, delete_project, get_project, list_projects, move_pages, rename_folder,
 };
 use commands::provider::{
     delete_provider, get_providers, list_models, list_models_draft, save_provider, validate_provider,
@@ -93,12 +99,10 @@ impl AppState {
 // ponytail: M0 holds projects only. BubbleDetector (M1), reqwest client (M2),
 // rusqlite cache+glossary (M2/M3) join AppState with their tasks.
 // ponytail: secrets (M4-1) live in OS keychain via `secrets`; sqlite keeps '' + fallback.
-fn io_err<E: ToString>(e: E) -> std::io::Error {
-    std::io::Error::other(e.to_string())
-}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    use error::AppError;
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
@@ -106,9 +110,9 @@ pub fn run() {
             let dir = app
                 .path()
                 .app_data_dir()
-                .map_err(|e| io_err(e.to_string()))?
+                .map_err(AppError::store)?
                 .join("kuron-studio");
-            let store = ProjectStore::load(dir.clone()).map_err(io_err)?;
+            let store = ProjectStore::load(dir.clone())?;
             // Log JSON Lines: stderr (untuk `pnpm tauri dev`) + file persisten
             // di app data dir, supaya error yang terjadi belakangan masih bisa
             // dibaca tanpa terminal yang sedang terbuka.
@@ -127,16 +131,15 @@ pub fn run() {
                 );
             }
             let db_path = dir.join("kuron-studio.db");
-            let db = rusqlite::Connection::open(&db_path).map_err(io_err)?;
-            cache::init_db(&db).map_err(io_err)?;
+            let db = rusqlite::Connection::open(&db_path)?;
+            cache::init_db(&db)?;
             let http = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(90))
                 .tls_built_in_root_certs(true)
-                .build()
-                .map_err(|e| io_err(e.to_string()))?;
+                .build()?;
             app.manage(AppState {
                 store: Mutex::new(store),
-                detect: DetectState::new(app.path().resource_dir().ok(), app.path().app_data_dir().map_err(|e| io_err(e.to_string()))?),
+                detect: DetectState::new(app.path().resource_dir().ok(), app.path().app_data_dir().map_err(AppError::store)?),
                 http,
                 db: Mutex::new(db),
                 previews: Mutex::new(preview_cache::PreviewCaches::new()),
@@ -146,7 +149,7 @@ pub fn run() {
             });
             // M4-7: updater (desktop only); endpoints/pubkey in tauri.conf.json.
             #[cfg(desktop)]
-            app.handle().plugin(tauri_plugin_updater::Builder::new().build()).map_err(io_err)?;
+            app.handle().plugin(tauri_plugin_updater::Builder::new().build()).map_err(AppError::store)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

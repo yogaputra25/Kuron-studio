@@ -1,0 +1,40 @@
+{
+  "lineHeight": 1.25,
+  "padding": 4,
+  "minFont": 10,
+  "maxFont": 72,
+  "fontStep": 0.5,
+  "bodyMinFrac": 0.35,
+  "bodyScanStep": 2,
+  "windowsFonts": [
+    "C:/Windows/Fonts/arial.ttf",
+    "C:/Windows/Fonts/tahoma.ttf",
+    "C:/Windows/Fonts/msyh.ttc",
+    "C:/Windows/Fonts/msyhl.ttc",
+    "C:/Windows/Fonts/msgothic.ttc",
+    "C:/Windows/Fonts/segoeui.ttf",
+    "C:/Windows/Fonts/calibri.ttf"
+  ],
+  "macosFonts": [
+    "/System/Library/Fonts/Helvetica.ttc",
+    "/System/Library/Fonts/Hiragino Sans GB.ttc",
+    "/System/Library/Fonts/Hiragino Kaku Gothic ProN.ttc",
+    "/Library/Fonts/Arial.ttf"
+  ],
+  "linuxFonts": [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed.ttf",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"
+  ],
+  "cssFamily": {
+    "arial.ttf": "Arial",
+    "tahoma.ttf": "Tahoma",
+    "msyh.ttc": "Microsoft YaHei",
+    "msyhl.ttc": "Microsoft YaHei Light",
+    "msgothic.ttc": "MS Gothic",
+    "segoeui.ttf": "Segoe UI",
+    "calibri.ttf": "Calibri"
+  },
+  "overlayFontStack": "Arial, Tahoma, \"Microsoft YaHei\", sans-serif"
+}

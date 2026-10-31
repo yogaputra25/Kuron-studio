@@ -213,11 +213,11 @@ pub fn model_mask_polygon(
     if !any {
         return None;
     }
-    let contour = crate::outline::trace_contour(&mask)?;
-    let simp = crate::outline::simplify_rdp(
+    let contour = crate::render::outline::trace_contour(&mask)?;
+    let simp = crate::render::outline::simplify_rdp(
         &contour,
-        crate::outline::RDP_EPSILON,
-        crate::outline::MAX_POINTS,
+        crate::render::outline::RDP_EPSILON,
+        crate::render::outline::MAX_POINTS,
     );
     if simp.len() < 3 {
         return None;

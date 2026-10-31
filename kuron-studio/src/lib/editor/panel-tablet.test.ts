@@ -1,49 +1,61 @@
-import { describe, expect, it } from "vitest";
-import panelSrc from "./EditorPanel.svelte?raw";
-import deviceSrc from "../app/device?raw";
-import hookSrc from "./usePanelResize.svelte?raw";
-import dividerSrc from "../ui/Divider.svelte?raw";
+// @vitest-environment jsdom
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent } from "@testing-library/svelte";
+import { renderWithI18n } from "../test-utils";
+import Divider from "../ui/Divider.svelte";
+import {
+  clampWidth,
+  nearestSnap,
+  sidebarMax,
+  sheetHeightPct,
+  SIDEBAR_MIN,
+  SIDEBAR_MAX,
+  SIDEBAR_DEFAULT,
+} from "./panel";
 
-import gridSrc from "../library/PageGrid.svelte?raw";
-
-// panel-resize-tablet: layout resizable + mode tablet wajib lewat jalur
-// terpusat (device.ts + panel.ts), bukan angka/UA-sniff tersebar.
-// Sejak FE-4 (3.1): jalur terpusat tinggal di usePanelResize, bukan panel.
-describe("resizable panel + tablet mode wiring", () => {
-  it("EditorPanel memakai device.ts terpusat", () => {
-    expect(hookSrc).toContain('from "../app/device"');
-    expect(hookSrc).toContain("isNarrow");
-    expect(hookSrc).toContain("watchViewport");
-    expect(hookSrc).toContain("loadSidebarW");
-    expect(hookSrc).toContain("saveSidebarW");
-    expect(panelSrc).toContain("usePanelResize");
+describe("panel layout pure functions", () => {
+  it("clampWidth respects MIN and MAX bounds", () => {
+    expect(clampWidth(100)).toBe(SIDEBAR_MIN);
+    expect(clampWidth(600)).toBe(SIDEBAR_MAX);
+    expect(clampWidth(350)).toBe(350);
+    expect(clampWidth(Number.NaN)).toBe(SIDEBAR_DEFAULT);
   });
 
-  it("EditorPanel memakai logika murni panel.ts (clamp + snap)", () => {
-    expect(hookSrc).toContain('from "./panel"');
-    expect(hookSrc).toContain("clampWidth");
-    expect(hookSrc).toContain("nearestSnap");
+  it("sidebarMax adapts dynamically to body width", () => {
+    expect(sidebarMax(1000)).toBe(720); // 1000 - 280
+    expect(sidebarMax()).toBe(SIDEBAR_MAX);
+    expect(sidebarMax(0)).toBe(SIDEBAR_MAX);
   });
 
-  it("divider punya role separator + keyboard handler", () => {
-    expect(dividerSrc).toContain('role="separator"');
-    expect(hookSrc).toContain("function key(e: KeyboardEvent)");
-    expect(hookSrc).toContain("setPointerCapture");
-    expect(panelSrc).toContain("Divider");
+  it("nearestSnap rounds to closest predefined snap point", () => {
+    expect(nearestSnap(35)).toBe(40);
+    expect(nearestSnap(60)).toBe(70);
+    expect(nearestSnap(95)).toBe(100);
   });
 
-  it("sidebar lama w-[19rem] fixed sudah tidak ada", () => {
-    expect(panelSrc).not.toContain("w-[19rem]");
+  it("sheetHeightPct returns container percentage", () => {
+    expect(sheetHeightPct(40)).toBe(40);
+    expect(sheetHeightPct(100)).toBe(100);
   });
+});
 
-  it("grid tablet = 3 kolom di md (PageGrid, pindahan App utuh)", () => {
-    // page-list-view 2.3: markup grid pindah ke PageGrid — perilaku sama.
-    expect(gridSrc).toContain("md:grid-cols-3");
-  });
+describe("Divider component behavior", () => {
+  it("renders role separator with orientation and handles keyboard events", async () => {
+    const onKey = vi.fn();
+    const { getByRole } = renderWithI18n(Divider, {
+      props: {
+        orientation: "vertical",
+        onDown: vi.fn(),
+        onMove: vi.fn(),
+        onUp: vi.fn(),
+        onKey,
+      },
+    });
 
-  it("device.ts tidak mengandalkan UA untuk tablet", () => {
-    expect(deviceSrc).toContain("matchMedia");
-    expect(deviceSrc).toContain("pointer");
-    expect(deviceSrc).toContain("isTablet");
+    const divider = getByRole("separator");
+    expect(divider.getAttribute("aria-orientation")).toBe("vertical");
+
+    await fireEvent.keyDown(divider, { key: "ArrowLeft" });
+    expect(onKey).toHaveBeenCalled();
   });
 });

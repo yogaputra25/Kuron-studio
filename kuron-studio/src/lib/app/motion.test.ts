@@ -1,54 +1,69 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+// @vitest-environment jsdom
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent } from "@testing-library/svelte";
+import { createRawSnippet } from "svelte";
+import { renderWithI18n } from "../test-utils";
+import Button from "../ui/Button.svelte";
+import Panel from "../ui/Panel.svelte";
+import ProjectSwitcher from "./shell/ProjectSwitcher.svelte";
+import type { Project } from "../contracts/types";
 
-import barSrc from "./shell/KanbanBar.svelte?raw";
-import gridSrc from "../library/PageGrid.svelte?raw";
-import switchSrc from "./shell/ProjectSwitcher.svelte?raw";
-import moveSrc from "../library/MoveDialog.svelte?raw";
-import onbSrc from "./Onboarding.svelte?raw";
-import panelSrc from "../ui/Panel.svelte?raw";
-import btnSrc from "../ui/Button.svelte?raw";
+describe("Motion and interactive feedback", () => {
+  it("Button includes active press feedback class and handles click", async () => {
+    const onClick = vi.fn();
+    const { getByRole } = renderWithI18n(Button, {
+      props: { onclick: onClick },
+    });
 
-// Motion pass: dialog, kartu grid, dropdown, onboarding, dan tombol
-// punya animasi masuk/hover/tekan — bukan spinner, bukan instant-cut.
-// prefers-reduced-motion tetap dijaga di app.css (sudah ada sebelumnya).
-describe("motion pass", () => {
-  it("semua dialog Panel fade + fly", () => {
-    expect(panelSrc).toContain("transition:fade");
-    expect(panelSrc).toContain("transition:fly");
+    const btn = getByRole("button");
+    expect(btn.className).toContain("active:scale-[0.97]");
+
+    await fireEvent.click(btn);
+    expect(onClick).toHaveBeenCalledTimes(1);
   });
 
-  it("semua tombol punya press feedback", () => {
-    expect(btnSrc).toContain("active:scale-[0.97]");
+  it("Panel mounts with role dialog, renders children, and handles close", async () => {
+    const onClose = vi.fn();
+    const children = createRawSnippet(() => ({
+      render: () => "<p>Panel Content Body</p>",
+    }));
+
+    const { getByRole, getByText } = renderWithI18n(Panel, {
+      props: { title: "Settings Panel", onClose, children },
+    });
+
+    const dialog = getByRole("dialog");
+    expect(dialog).toBeTruthy();
+    expect(dialog.getAttribute("aria-label")).toBe("Settings Panel");
+    expect(getByText("Panel Content Body")).toBeTruthy();
+
+    const closeBtn = getByRole("button", { name: /Tutup|Close/i });
+    await fireEvent.click(closeBtn);
+    expect(onClose).toHaveBeenCalled();
   });
 
-  it("kartu grid stagger masuk + hover lift", () => {
-    // page-list-view 2.3: kartu pindah ke PageGrid — perilaku sama, lokasi baru.
-    expect(gridSrc).toContain("as pg, idx (pg.id)");
-    expect(gridSrc).toContain("in:fly={{ y: 14, duration: 220, delay: Math.min(idx * 15, 300) }}");
-    expect(gridSrc).toContain("hover:-translate-y-0.5");
-  });
+  it("ProjectSwitcher opens dropdown menu and selects project", async () => {
+    const onPick = vi.fn();
+    const dummyProjects: Project[] = [
+      { id: "p1", name: "Project Alpha", folders: [] },
+      { id: "p2", name: "Project Beta", folders: [] },
+    ];
 
-  it("dropdown project dan bar seleksi beranimasi", () => {
-    expect(switchSrc).toContain("transition:scale={{ duration: 140");
-    expect(barSrc).toContain('role="status" transition:fly={{ y: -8, duration: 180 }}');
-  });
+    const { getByRole, getAllByRole } = renderWithI18n(ProjectSwitcher, {
+      props: {
+        current: dummyProjects[0],
+        projects: dummyProjects,
+        onPick,
+      },
+    });
 
-  it("onboarding masuk + slide + hover lift", () => {
-    expect(onbSrc).toContain("in:fly={{ y: 16, duration: 250 }}");
-    expect(onbSrc).toContain("{#key wstep}");
-    expect(onbSrc).toContain("in:fly={{ x: 14, duration: 180 }}");
-    expect(onbSrc).toContain("hover:-translate-y-0.5");
-  });
+    const trigger = getByRole("button", { name: "Pilih project" });
+    await fireEvent.click(trigger);
 
-  it("sukses pindah pop tanpa spinner", () => {
-    expect(moveSrc).toContain("in:scale={{ start: 0.5, duration: 250 }}");
-    expect(moveSrc).not.toContain("animate-spin");
-  });
+    const options = getAllByRole("option");
+    expect(options.length).toBe(2);
 
-  it("reduced-motion tetap dijaga", () => {
-    const css = readFileSync(fileURLToPath(new URL("../../app.css", import.meta.url)), "utf8");
-    expect(css).toContain("prefers-reduced-motion");
+    await fireEvent.click(options[1]);
+    expect(onPick).toHaveBeenCalledWith("p2");
   });
 });

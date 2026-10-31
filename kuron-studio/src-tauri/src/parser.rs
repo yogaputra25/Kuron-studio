@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::error::AppError;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BubbleResult {
@@ -43,13 +45,13 @@ fn bubble_result(v: &serde_json::Value) -> BubbleResult {
 }
 
 /// Object with 1-based numeric keys; also accepts {"bubbles":[...]} wrapper.
-pub fn parse_mosaic_json(s: &str) -> Result<Vec<(usize, BubbleResult)>, String> {
+pub fn parse_mosaic_json(s: &str) -> Result<Vec<(usize, BubbleResult)>, AppError> {
     let t = strip_markdown(s);
     if t.trim().is_empty() {
-        return Err("empty response".to_string());
+        return Err(AppError::parse("empty response"));
     }
     let v: serde_json::Value =
-        serde_json::from_str(t).map_err(|e| format!("invalid json: {e}"))?;
+        serde_json::from_str(t).map_err(|e| AppError::parse(format!("invalid json: {e}")))?;
     if let Some(arr) = v.get("bubbles").and_then(|a| a.as_array()) {
         return Ok(arr
             .iter()
@@ -57,12 +59,12 @@ pub fn parse_mosaic_json(s: &str) -> Result<Vec<(usize, BubbleResult)>, String> 
             .map(|(i, b)| (i + 1, bubble_result(b)))
             .collect());
     }
-    let obj = v.as_object().ok_or_else(|| "expected json object".to_string())?;
+    let obj = v.as_object().ok_or_else(|| AppError::parse("expected json object"))?;
     let mut out: Vec<(usize, BubbleResult)> = Vec::new();
     for (k, val) in obj {
-        let n: usize = k.parse().map_err(|_| format!("non-numeric key: {k}"))?;
+        let n: usize = k.parse().map_err(|_| AppError::parse(format!("non-numeric key: {k}")))?;
         if n == 0 {
-            return Err("keys are 1-based".to_string());
+            return Err(AppError::parse("keys are 1-based"));
         }
         out.push((n, bubble_result(val)));
     }
@@ -70,13 +72,13 @@ pub fn parse_mosaic_json(s: &str) -> Result<Vec<(usize, BubbleResult)>, String> 
     Ok(out)
 }
 
-pub fn parse_full_image_json(s: &str) -> Result<Vec<FullBubble>, String> {
+pub fn parse_full_image_json(s: &str) -> Result<Vec<FullBubble>, AppError> {
     let t = strip_markdown(s);
     if t.trim().is_empty() {
-        return Err("empty response".to_string());
+        return Err(AppError::parse("empty response"));
     }
     let v: Vec<FullBubble> =
-        serde_json::from_str(t).map_err(|e| format!("invalid json: {e}"))?;
+        serde_json::from_str(t).map_err(|e| AppError::parse(format!("invalid json: {e}")))?;
     Ok(v)
 }
 

@@ -1,4 +1,5 @@
 import Konva from "konva";
+import layout from "../../contracts/layout.json";
 import type { MeasureApi } from "./textLayout";
 
 /**
@@ -18,11 +19,11 @@ import type { MeasureApi } from "./textLayout";
  * (`@fontsource-variable/inter` hanya mengirim woff2). Daripada menambah aset
  * biner, paritas dicapai dengan memakai font sistem yang sama di dua sisi.
  *
- * Urutannya WAJIB mencerminkan `candidate_font_paths()` di
- * `src-tauri/src/commands/export.rs` (cabang Windows). Dijaga test kontrak
- * lintas berkas; kalau salah satu daftar diubah, ubah dua-duanya.
+ * Urutan string ini WAJIB mencerminkan `windowsFonts` di `layout.json`
+ * (dipakai `candidate_font_paths()` Rust di Windows). Dijaga test kontrak
+ * lintas berkas; kalau salah satu daftar diubah, ubah JSON-nya.
  */
-export const OVERLAY_FONT_STACK = 'Arial, Tahoma, "Microsoft YaHei", sans-serif';
+export const OVERLAY_FONT_STACK: string = layout.overlayFontStack;
 
 /**
  * Berat huruf HARUS sama dengan TTF sistem yang dimuat Rust (regular).

@@ -1,34 +1,84 @@
-import { describe, expect, it } from "vitest";
-import compSrc from "./DetectProgress.svelte?raw";
+// @vitest-environment jsdom
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent } from "@testing-library/svelte";
+import { renderWithI18n } from "../test-utils";
+import DetectProgress from "./DetectProgress.svelte";
+import type { DetectState } from "./detectProgress";
 
-// detect-ux-pack 1.2: overlay non-blocking + a11y + tanpa string hardcode.
-// Pola-sumber (gaya preview-transport.test.ts): komponen Svelte + runtime,
-// mount unit tak bermakna.
-describe("DetectProgress overlay (detect-ux-pack 1.2)", () => {
-  it("punya role status + progressbar dengan aria-valuenow", () => {
-    expect(compSrc).toContain('role="status"');
-    expect(compSrc).toContain('role="progressbar"');
-    expect(compSrc).toContain("aria-valuenow");
-    expect(compSrc).toContain("aria-valuemin");
-    expect(compSrc).toContain("aria-valuemax");
+describe("DetectProgress overlay behavioral tests", () => {
+  const inProgressState: DetectState = {
+    total: 10,
+    done: 4,
+    failed: [],
+    finished: false,
+    file: "chapter1/page4.jpg",
+  };
+
+  const finishedWithFailuresState: DetectState = {
+    total: 10,
+    done: 10,
+    failed: [
+      { pageId: "p-3", file: "page3.jpg", message: "Model timeout" },
+    ],
+    file: "",
+    finished: true,
+  };
+
+  it("renders status, progressbar, and percentage when running", () => {
+    const { getByRole, getByText } = renderWithI18n(DetectProgress, {
+      props: { state: inProgressState, onClose: vi.fn() },
+    });
+
+    expect(getByRole("status")).toBeTruthy();
+    const progressbar = getByRole("progressbar");
+    expect(progressbar.getAttribute("aria-valuenow")).toBe("40");
+    expect(progressbar.getAttribute("aria-valuemin")).toBe("0");
+    expect(progressbar.getAttribute("aria-valuemax")).toBe("100");
+
+    expect(getByText("4 / 10")).toBeTruthy();
+    expect(getByText("40%")).toBeTruthy();
+    expect(getByText(/chapter1\/page4\.jpg/)).toBeTruthy();
   });
 
-  it("non-blocking: klik luar overlay lolos (tanpa backdrop menelan klik)", () => {
-    expect(compSrc).toContain("pointer-events-none");
-    expect(compSrc).toContain("pointer-events-auto");
+  it("displays summary and failure list when finished with errors", () => {
+    const { getByRole, getByText, queryByRole } = renderWithI18n(DetectProgress, {
+      props: { state: finishedWithFailuresState, onClose: vi.fn() },
+    });
+
+    expect(getByRole("status")).toBeTruthy();
+    expect(queryByRole("progressbar")).toBeNull();
+    expect(getByText(/page3\.jpg: Model timeout/i)).toBeTruthy();
   });
 
-  it("semua label lewat i18n, tanpa hardcode Indonesia", () => {
-    expect(compSrc).toContain('$t("detecting")');
-    expect(compSrc).toContain('$t("detectSummary")');
-    expect(compSrc).toContain('$t("close")');
-    expect(compSrc).not.toContain("Mendeteksi");
-    expect(compSrc).not.toContain("Coba lagi");
+  it("calls onClose when clicking close button", async () => {
+    const onClose = vi.fn();
+    const { getByRole } = renderWithI18n(DetectProgress, {
+      props: { state: inProgressState, onClose },
+    });
+
+    const closeBtn = getByRole("button", { name: /Tutup|Close/i });
+    await fireEvent.click(closeBtn);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("tutup otomatis hanya bila tanpa gagal; gagal tampilkan ringkasan", () => {
-    expect(compSrc).toContain("setTimeout(onClose, 2000)");
-    expect(compSrc).toContain("failedCount === 0");
-    expect(compSrc).toContain("state.failed");
+  it("auto-closes after 2s when finished without failures", async () => {
+    vi.useFakeTimers();
+    const onClose = vi.fn();
+    const finishedState: DetectState = {
+      total: 5,
+      done: 5,
+      failed: [],
+      file: "",
+      finished: true,
+    };
+
+    renderWithI18n(DetectProgress, {
+      props: { state: finishedState, onClose },
+    });
+
+    expect(onClose).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(2000);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 });

@@ -5,7 +5,8 @@
 
 use image::{Rgb, RgbImage};
 
-use crate::commands::export::{paint_patch, render_page_png};
+use crate::error::AppError;
+use crate::render::page::{paint_patch, render_page_png};
 use crate::translation::PageTranslation;
 
 fn be16(v: u16, out: &mut Vec<u8>) {
@@ -41,14 +42,14 @@ pub fn render_page_psd(
     page_bytes: &[u8],
     t: &PageTranslation,
     shapes: &[Option<Vec<[i32; 2]>>],
-) -> Result<Vec<u8>, String> {
+) -> Result<Vec<u8>, AppError> {
     let bg_png = render_page_png(page_bytes, t, shapes)?;
     let bg = image::load_from_memory(&bg_png)
-        .map_err(|e| format!("decode bg: {e}"))?
+        .map_err(|e| AppError::parse(format!("decode bg: {e}")))?
         .to_rgb8();
     let (w, h) = (bg.width(), bg.height());
     if w == 0 || h == 0 || w > 30000 || h > 30000 {
-        return Err("dimensi halaman di luar batas PSD".to_string());
+        return Err(AppError::parse("dimensi halaman di luar batas PSD"));
     }
     let layers: Vec<(RgbImage, String)> =
         t.bubbles.iter().map(|b| bubble_layer(b, w, h)).collect();

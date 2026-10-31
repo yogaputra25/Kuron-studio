@@ -20,6 +20,7 @@ tauri-plugin-updater = { version = "2", features = [], optional = true }
 tauri-plugin-process = { version = "2", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+thiserror = "2"
 image = "0.25"
 ab_glyph = "0.2"
 uuid = { version = "1", features = ["v4"] }
@@ -49,3 +50,9 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "sync"
 [target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
 tauri-plugin-updater = { version = "2", features = [] }
 tauri-plugin-process = "2"
+
+[dev-dependencies]
+# Fitur "test" hanya untuk integration test (`tauri::test::mock_builder`
+# di `tests/common`); feature-unification Cargo menyalakannya untuk target
+# test saja, build produksi (`cargo build`) tetap tanpa fitur test.
+tauri = { version = "2", features = ["test"] }

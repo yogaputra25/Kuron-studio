@@ -1,35 +1,28 @@
 import { describe, expect, it } from "vitest";
-import configRs from "../../../src-tauri/src/provider/config.rs?raw";
 import { DEFAULT_BASE_URLS, PROVIDER_TYPES } from "../contracts/types";
+import providers from "../contracts/providers.json";
 
-// Preset base URL duplikat di Rust (AiProviderType::default_base_url) dan
-// TS (DEFAULT_BASE_URLS). Kalau menyimpang, user dapat endpoint beda
-// tergantung jalur (listing vs effective_base_url). Rust sumber kebenaran.
-function rustDefaults(): Record<string, string> {
-  const fnBody = /fn default_base_url\(&self\) -> &'static str \{([\s\S]*?)\n    \}/.exec(configRs);
-  expect(fnBody, "default_base_url tidak ketemu di config.rs").not.toBeNull();
-  const out: Record<string, string> = {};
-  for (const m of fnBody![1].matchAll(/Self::(\w+) => "([^"]*)"/g)) {
-    const key = m[1].charAt(0).toLowerCase() + m[1].slice(1);
-    out[key] = m[2];
-  }
-  return out;
-}
+// Kontrak lintas bahasa, sumber = `providers.json` — TANPA membaca source
+// Rust (tidak ada `?raw` ke `.rs`, tidak ada path `src-tauri/`):
+// - TS (`types.ts`) mengimpor JSON langsung (bukan salinan),
+// - Rust (`AiProviderType::default_base_url`) membaca JSON yang sama via
+//   `include_str!` + `OnceLock` (dipin test Rust
+//   `default_base_url_matches_json_contract`; kompat nama preset lama dipin
+//   `removed_preset_names_still_deserialize_to_custom`),
+// - test ini memastikan pemakaian TS tetap sinkron dengan JSON.
 
-describe("provider preset contract (TS == Rust)", () => {
-  it("base URL per tipe sama di kedua sisi", () => {
-    expect({ ...DEFAULT_BASE_URLS }).toEqual(rustDefaults());
+describe("provider preset contract (TS == JSON)", () => {
+  it("base URL per tipe sama dengan JSON", () => {
+    expect({ ...DEFAULT_BASE_URLS }).toEqual({ ...providers });
   });
 
   it("daftar dropdown == kunci preset, tanpa tipe hapus", () => {
     expect(PROVIDER_TYPES.map((p) => p.value).sort()).toEqual(
-      Object.keys(DEFAULT_BASE_URLS).sort(),
+      Object.keys(providers).sort(),
     );
-    for (const dead of ["Zen", "OpenCodeGo", "OpenRouter", "ClinePass"]) {
-      expect(configRs).not.toMatch(new RegExp(`Self::${dead}\\b`));
+    for (const dead of ["zen", "openCodeGo", "openRouter", "clinePass"]) {
+      expect(Object.keys(providers)).not.toContain(dead);
     }
-    // Satu-satunya tempat nama hapus boleh muncul: arm migrasi deserializer.
-    expect(configRs).toContain('"zen" | "openCodeGo" | "openRouter" | "clinePass"');
   });
 
   it("preset Meta memakai api.meta.ai", () => {

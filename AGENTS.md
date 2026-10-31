@@ -35,6 +35,9 @@ Jalankan dari `kuron-studio/` kecuali ditulis lain:
 6. Data proyek + API key di folder data OS / keychain (`id.kuron.studio`). Tidak pernah di repo.
 7. Mobile gating di `device.ts` (tanpa folder-picker/updater/PNG-PSD). Dijaga `mobile-gating.test.ts`.
 8. Secret (API key, password, private/signing key, isi keychain/`.env`) tidak pernah ditulis ke repo — termasuk `MEMORY.md`, `memory/log.md`, dan file aturan. Nemu secret di output (diagnostics, env, log) → tulis `[REDACTED]`.
+9. Backend berlapis: `domain` (tipe data; hanya merujuk tipe daun `bubble`/`translation` + `error`, tanpa I/O) ← `store` / `db`+repo / `render` / `provider` / `jobs` ← `commands` (+`commands/import/`) sebagai boundary tipis `Result<T, String>`. Jangan impor arah sebaliknya. Skema SQLite hanya milik `db/` (`migrate`, idempoten); repo per-domain (`provider/repo.rs`, `glossary/repo.rs`, `preview_cache/repo.rs`) hanya query.
+10. Error & provider: kode dalam mengembalikan `Result<T, AppError>` (`error/`, thiserror) dengan `?` + `From`; konversi ke `String` hanya di titik `#[tauri::command]`. Dispatch provider via `match` di `provider/mod.rs` (bukan trait — himpunan statis, trait object hanya bila butuh dispatch dinamis); HTTP bersama di `provider/http.rs` (retry 429 satu kali, jeda 2s); opsi per-request dirakit di satu titik (`provider/config.rs::effective_model` / `effective_base_url`, `prompt.rs`).
+11. Test kontrak bersifat behavioral: bandingkan pemakaian lawan JSON sumber (`extensions`/`layout`/`providers`), bukan regex source lawan — file boleh pindah modul tanpa test ikut merah.
 
 ## Alur kerja
 
