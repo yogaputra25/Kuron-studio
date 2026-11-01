@@ -11,6 +11,9 @@
   import Panel from "../ui/Panel.svelte";
   import Button from "../ui/Button.svelte";
   import Markdown from "../ui/Markdown.svelte";
+  // Mark resmi Meta (Wikimedia Commons, merek dagang Meta) — hanya untuk
+  // kredit atribusi "powered by".
+  import metaUrl from "../../meta.svg";
   import KuroMascot from "../ui/KuroMascot.svelte";
 
   interface Props {
@@ -67,9 +70,7 @@
     </ul>
 
     <div class="mt-5 flex items-center gap-3 rounded-card border border-line bg-surface-2/60 px-3.5 py-2.5">
-      <svg width="26" height="18" viewBox="0 0 36 24" fill="none" aria-hidden="true" class="shrink-0 text-info">
-        <path d="M18 12C18 7.5 14.5 4 9.5 4 4.8 4 1.5 7.6 1.5 12c0 4.4 3.3 8 8 8 5 0 8.5-3.5 8.5-8 0-4.5 3.5-8 8.5-8 4.7 0 8 3.6 8 8 0 4.4-3.3 8-8 8-5 0-8.5-3.5-8.5-8Z" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" />
-      </svg>
+      <img src={metaUrl} alt="" aria-hidden="true" width="30" height="20" class="shrink-0" />
       <p class="text-xs leading-relaxed text-ink-3">{$t("aboutCredits")}</p>
     </div>
   {:else}
