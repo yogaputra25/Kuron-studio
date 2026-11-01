@@ -179,6 +179,26 @@ impl From<keyring::Error> for AppError {
     }
 }
 
+/// Secret terenkripsi file (pengganti keychain): kegagalan enkripsi/dekripsi
+/// maupun kunci = `Store`, sama seperti keychain sebelumnya.
+impl From<aes_gcm::Error> for AppError {
+    fn from(e: aes_gcm::Error) -> Self {
+        Self::Store(e.to_string())
+    }
+}
+
+impl From<base64::DecodeError> for AppError {
+    fn from(e: base64::DecodeError) -> Self {
+        Self::Store(e.to_string())
+    }
+}
+
+impl From<getrandom::Error> for AppError {
+    fn from(e: getrandom::Error) -> Self {
+        Self::Store(e.to_string())
+    }
+}
+
 impl From<String> for AppError {
     fn from(s: String) -> Self {
         if s == "dibatalkan oleh user" {

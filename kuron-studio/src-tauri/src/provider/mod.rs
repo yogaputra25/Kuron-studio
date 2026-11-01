@@ -8,7 +8,7 @@ pub mod repo;
 use crate::error::AppError;
 
 pub use config::{effective_model, is_vision_capable, AiModelOption, AiProviderType, ProviderRecord};
-// ponytail: keyring milik M4 (tanpa keyring dep di sini).
+// ponytail: secret milik `secrets` (tanpa dep kripto di sini).
 // ponytail: factory = match satu produk; trait object bila provider ke-4 butuh dispatch dinamis.
 
 // OpenAI-compatible dispatch: OpenAi/MetaAi/Custom (Gemini + Cohere punya modul sendiri).

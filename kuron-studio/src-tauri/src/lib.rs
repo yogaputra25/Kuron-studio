@@ -70,7 +70,8 @@ impl AppState {
 
 // ponytail: M0 holds projects only. BubbleDetector (M1), reqwest client (M2),
 // rusqlite cache+glossary (M2/M3) join AppState with their tasks.
-// ponytail: secrets (M4-1) live in OS keychain via `secrets`; sqlite keeps '' + fallback.
+// ponytail: secrets file-encrypted (AES-GCM, DEK keys/master.key) via `secrets`;
+// sqlite menyimpan ciphertext `enc1:`. Keychain hanya dibaca saat migrasi.
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -105,6 +106,15 @@ pub fn run() {
             let db_path = dir.join("kuron-studio.db");
             let db = rusqlite::Connection::open(&db_path)?;
             cache::init_db(&db)?;
+            // Migrasi satu arah keychain → sqlite terenkripsi (best-effort;
+            // tidak menggagalkan startup). Setelah ini keychain tak tersentuh.
+            let migrated = commands::provider::migrate_provider_keys(&db, &dir);
+            if migrated > 0 {
+                logging::info(
+                    "provider_keys_migrated",
+                    serde_json::json!({ "count": migrated }),
+                );
+            }
             let http = reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(90))
                 .tls_built_in_root_certs(true)

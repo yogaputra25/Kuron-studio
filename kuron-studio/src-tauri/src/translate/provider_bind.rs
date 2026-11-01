@@ -15,8 +15,9 @@ pub fn load_provider(
     let db = crate::error::lock_or_err(&state.db)?;
     let mut rec = cache::get_provider(&db, provider_id)?
         .ok_or_else(|| crate::error::AppError::provider_not_found(provider_id))?;
-    // M4-1: keychain first, sqlite legacy fallback. Never logged.
-    rec.api_key = crate::secrets::read_key(provider_id, &rec.api_key)?;
+    // File-encrypted: `enc1:` didekripsi lokal tanpa keychain; legacy
+    // keychain/sqlite fallback. Never logged.
+    rec.api_key = crate::secrets::read_key(&state.data_dir, provider_id, &rec.api_key)?;
     Ok((state.http.clone(), rec))
 }
 
@@ -28,7 +29,7 @@ pub struct ProviderBinding {
     pub cache_key: String,
 }
 
-/// Ikat prep agnostik ke satu provider: resolve record (+keychain), model
+/// Ikat prep agnostik ke satu provider: resolve record (+dekripsi key), model
 /// efektif, cache key. Satu-satunya implementasi resolve provider (#59):
 /// `commands::provider` memakai [`load_provider`] ini, bukan salinan.
 /// Gagal di sini = halaman belum mulai kerja → status pulih pra-klaim

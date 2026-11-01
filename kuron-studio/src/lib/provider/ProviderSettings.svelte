@@ -147,7 +147,8 @@
     if (!fName.trim()) { error = NAME_REQUIRED; return; }
     busy = true; error = "";
     try {
-      // ponytail: M2 simpan sqlite kolom "stored:key"; M4 pindah ke OS keychain.
+      // Key disimpan terenkripsi (AES-GCM) di sqlite; form tidak pernah
+      // di-backfill dari simpanan.
       const saved = await api.saveProvider({
         ...(editId ? { id: editId } : {}),
         providerType: fType, name: fName.trim(), baseUrl: fBaseUrl,

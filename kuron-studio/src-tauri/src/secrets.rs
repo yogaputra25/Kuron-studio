@@ -1,14 +1,34 @@
-//! M4-1: OS keychain via `keyring` (service `id.kuron.studio`,
-//! account `provider:{id}`) + sqlite fallback (M2 compat).
+//! Provider secrets terenkripsi file (pengganti OS keychain).
+//!
+//! Format kolom sqlite `api_key`: `enc1:base64(nonce12 || ciphertext)`
+//! (AES-256-GCM). Kunci enkripsi (DEK 32-byte) di
+//! `<app_data>/keys/master.key` permission `0600`.
 //!
 //! Rules:
-//! - `save_key` writes OS keychain; returns Err on failure (caller keeps
-//!   sqlite fallback column empty so a stale key is never left behind).
-//! - `read_key` tries keychain, falls back to sqlite (legacy rows).
-//! - `delete_key` removes both (keychain NoEntry is fine).
-//! - M4-2: never log the key anywhere in this module.
+//! - `encrypt_key` selalu menghasilkan `enc1:`; `decrypt_stored` membuka
+//!   `enc1:` dan melewatkan plaintext legacy apa adanya (kompatibel bacaan
+//!   baris lama tanpa migrasi skema).
+//! - `read_key` TIDAK menyentuh keychain bila nilai sqlite sudah `enc1:`
+//!   (path panas: `get_providers`, tiap translate). Keychain hanya dibaca
+//!   untuk baris legacy — dan `migrate_provider_keys` (di
+//!   `commands::provider`) memindahkan semuanya saat startup, jadi setelah
+//!   migrasi tidak ada lagi dialog akses Keychain di macOS.
+//! - `delete_key` menghapus sisa entri keychain pra-migrasi (best-effort).
+//! - Kunci tidak pernah di-log di modul ini.
+
+use std::path::{Path, PathBuf};
+
+use aes_gcm::{
+    aead::{Aead, KeyInit},
+    Aes256Gcm, Nonce,
+};
+use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 
 use crate::error::AppError;
+
+/// Prefix format ciphertext di kolom sqlite.
+pub const ENC_PREFIX: &str = "enc1:";
+const NONCE_LEN: usize = 12;
 
 pub const SERVICE: &str = "id.kuron.studio";
 
@@ -20,40 +40,117 @@ fn entry(provider_id: &str) -> Result<keyring::Entry, AppError> {
     Ok(keyring::Entry::new(SERVICE, &account(provider_id))?)
 }
 
-/// Read: keychain first, sqlite legacy column as fallback. Never logs key.
-/// Never fails on backend absence: any keychain error → sqlite value.
-pub fn read_key(
-    provider_id: &str,
-    sqlite_fallback: &str,
-) -> Result<String, AppError> {
-    let Ok(e) = entry(provider_id) else {
-        return Ok(sqlite_fallback.to_string());
-    };
-    match e.get_password() {
-        Ok(k) => Ok(k),
-        Err(_) => Ok(sqlite_fallback.to_string()),
-    }
+fn master_path(data_dir: &Path) -> PathBuf {
+    data_dir.join("keys").join("master.key")
 }
 
-/// Presence check for `has_key` badge: keychain hit wins, else sqlite.
-pub fn has_key(provider_id: &str, sqlite_fallback: &str) -> bool {
-    if let Ok(e) = entry(provider_id) {
-        if let Ok(k) = e.get_password() {
-            return !k.is_empty();
+/// Muat DEK, atau buat sekali (32 byte acak) dengan permission `0600`.
+fn master_key(data_dir: &Path) -> Result<[u8; 32], AppError> {
+    let p = master_path(data_dir);
+    if let Ok(bytes) = std::fs::read(&p) {
+        if bytes.len() == 32 {
+            let mut key = [0u8; 32];
+            key.copy_from_slice(&bytes);
+            return Ok(key);
         }
+        return Err(AppError::store(format!(
+            "master key corrupt ({} bytes): {}",
+            bytes.len(),
+            p.display()
+        )));
     }
-    !sqlite_fallback.is_empty()
+    let mut key = [0u8; 32];
+    getrandom::getrandom(&mut key)?;
+    if let Some(parent) = p.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(&p, key)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o600))?;
+    }
+    Ok(key)
 }
 
-/// Save: keychain write-through. Err → caller leaves sqlite empty.
-pub fn save_key(provider_id: &str, api_key: &str) -> Result<(), AppError> {
-    entry(provider_id)?.set_password(api_key)?;
-    Ok(())
+/// Enkripsi API key plaintext → `enc1:...` siap simpan ke sqlite.
+pub fn encrypt_key(data_dir: &Path, plaintext: &str) -> Result<String, AppError> {
+    let key = master_key(data_dir)?;
+    let cipher = Aes256Gcm::new_from_slice(&key)
+        .map_err(|e| AppError::store(e.to_string()))?;
+    let mut nonce_bytes = [0u8; NONCE_LEN];
+    getrandom::getrandom(&mut nonce_bytes)?;
+    let ct = cipher.encrypt(Nonce::from_slice(&nonce_bytes), plaintext.as_bytes())?;
+    let mut blob = Vec::with_capacity(NONCE_LEN + ct.len());
+    blob.extend_from_slice(&nonce_bytes);
+    blob.extend_from_slice(&ct);
+    Ok(format!("{ENC_PREFIX}{}", B64.encode(blob)))
 }
 
-/// Delete keychain credential only — tidak menyentuh DB (issue #58).
-/// Baris sqlite dihapus caller via `crate::provider::repo::delete_provider`
-/// (lihat `commands::provider::delete_provider`).
+/// Buka nilai kolom sqlite: `enc1:` → dekripsi; selain itu plaintext legacy.
+pub fn decrypt_stored(data_dir: &Path, stored: &str) -> Result<String, AppError> {
+    let Some(b64) = stored.strip_prefix(ENC_PREFIX) else {
+        return Ok(stored.to_string());
+    };
+    let blob = B64.decode(b64)?;
+    if blob.len() < NONCE_LEN {
+        return Err(AppError::store("ciphertext provider key terlalu pendek"));
+    }
+    let key = master_key(data_dir)?;
+    let cipher = Aes256Gcm::new_from_slice(&key)
+        .map_err(|e| AppError::store(e.to_string()))?;
+    let pt = cipher.decrypt(
+        Nonce::from_slice(&blob[..NONCE_LEN]),
+        &blob[NONCE_LEN..],
+    )?;
+    String::from_utf8(pt).map_err(|e| AppError::store(e.to_string()))
+}
+
+/// Read: `enc1:` langsung dekripsi (TANPA sentuh keychain → tanpa popup
+/// macOS). Baris legacy: keychain dulu (sisa pra-migrasi), lalu sqlite.
+pub fn read_key(
+    data_dir: &Path,
+    provider_id: &str,
+    sqlite_value: &str,
+) -> Result<String, AppError> {
+    if sqlite_value.starts_with(ENC_PREFIX) {
+        return decrypt_stored(data_dir, sqlite_value);
+    }
+    if let Some(k) = read_keychain_only(provider_id) {
+        return Ok(k);
+    }
+    Ok(sqlite_value.to_string())
+}
+
+/// Presence check untuk badge `has_key`: `enc1:` → coba dekripsi; legacy →
+/// keychain dulu, lalu sqlite. Tidak pernah me-log key.
+pub fn has_key(data_dir: &Path, provider_id: &str, sqlite_value: &str) -> bool {
+    if sqlite_value.starts_with(ENC_PREFIX) {
+        return decrypt_stored(data_dir, sqlite_value)
+            .map(|k| !k.is_empty())
+            .unwrap_or(false);
+    }
+    if read_keychain_only(provider_id).is_some() {
+        return true;
+    }
+    !sqlite_value.is_empty()
+}
+
+/// Baca keychain saja (jalur migrasi). `None` = tidak ada / tak bisa dibaca.
+/// Setiap pemanggilan ini di macOS berpotensi memicu dialog akses Keychain —
+/// hanya dipakai untuk baris legacy, bukan path panas.
+pub fn read_keychain_only(provider_id: &str) -> Option<String> {
+    let e = entry(provider_id).ok()?;
+    let k = e.get_password().ok()?;
+    if k.is_empty() {
+        None
+    } else {
+        Some(k)
+    }
+}
+
+/// Delete sisa entri keychain pra-migrasi — tidak menyentuh DB (baris sqlite
+/// dihapus caller via repo, seperti sebelumnya).
 pub fn delete_key(provider_id: &str) -> Result<(), AppError> {
     if let Ok(e) = entry(provider_id) {
         match e.delete_credential() {
@@ -64,8 +161,7 @@ pub fn delete_key(provider_id: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-/// M4-2: redacted view untuk test. Full key tidak pernah muncul; body preview
-/// elsewhere sudah cap 200 chars (`err_preview` di provider/*). Hanya dipakai
+/// M4-2: redacted view untuk test. Full key tidak pernah muncul. Hanya dipakai
 /// test — tidak ada pemanggil produksi.
 #[cfg(test)]
 pub fn redacted(key: &str) -> &'static str {
@@ -80,9 +176,70 @@ pub fn redacted(key: &str) -> &'static str {
 mod tests {
     use super::*;
 
+    fn tmpdir(name: &str) -> PathBuf {
+        let p = std::env::temp_dir().join(format!("kuron-secrets-test-{name}"));
+        let _ = std::fs::remove_dir_all(&p);
+        std::fs::create_dir_all(&p).unwrap();
+        p
+    }
+
     #[test]
     fn account_format() {
         assert_eq!(account("abc"), "provider:abc");
+    }
+
+    #[test]
+    fn roundtrip_enc1() {
+        let d = tmpdir("roundtrip");
+        let c = encrypt_key(&d, "sk-live-123").unwrap();
+        assert!(c.starts_with(ENC_PREFIX));
+        assert!(!c.contains("sk-live-123"));
+        assert_eq!(decrypt_stored(&d, &c).unwrap(), "sk-live-123");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn tamper_terdeteksi_gcm_tag() {
+        let d = tmpdir("tamper");
+        let mut c = encrypt_key(&d, "secret").unwrap();
+        let last = c.pop().unwrap();
+        c.push(if last == 'A' { 'B' } else { 'A' });
+        assert!(decrypt_stored(&d, &c).is_err());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn legacy_plaintext_passthrough_tanpa_master_key() {
+        let d = tmpdir("legacy");
+        // Tidak ada file kunci dibuat — pure passthrough.
+        assert_eq!(decrypt_stored(&d, "k-lama").unwrap(), "k-lama");
+        assert!(!master_path(&d).exists());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn master_key_permission_0600() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = tmpdir("perm");
+        let _ = encrypt_key(&d, "x").unwrap();
+        let mode = std::fs::metadata(master_path(&d))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o600);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn corrupt_master_key_ditolak_bukan_ditimpa() {
+        // Regenerasi diam-diam akan meng-yatimkan semua baris enc1:.
+        let d = tmpdir("corrupt");
+        std::fs::create_dir_all(d.join("keys")).unwrap();
+        std::fs::write(master_path(&d), b"pendek").unwrap();
+        assert!(encrypt_key(&d, "x").is_err());
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]
@@ -92,36 +249,5 @@ mod tests {
         assert!(!r.contains(k));
         assert!(!r.contains("sk-live"));
         assert_eq!(redacted(""), "missing");
-    }
-
-    #[test]
-    fn fallback_read_without_keychain_entry() {
-        // Fresh id has no keychain entry → legacy sqlite value returned.
-        let v = read_key("no-such-provider-m4-test", "legacy-k").unwrap();
-        assert_eq!(v, "legacy-k");
-    }
-
-    /// Regresi: tanpa feature `apple-native`, crate `keyring` memakai store
-    /// `mock` di macOS — `set_password` tetap `Ok(())` (jadi tidak ada error
-    /// sama sekali), tapi tidak ada yang tersimpan. Gejalanya: API key hilang
-    /// tiap restart app. Test ini memakai entry yang sama dua kali lewat
-    /// `Entry::new` baru: mock selalu mengembalikan `NoEntry`.
-    #[test]
-    #[cfg(target_os = "macos")]
-    fn keychain_backend_is_real() {
-        let id = "kuron-studio-backend-probe";
-        let _ = read_key(id, "").ok();
-        let e = entry(id).expect("keychain entry harus bisa dibuat");
-        e.set_password("probe-value")
-            .expect("set_password harus berhasil (store sungguhan, bukan mock)");
-        // Entry BARU ke store yang sama — mock tidak punya persistensi.
-        let again = entry(id).unwrap().get_password();
-        assert_eq!(
-            again.as_deref().ok(),
-            Some("probe-value"),
-            "credential hilang saat entry dibuat ulang = store `mock`, \
-             bukan macOS Keychain. Cek feature `apple-native` di Cargo.toml."
-        );
-        let _ = e.delete_credential();
     }
 }

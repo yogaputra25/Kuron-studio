@@ -42,19 +42,19 @@ pub struct ValidateResult {
     pub message: String,
 }
 
-fn has_key_of(rec: &ProviderRecord) -> bool {
-    // M4-1: keychain hit wins; sqlite legacy column is the fallback.
-    crate::secrets::has_key(&rec.id, &rec.api_key)
+fn has_key_of(data_dir: &std::path::Path, rec: &ProviderRecord) -> bool {
+    // File-encrypted: `enc1:` didekripsi lokal; legacy keychain/sqlite fallback.
+    crate::secrets::has_key(data_dir, &rec.id, &rec.api_key)
 }
 
-fn view_of(rec: &ProviderRecord) -> ProviderView {
+fn view_of(data_dir: &std::path::Path, rec: &ProviderRecord) -> ProviderView {
     ProviderView {
         id: rec.id.clone(),
         provider_type: rec.provider_type,
         name: rec.name.clone(),
         base_url: rec.effective_base_url(),
         model: rec.model.clone(),
-        has_key: has_key_of(rec),
+        has_key: has_key_of(data_dir, rec),
         is_vision_capable: vision_capable(rec.provider_type, &rec.model),
     }
 }
@@ -110,39 +110,24 @@ pub fn save_provider(
         })),
     );
     let db = crate::error::lock_or_err(&state.db)?;
-    // M4-1: edit tanpa key = pertahankan key lama (jangan wipe keychain).
+    // Edit tanpa key = pertahankan simpanan lama verbatim (ciphertext tetap
+    // ciphertext — tanpa dekripsi/re-enkripsi, tanpa sentuh keychain).
+    // Key baru = enkripsi ke `enc1:`, selalu tersimpan di sqlite.
     if rec.api_key.is_empty() {
         if let Some(old) = repo::get_provider(&db, &rec.id)? {
-            rec.api_key = crate::secrets::read_key(&rec.id, &old.api_key)
-                .unwrap_or_default();
+            rec.api_key = old.api_key.clone();
         }
+    } else {
+        rec.api_key = crate::secrets::encrypt_key(&state.data_dir, &rec.api_key)?;
     }
-    // Keychain write-through; sqlite keeps "" on success so no second
-    // copy of the secret exists. Keychain failure → legacy sqlite fallback.
-    let sqlite_key = match crate::secrets::save_key(&rec.id, &rec.api_key) {
-        Ok(()) => {
-            crate::logging::info("keychain_write_ok", serde_json::json!({ "id": rec.id }));
-            String::new()
-        }
-        Err(e) => {
-            // PENTING: keychain gagal = app tidak sandboxed/keychain tidak
-            // bisa diakses, TIDAK berarti key hilang (ada fallback sqlite).
-            // Log dulu sebelum user menemukan ini sebagai "key hilang diam-diam".
-            crate::logging::warn(
-                "keychain_write_failed_using_sqlite",
-                serde_json::json!({ "id": rec.id, "error": crate::logging::redact(&e.to_string()) }),
-            );
-            rec.api_key.clone()
-        }
-    };
-    if let Err(e) = repo::insert_provider_with_key(&db, &rec, &sqlite_key) {
+    if let Err(e) = repo::insert_provider(&db, &rec) {
         crate::logging::error(
             "save_provider_db_failed",
             serde_json::json!({ "id": rec.id, "error": crate::logging::redact(&e.to_string()) }),
         );
         return Err(e.into());
     }
-    let view = view_of(&rec);
+    let view = view_of(&state.data_dir, &rec);
     crate::logging::info(
         "save_provider_ok",
         serde_json::json!({
@@ -160,14 +145,56 @@ pub fn save_provider(
 pub fn get_providers(state: State<'_, AppState>) -> Result<Vec<ProviderView>, String> {
     let db = crate::error::lock_or_err(&state.db)?;
     let recs = repo::list_providers(&db)?;
-    Ok(recs.iter().map(view_of).collect())
+    Ok(recs.iter().map(|r| view_of(&state.data_dir, r)).collect())
+}
+
+/// Migrasi satu arah keychain → sqlite terenkripsi, dipanggil sekali saat
+/// startup (`lib.rs`). Idempoten + best-effort: gagal per-baris = skip baris
+/// itu (tetap terbaca via jalur legacy), tidak pernah menggagalkan startup.
+/// Setelah semua baris `enc1:`, keychain tidak disentuh lagi.
+pub fn migrate_provider_keys(
+    conn: &rusqlite::Connection,
+    data_dir: &std::path::Path,
+) -> usize {
+    let rows = match repo::list_providers(conn) {
+        Ok(r) => r,
+        Err(_) => return 0,
+    };
+    let mut done = 0;
+    for rec in &rows {
+        if rec.api_key.starts_with(crate::secrets::ENC_PREFIX) {
+            continue;
+        }
+        // Legacy: sisa keychain dulu, lalu plaintext sqlite era-fallback.
+        let plain = match crate::secrets::read_keychain_only(&rec.id) {
+            Some(k) => k,
+            None if !rec.api_key.is_empty() => rec.api_key.clone(),
+            None => continue,
+        };
+        let Ok(enc) = crate::secrets::encrypt_key(data_dir, &plain) else {
+            continue;
+        };
+        if conn
+            .execute(
+                "UPDATE providers SET api_key = ?1 WHERE id = ?2",
+                rusqlite::params![enc, rec.id],
+            )
+            .is_err()
+        {
+            continue;
+        }
+        // Sisa entri keychain dihapus best-effort — popup terakhir user.
+        let _ = crate::secrets::delete_key(&rec.id);
+        done += 1;
+    }
+    done
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn delete_provider(state: State<'_, AppState>, provider_id: String) -> Result<(), String> {
     let db = crate::error::lock_or_err(&state.db)?;
-    // Keychain dulu (gagal → baris DB utuh, seperti perilaku lama),
-    // lalu baris sqlite via repo.
+    // Sisa entri keychain pra-migrasi (best-effort via `?` seperti perilaku
+    // lama), lalu baris sqlite via repo.
     crate::secrets::delete_key(&provider_id)?;
     repo::delete_provider(&db, &provider_id).map_err(Into::into)
 }

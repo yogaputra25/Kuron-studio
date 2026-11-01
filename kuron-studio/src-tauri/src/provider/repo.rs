@@ -13,8 +13,8 @@ pub fn insert_provider(conn: &Connection, rec: &ProviderRecord) -> Result<(), Ap
     insert_provider_with_key(conn, rec, &rec.api_key)
 }
 
-/// M4-1: store sqlite row with an explicit key value. Keychain holds the
-/// real secret; callers pass "" on keychain success, legacy key on failure.
+/// Store sqlite row dengan nilai key eksplisit. Caller menyimpan ciphertext
+/// `enc1:` (hasil `secrets::encrypt_key`); baris legacy berisi plaintext.
 pub fn insert_provider_with_key(
     conn: &Connection,
     rec: &ProviderRecord,
@@ -84,7 +84,7 @@ mod tests {
     fn insert_with_explicit_key_overrides_record_key() {
         let c = mem();
         let rec = ProviderRecord { id: "p1".into(), provider_type: AiProviderType::Gemini, name: "n".into(), base_url: "".into(), api_key: "real".into(), model: "m".into() };
-        // Keychain sukses → sqlite disimpan kosong.
+        // Ciphertext eksplisit tersimpan verbatim.
         insert_provider_with_key(&c, &rec, "").unwrap();
         assert_eq!(get_provider(&c, "p1").unwrap().unwrap().api_key, "");
     }
