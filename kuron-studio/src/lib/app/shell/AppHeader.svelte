@@ -6,8 +6,9 @@
 <script lang="ts">
   import iconUrl from "../../../../icon.svg";
   import { isMobile } from "../../app/device";
-  import { lang, t, theme, type Lang, type Theme } from "../../app/i18n";
   import Button from "../../ui/Button.svelte";
+  import Icon from "../../ui/Icon.svelte";
+  import { lang, t, theme, type Lang, type Theme } from "../../app/i18n";
   import UpdateButton from "../UpdateButton.svelte";
   import ProjectSwitcher from "./ProjectSwitcher.svelte";
   import type { Project } from "../../contracts/types";
@@ -247,32 +248,32 @@
         <Button variant="primary" class="min-h-[48px] w-full" onclick={() => { drawerOpen = false; onDetect(); }} disabled={!canDetect || busy}>{$t("detectAll")}</Button>
 
         <div class="dsec" aria-hidden="true"></div>
-        <button class="drow" onclick={() => { drawerOpen = false; onProviders(); }}><span aria-hidden="true" class="dic">◈</span>{$t("providers")}<span aria-hidden="true" class="dchev">›</span></button>
-        <button class="drow" onclick={() => { drawerOpen = false; onBatch(); }} disabled={!current}><span aria-hidden="true" class="dic">⧉</span>{$t("batch")}</button>
-        <button class="drow" onclick={() => { drawerOpen = false; onGlossary(); }}><span aria-hidden="true" class="dic">≣</span>{$t("glossary")}<span aria-hidden="true" class="dchev">›</span></button>
-        <button class="drow" onclick={() => { drawerOpen = false; onResults(); }} disabled={!current}><span aria-hidden="true" class="dic">▤</span>{$t("resultsExport")}<span aria-hidden="true" class="dchev">›</span></button>
+        <button class="drow" onclick={() => { drawerOpen = false; onProviders(); }}><span aria-hidden="true" class="dic"><Icon name="key" /></span>{$t("providers")}<span aria-hidden="true" class="dchev">›</span></button>
+        <button class="drow" onclick={() => { drawerOpen = false; onBatch(); }} disabled={!current}><span aria-hidden="true" class="dic"><Icon name="layers" /></span>{$t("batch")}</button>
+        <button class="drow" onclick={() => { drawerOpen = false; onGlossary(); }}><span aria-hidden="true" class="dic"><Icon name="book" /></span>{$t("glossary")}<span aria-hidden="true" class="dchev">›</span></button>
+        <button class="drow" onclick={() => { drawerOpen = false; onResults(); }} disabled={!current}><span aria-hidden="true" class="dic"><Icon name="download" /></span>{$t("resultsExport")}<span aria-hidden="true" class="dchev">›</span></button>
 
         <div class="dsec" aria-hidden="true"></div>
-        <button class="drow" aria-expanded={showImportMenu} onclick={() => (showImportMenu = !showImportMenu)} disabled={!current || busy}><span aria-hidden="true" class="dic">⬆</span>{$t("importAction")}<span aria-hidden="true" class="dchev">{showImportMenu ? "▾" : "›"}</span></button>
+        <button class="drow" aria-expanded={showImportMenu} onclick={() => (showImportMenu = !showImportMenu)} disabled={!current || busy}><span aria-hidden="true" class="dic"><Icon name="upload" /></span>{$t("importAction")}<span aria-hidden="true" class="dchev">{showImportMenu ? "▾" : "›"}</span></button>
         {#if showImportMenu}
           {#if !isMobile}
-            <button class="drow dsub" onclick={() => { drawerOpen = false; showImportMenu = false; onImportFolder(); }} disabled={!current || busy}><span aria-hidden="true" class="dic">◫</span>{$t("importFolder")}</button>
+            <button class="drow dsub" onclick={() => { drawerOpen = false; showImportMenu = false; onImportFolder(); }} disabled={!current || busy}><span aria-hidden="true" class="dic"><Icon name="folder" /></span>{$t("importFolder")}</button>
           {/if}
-          <button class="drow dsub" onclick={() => { drawerOpen = false; showImportMenu = false; onImportFiles(); }} disabled={!current || busy}><span aria-hidden="true" class="dic">▦</span>{$t("importFiles")}</button>
+          <button class="drow dsub" onclick={() => { drawerOpen = false; showImportMenu = false; onImportFiles(); }} disabled={!current || busy}><span aria-hidden="true" class="dic"><Icon name="image" /></span>{$t("importFiles")}</button>
         {/if}
         {#if !isMobile}
-          <button class="drow" onclick={() => { drawerOpen = false; onClean(); }} disabled={!current || busy}><span aria-hidden="true" class="dic">◌</span>{$t("cleanImages")}{#if brokenCount > 0}<span class="tnum dvalDanger">{brokenCount}</span>{/if}</button>
+          <button class="drow" onclick={() => { drawerOpen = false; onClean(); }} disabled={!current || busy}><span aria-hidden="true" class="dic"><Icon name="minus-circle" /></span>{$t("cleanImages")}{#if brokenCount > 0}<span class="tnum dvalDanger">{brokenCount}</span>{/if}</button>
         {/if}
-        <button class="drow drowDanger" onclick={() => { drawerOpen = false; onDelete(); }} disabled={!current}><span aria-hidden="true" class="dic">☓</span>{$t("deleteProject")}</button>
+        <button class="drow drowDanger" onclick={() => { drawerOpen = false; onDelete(); }} disabled={!current}><span aria-hidden="true" class="dic"><Icon name="trash" /></span>{$t("deleteProject")}</button>
 
         <div class="dsec" aria-hidden="true"></div>
-        <button class="drow" onclick={() => onToggleReadingDir()}><span aria-hidden="true" class="dic">⇄</span>{$t("drawerReading")}<span class="tnum dval">{readingDir === "rtl" ? "RTL→" : "←LTR"}</span></button>
-        <button class="drow" onclick={() => theme.update((v: Theme) => (v === "dark" ? "light" : "dark"))}><span aria-hidden="true" class="dic">{$theme === "dark" ? "◐" : "◑"}</span>{$t("drawerTheme")}<span class="dval">{$theme === "dark" ? $t("themeDark") : $t("themeLight")}</span></button>
-        <button class="drow" onclick={cycleLang}><span aria-hidden="true" class="dic">◍</span>{$t("drawerLang")}<span class="tnum dval">{$lang.toUpperCase()}</span></button>
+        <button class="drow" onclick={() => onToggleReadingDir()}><span aria-hidden="true" class="dic"><Icon name="repeat" /></span>{$t("drawerReading")}<span class="tnum dval">{readingDir === "rtl" ? "RTL→" : "←LTR"}</span></button>
+        <button class="drow" onclick={() => theme.update((v: Theme) => (v === "dark" ? "light" : "dark"))}><span aria-hidden="true" class="dic"><Icon name={$theme === "dark" ? "moon" : "sun"} /></span>{$t("drawerTheme")}<span class="dval">{$theme === "dark" ? $t("themeDark") : $t("themeLight")}</span></button>
+        <button class="drow" onclick={cycleLang}><span aria-hidden="true" class="dic"><Icon name="globe" /></span>{$t("drawerLang")}<span class="tnum dval">{$lang.toUpperCase()}</span></button>
         {#if !isMobile}
-          <button class="drow" onclick={() => { drawerOpen = false; onOpenDiagnostics(); }}><span aria-hidden="true" class="dic">⚙</span>Diagnostics<span aria-hidden="true" class="dchev">›</span></button>
+          <button class="drow" onclick={() => { drawerOpen = false; onOpenDiagnostics(); }}><span aria-hidden="true" class="dic"><Icon name="activity" /></span>Diagnostics<span aria-hidden="true" class="dchev">›</span></button>
         {/if}
-        <button class="drow" onclick={() => { drawerOpen = false; onAbout(); }}><span aria-hidden="true" class="dic">ⓘ</span>{$t("about")}<span aria-hidden="true" class="dchev">›</span></button>
+        <button class="drow" onclick={() => { drawerOpen = false; onAbout(); }}><span aria-hidden="true" class="dic"><Icon name="info" /></span>{$t("about")}<span aria-hidden="true" class="dchev">›</span></button>
       </nav>
     </div>
   </div>
