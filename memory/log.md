@@ -346,6 +346,11 @@ menyentuh baris lama).
 - Keputusan: Fallback data (bukan lemahkan rule status) supaya kanvas/export tak bolong. Data lama tak dimigrasi — user translate ulang halaman.
 - Lanjut: Push (masih di tangan pemilik), user verifikasi p015 → Translated.
 
+
+## 2026-11-01 — Sweep issue terbuka
+
+- Kerja: Cek 6 open issue atas instruksi pemilik (kalau sudah → close). #50: semua AC terverifikasi (ReviewGrid 129 baris, single mapping translateOpts, progressStats 4 kasus, tanpa colspan, mobile gating di lint.test.ts, gate hijau) → komentar verifikasi; close ditolak (sudah ditutup pihak lain). #65: batch-dari-list via BatchTranslateDialog di OverlayHost, tooltip lama hilang → komentar + close. #66 (multi-provider pool: masih `provider_id` tunggal + semaphore global), #67 (double-POST parse-gagal masih ada), #14 (tanpa drawer/isNarrow) → belum, dibiarkan. #29 sebagian (filter default all + tab QA/TM dihapus) tapi keputusan A/B/C belum → dibiarkan tanpa komentar.
+- Lanjut: Push menumpuk (`d9b25bb`, `e1440b4`) di tangan pemilik.
 ## 2026-11-01 — Fix progress card offside + overlay translate ngikut bentuk bubble
 
 - Kerja: (1) `ProjectCard.svelte`: tombol card tak punya `relative` sehingga progress bar `absolute inset-x-0 bottom-0` menempel ke wrapper luar (`div.relative`) — offside dari card. Tambah `relative` di button + `overflow-hidden rounded-b-md` di track. (2) `render/overlay.ts`: background overlay selalu `Konva.Rect` inset (kotak hitam) walau bubble polygon/ellipse — ganti shape-aware samakan export `paint_patch`: polygon → isi `Konva.Line` polygon, `ellipse` → isi `Konva.Ellipse`, rect → isi penuh. Teks + auto-fit (`computeTextLayout`, `wrap:none`, `txt.height(boxH)` + `verticalAlign middle`) tak berubah.
