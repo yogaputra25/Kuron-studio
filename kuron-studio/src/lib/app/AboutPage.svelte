@@ -10,6 +10,7 @@
   import { t } from "./i18n";
   import Panel from "../ui/Panel.svelte";
   import Button from "../ui/Button.svelte";
+  import Markdown from "../ui/Markdown.svelte";
   import KuroMascot from "../ui/KuroMascot.svelte";
 
   interface Props {
@@ -21,13 +22,6 @@
   type View = "main" | "privacy" | "terms" | "license";
   let view = $state<View>("main");
 
-  const title = $derived(
-    view === "main" ? $t("about")
-    : view === "privacy" ? $t("aboutPrivacy")
-    : view === "terms" ? $t("aboutTerms")
-    : $t("license"),
-  );
-
   const body = $derived(
     view === "privacy" ? privacyText
     : view === "terms" ? termsText
@@ -36,7 +30,7 @@
   );
 </script>
 
-<Panel {title} {onClose} class="max-w-2xl">
+<Panel title={view === "main" ? $t("about") : view === "privacy" ? $t("aboutPrivacy") : view === "terms" ? $t("aboutTerms") : $t("license")} {onClose} class="max-w-2xl">
   {#if view !== "main"}
     <div class="mb-3">
       <Button variant="ghost" size="sm" onclick={() => (view = "main")}>‹ {$t("onboardBack")}</Button>
@@ -72,10 +66,13 @@
       <li class="flex gap-2"><span class="text-success" aria-hidden="true">✓</span><span>{$t("aboutFeatExport")}</span></li>
     </ul>
 
-    <p class="mt-5 rounded-card border border-line bg-surface-2/60 px-3 py-2 text-xs leading-relaxed text-ink-3">
-      🤖 {$t("aboutCredits")}
-    </p>
+    <div class="mt-5 flex items-center gap-3 rounded-card border border-line bg-surface-2/60 px-3.5 py-2.5">
+      <svg width="26" height="18" viewBox="0 0 36 24" fill="none" aria-hidden="true" class="shrink-0 text-info">
+        <path d="M18 12C18 7.5 14.5 4 9.5 4 4.8 4 1.5 7.6 1.5 12c0 4.4 3.3 8 8 8 5 0 8.5-3.5 8.5-8 0-4.5 3.5-8 8.5-8 4.7 0 8 3.6 8 8 0 4.4-3.3 8-8 8-5 0-8.5-3.5-8.5-8Z" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" />
+      </svg>
+      <p class="text-xs leading-relaxed text-ink-3">{$t("aboutCredits")}</p>
+    </div>
   {:else}
-    <pre class="tnum max-h-80 overflow-auto rounded-card border border-line bg-surface-2/60 p-3 text-xs leading-relaxed whitespace-pre-wrap text-ink-2">{body}</pre>
+    <div class="max-h-80 overflow-auto rounded-card border border-line bg-surface-2/60 py-1 pl-4 pr-3"><Markdown text={body} /></div>
   {/if}
 </Panel>

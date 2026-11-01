@@ -360,6 +360,12 @@ menyentuh baris lama).
 - Keputusan: Satu komponen + snippet (bukan 2 file header) agar tombol tak duplikat; About selalu tersedia (drawer di sempit).
 - Lanjut: Push menumpuk di pemilik; smoke manual drawer (resize <768px) + About 3 bahasa.
 
+
+## 2026-11-01 — Menu bar macOS + shortcut + About legal
+
+- Kerja: (1) Menu About macOS direroute: `src-tauri/src/menu.rs` baru (desktop-only, App/Berkas/Edit/Jendela, semua predefined kecuali About kustom `show-about`) + `on_menu_event` -> emit -> `onShowAbout` (events.ts) -> AboutPage. (2) Shortcut Cmd/Ctrl+,/B/E/D/O (+ hint di tooltip header) via `shortcuts.ts` murni + test; guard editor/input/current/busy. (3) About: tombol Privacy/Terms/License, isi dari repo-root .md via `sync:legal` (pretest/prebuild) ke `src/lib/app/legal/` (vitest menolak ?raw di luar root); teks legal Indonesia authoritatif; kredit Muse (Meta). LICENSE/ PRIVACY.md/TERMS.md proprietary (pilihan owner).
+- Hasil: `pnpm test` 543/543, `pnpm check` 0/0, `cargo check/clippy/test` hijau, dev direstart (menu Rust aktif). Commit lokal `b5d15fb` (+amend keluarkan 2 screenshot liar ke /tmp/kuron-stray). Insiden: path `../legal` vs `./legal`, key `about` hilang saat edit, tombol glossary ikut terhapus (dikembalikan), `let` di tengah chain builder (tambah `;`).
+- Lanjut: Push menumpuk di pemilik; smoke: menu Tentang Kuron Studio, shortcut 5 tombol, About 3 bahasa + 3 subview.
 - Kerja: (1) `ProjectCard.svelte`: tombol card tak punya `relative` sehingga progress bar `absolute inset-x-0 bottom-0` menempel ke wrapper luar (`div.relative`) — offside dari card. Tambah `relative` di button + `overflow-hidden rounded-b-md` di track. (2) `render/overlay.ts`: background overlay selalu `Konva.Rect` inset (kotak hitam) walau bubble polygon/ellipse — ganti shape-aware samakan export `paint_patch`: polygon → isi `Konva.Line` polygon, `ellipse` → isi `Konva.Ellipse`, rect → isi penuh. Teks + auto-fit (`computeTextLayout`, `wrap:none`, `txt.height(boxH)` + `verticalAlign middle`) tak berubah.
 - Hasil: `pnpm test` 56 file/524 lolos, `pnpm check` 0 error. Rust tak tersentuh. Belum smoke visual (butuh `pnpm tauri dev` manual oleh pemilik).
 - Keputusan: Tanpa openspec (bugfix kecil, paritas kanvas→export sudah ada). Tanpa commit/push.
