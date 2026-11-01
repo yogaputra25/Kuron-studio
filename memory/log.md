@@ -372,6 +372,11 @@ menyentuh baris lama).
 - Kerja: User: .md tampil mentah jelek + ganti emoji robot dgn logo Meta. `Markdown.svelte` baru (h1/h2/list/bold + escape, tanpa dep) + test; About subview pakai itu. Kredit: loop Meta SVG (stroke=currentColor, `text-info`) ganti emoji. LICENSE/PRIVACY.md/TERMS.md dipoles; sync:legal. Token `--ks-meta` sempat ditambah lalu dibatalkan (pakai text-info) setelah temukan edge-case lint: util `*-ks-*` pertama di repo, test bandingkan tanpa prefix `--` (lapor Yoga/perlu fix test lain waktu).
 - Hasil: `pnpm test` 549/549 (61 file), `pnpm check` 0/0. Commit `ff9b7a5`.
 - Lanjut: Push menumpuk di pemilik; smoke About 3 subview + 3 bahasa.
+
+## 2026-11-01 — Logo resmi Meta
+
+- Kerja: User protes loop tiruan bukan logo Meta; minta download yang resmi. Ambil `Meta Platforms Inc. logo (cropped).svg` dari Wikimedia Commons (lolos verifikasi render) ke `kuron-studio/src/meta.svg`; About pakai `<img>` + komentar atribusi merek dagang; SVG tiruan dibuang. Jujur ke user: logo resmi = merek dagang Meta, dipakai untuk atribusi.
+- Hasil: `pnpm test` 549/549, `pnpm check` 0/0. Commit `9d2deb5`.
 - Kerja: (1) `ProjectCard.svelte`: tombol card tak punya `relative` sehingga progress bar `absolute inset-x-0 bottom-0` menempel ke wrapper luar (`div.relative`) — offside dari card. Tambah `relative` di button + `overflow-hidden rounded-b-md` di track. (2) `render/overlay.ts`: background overlay selalu `Konva.Rect` inset (kotak hitam) walau bubble polygon/ellipse — ganti shape-aware samakan export `paint_patch`: polygon → isi `Konva.Line` polygon, `ellipse` → isi `Konva.Ellipse`, rect → isi penuh. Teks + auto-fit (`computeTextLayout`, `wrap:none`, `txt.height(boxH)` + `verticalAlign middle`) tak berubah.
 - Hasil: `pnpm test` 56 file/524 lolos, `pnpm check` 0 error. Rust tak tersentuh. Belum smoke visual (butuh `pnpm tauri dev` manual oleh pemilik).
 - Keputusan: Tanpa openspec (bugfix kecil, paritas kanvas→export sudah ada). Tanpa commit/push.

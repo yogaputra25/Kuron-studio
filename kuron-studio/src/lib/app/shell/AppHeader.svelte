@@ -71,7 +71,20 @@
 
 <svelte:window onkeydown={(e) => { if (e.key === "Escape") { showImportMenu = false; drawerOpen = false; } }} />
 
-{#snippet barActions()}
+{#snippet barActions(inDrawer = false)}
+  {#if inDrawer}
+    <div class="flex gap-1.5" role="group" aria-label="Tampilan">
+      <Button variant="ghost" size="sm" class="trio-btn min-h-[44px] flex-1 justify-center font-mono" onclick={onToggleReadingDir} title="Urutan baca bubble">
+        {readingDir === "rtl" ? "RTL→" : "←LTR"}
+      </Button>
+      <Button variant="ghost" size="sm" class="trio-btn min-h-[44px] flex-1 justify-center" onclick={() => theme.update((v: Theme) => (v === "dark" ? "light" : "dark"))} title="Tema gelap/terang" aria-label="Tema gelap/terang">
+        {$theme === "dark" ? "◐" : "◑"}
+      </Button>
+      <Button variant="ghost" size="sm" class="trio-btn min-h-[44px] flex-1 justify-center font-mono" onclick={cycleLang} title="Bahasa / Language / 语言" aria-label="Ganti bahasa">
+        {$lang.toUpperCase()}
+      </Button>
+    </div>
+  {:else}
   <Button variant="ghost" size="sm" class="font-mono" onclick={onToggleReadingDir} title="Urutan baca bubble">
     {readingDir === "rtl" ? "RTL→" : "←LTR"}
   </Button>
@@ -83,6 +96,7 @@
   </Button>
 
   {#if !isMobile}<div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>{/if}
+  {/if}
 
   <Button variant="ghost" size="sm" onclick={onProviders} title="Providers (Ctrl/⌘+,)">{$t("providers")}</Button>
   {#if !isMobile}<UpdateButton />{/if}
@@ -238,8 +252,8 @@
         <span class="font-display text-sm font-semibold tracking-tight">Kuron Studio</span>
         <Button variant="ghost" size="icon" class="ml-auto" aria-label={$t("close")} onclick={() => (drawerOpen = false)}>×</Button>
       </div>
-      <div class="grid justify-items-stretch gap-1 [&_.h-5]:hidden [&_button]:min-h-[44px]">
-        {@render barActions()}
+      <div class="grid justify-items-stretch gap-1.5 [&_.h-5]:hidden [&_button]:min-h-[44px] [&_button]:w-full [&_button]:justify-start [&_button]:px-3 [&_.trio-btn]:w-auto [&_.trio-btn]:justify-center [&_.trio-btn]:px-2">
+        {@render barActions(true)}
       </div>
     </div>
   </div>
