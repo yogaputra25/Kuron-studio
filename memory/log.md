@@ -339,6 +339,13 @@ menyentuh baris lama).
 - Keputusan: Edge `import.rs` → `commands::project::{extensions,image_exts}` disengaja (konstanta kontrak milik lane #60); satu edge test-only ke `commands::detect` diterima. Push + smoke manual oleh pemilik.
 - Lanjut: Push `main`, smoke manual translate, epik #37 FE (milik Yoga: #50 dkk), fitur #65/#66/#67.
 
+## 2026-11-01 — Fix status macet Detected (SFX kosong)
+
+- Kerja: User lapor status TERDETEKSI padahal sudah translate + re-translate tetap. Ground truth dari `projects.json` p015: 11 bubble, 2 kosong (idx SFX `にちゃ♡`/`ぐにっ♡`) dengan `ai_translated` juga kosong → provider yang mengosongkan, bukan bug mapping/merge. `translation_complete` (semua-terisi) lalu menahan status di Detected by design (5503f4f). Bonus temuan: record tersimpan masih `targetLang: en/style: dramatic` (run lama), sedang dropdown kini Indonesia/Standard — After canvas memang render simpanan lama. Fix `e1440b4`: `fallback_translated()` di `map_mosaic`/`map_full_image` — `translated` kosong → isi `original`, `ai_translated` tetap mentah sebagai audit; rank hilang total tetap kosong. +1 unit test. Konsumen (`qa sfxLeak`, overlay, ResultTable, memory search) aman — justru konsisten.
+- Hasil: `cargo test` + `clippy` + `pnpm test` 532/532 + `pnpm check` 0 error hijau.
+- Keputusan: Fallback data (bukan lemahkan rule status) supaya kanvas/export tak bolong. Data lama tak dimigrasi — user translate ulang halaman.
+- Lanjut: Push (masih di tangan pemilik), user verifikasi p015 → Translated.
+
 ## 2026-11-01 — Fix progress card offside + overlay translate ngikut bentuk bubble
 
 - Kerja: (1) `ProjectCard.svelte`: tombol card tak punya `relative` sehingga progress bar `absolute inset-x-0 bottom-0` menempel ke wrapper luar (`div.relative`) — offside dari card. Tambah `relative` di button + `overflow-hidden rounded-b-md` di track. (2) `render/overlay.ts`: background overlay selalu `Konva.Rect` inset (kotak hitam) walau bubble polygon/ellipse — ganti shape-aware samakan export `paint_patch`: polygon → isi `Konva.Line` polygon, `ellipse` → isi `Konva.Ellipse`, rect → isi penuh. Teks + auto-fit (`computeTextLayout`, `wrap:none`, `txt.height(boxH)` + `verticalAlign middle`) tak berubah.
