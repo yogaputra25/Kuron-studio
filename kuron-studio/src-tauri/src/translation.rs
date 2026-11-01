@@ -84,6 +84,20 @@ pub fn translation_complete(t: &PageTranslation) -> bool {
         && t.bubbles.iter().all(|b| !b.translated.trim().is_empty())
 }
 
+/// Provider boleh mengosongkan `translated` (mis. SFX yang ia pilih tak
+/// diterjemahkan). Fallback ke `original` agar kanvas/export tak bolong dan
+/// status jujur bisa `Translated`; kebenaran provider tetap terekam di
+/// `ai_translated` (tak disentuh). Rank hilang total (`original` kosong)
+/// tetap kosong — itu kegagalan nyata, bukan pilihan provider.
+fn fallback_translated(original: &str, translated: &str) -> String {
+    if translated.trim().is_empty() && !original.trim().is_empty() {
+        original.to_string()
+    } else {
+        translated.to_string()
+    }
+}
+
+
 /// Wide box or >25% page area needs white patch before typeset.
 pub fn needs_white_patch(w: i32, h: i32, page_w: i32, page_h: i32) -> bool {
     let (w, h) = (w.max(0) as f64, h.max(0) as f64);
@@ -139,6 +153,9 @@ pub fn map_mosaic(
         .map(|(rank, &bi)| {
             let b = &bubbles[bi];
             let r = by_key.get(&(rank + 1));
+            let original: String = r.map(|x| x.original.clone()).unwrap_or_default();
+            let rawlated: String = r.map(|x| x.translated.clone()).unwrap_or_default();
+            let translated = fallback_translated(&original, &rawlated);
             BubbleTranslation {
                 index: bi,
                 x: b.x,
@@ -148,9 +165,9 @@ pub fn map_mosaic(
                 shape: b.shape.clone(),
                 layout: None,
                 font_size: None,
-                original: r.map(|x| x.original.clone()).unwrap_or_default(),
+                original,
                 reading: r.map(|x| x.reading.clone()).unwrap_or_default(),
-                translated: r.map(|x| x.translated.clone()).unwrap_or_default(),
+                translated,
                 ai_original: r.map(|x| x.original.clone()).unwrap_or_default(),
                 ai_reading: r.map(|x| x.reading.clone()).unwrap_or_default(),
                 ai_translated: r.map(|x| x.translated.clone()).unwrap_or_default(),
@@ -184,7 +201,7 @@ pub fn map_full_image(page_w: i32, page_h: i32, items: &[FullBubble]) -> Vec<Bub
                 font_size: None,
                 original: f.original.clone(),
                 reading: f.reading.clone(),
-                translated: f.translated.clone(),
+                translated: fallback_translated(&f.original, &f.translated),
                 ai_original: f.original.clone(),
                 ai_reading: f.reading.clone(),
                 ai_translated: f.translated.clone(),
@@ -295,6 +312,23 @@ mod tests {
         assert!(needs_white_patch(500, 500, 800, 1200));
         assert!(!needs_white_patch(100, 80, 800, 1200));
     }
+    #[test]
+    fn empty_translated_falls_back_to_original() {
+        use crate::parser::BubbleResult;
+        let bs = vec![b(0, 0, 50, 50), b(200, 0, 50, 50), b(0, 200, 50, 50)];
+        let res = vec![
+            (1, BubbleResult { original: "a".into(), reading: "".into(), translated: "A".into() }),
+            (2, BubbleResult { original: "SFX".into(), reading: "".into(), translated: "".into() }),
+        ];
+        let out = map_mosaic(&bs, &[0, 1, 2], &res, 800, 1200);
+        assert_eq!(out[0].translated, "A");
+        // Provider kosongkan SFX -> tampil sumber, audit mentah tetap "".
+        assert_eq!(out[1].translated, "SFX");
+        assert_eq!(out[1].ai_translated, "");
+        // Rank hilang total (original pun kosong) -> tetap kosong.
+        assert_eq!(out[2].translated, "");
+    }
+
 
     #[test]
     fn edits_preserved() {
