@@ -2,17 +2,28 @@
   Presentasional murni: data + aksi lewat props/callback dari App. -->
 <script lang="ts">
   import Button from "../../ui/Button.svelte";
-  import Snackbar from "../../ui/Snackbar.svelte";
+  import Snackbar, { type SnackbarTone } from "../../ui/Snackbar.svelte";
 
   interface Props {
     lastInvokeError: { command: string; error: string } | null;
     error: string;
     info: string;
+    /** Toast hasil cek update (di luar <main> tak kena clip) — null = sembunyi. */
+    updateToast?: { message: string; tone: SnackbarTone } | null;
     onOpenDiagnostics: () => void;
     onClearInfo: () => void;
+    onClearUpdateToast?: () => void;
   }
 
-  let { lastInvokeError, error, info, onOpenDiagnostics, onClearInfo }: Props = $props();
+  let {
+    lastInvokeError,
+    error,
+    info,
+    updateToast = null,
+    onOpenDiagnostics,
+    onClearInfo,
+    onClearUpdateToast = () => {},
+  }: Props = $props();
 </script>
 
 {#if lastInvokeError}
@@ -37,4 +48,7 @@
   {#key info}
     <Snackbar message={info} onClose={onClearInfo} />
   {/key}
+{/if}
+{#if updateToast}
+  <Snackbar message={updateToast.message} tone={updateToast.tone} onClose={onClearUpdateToast} />
 {/if}

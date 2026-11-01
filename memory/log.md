@@ -382,8 +382,28 @@ menyentuh baris lama).
 - Keputusan: Tanpa openspec (bugfix kecil, paritas kanvas→export sudah ada). Tanpa commit/push.
 - Lanjut: Smoke `pnpm tauri dev`: cek card project + panel After/Split untuk bubble polygon/ellipse/rect; commit oleh pemilik.
 
+
+## 2026-11-01 — Toolbar ramping + palet tools sidebar (BELUM COMMIT)
+
+- Kerja (atas perintah jangan asal commit — semua di worktree): toolbar editor hanya Grid/nama/mode/«/Detect/Simpan (ikon + label responsif, tanpa scroll, tanpa kepotong); 5 tool gambar pindah ke palet grid 5 kolom di atas sidebar kanan (ikon SVG konsisten + label, aktif coral, disabled di After + alasan). Icon baru: select/rect/ellipse/freeform/tail/search/save. Detect/Simpan ikon + label (>=md). Badge status sembunyi <400px. Test: draw-tools pin pindah ke panel, mount + palet. Revert FAB 9c042ed (ganggu kanvas + split rusak) + perbaiki 2x rusak bawaan revert.
+- Hasil: `pnpm check` 0/0, `pnpm test` 553/553. SENGAJA tidak commit — tunggu oke user.
 ## 2026-11-01 — Font translate kekecilan-kebesaran: fill 85% + margin (lanjut fix bubble)
 
+## 2026-11-01 — Split mobile: scroll independen (BELUM COMMIT)
+
+- Kerja: Saran disetujui. `syncScroll` return awal saat `resize.columnMode` (pane numpuk vertikal scroll sendiri-sendiri); desktop sebelahan tetap sync. Test source pin diperbarui.
+- Hasil: `pnpm check` 0, `pnpm test` 553/553. Tidak commit (instruksi pemilik).
+
+## 2026-11-01 — Editor: aksi pindah ke bottom bar (BELUM COMMIT)
+
+- Kerja: Toolbar atas tinggal Grid + nama + badge + engine (ramping, anti-kepotong). Before/Split/After + « + Detect + Simpan pindah ke EditorActionBar baru (bar bawah kanvas, border-t, tengah, label ciut di sempit). Test pin mode/onSetMode dialihkan toolbar->actionbar. PaneMode tetap milik toolbar.
+- Hasil: `pnpm check` 0, `pnpm test` 555/555. Tidak commit (instruksi).
+
+
+## 2026-11-01 — Editor mobile-only dua baris (BELUM COMMIT)
+
+- Kerja: Koreksi sesuai pemilik: dua baris HANYA mobile (columnMode) — slim toolbar + EditorActionBar di bawahnya; desktop satu baris penuh seperti semula. Toolbar dapat prop `slim`. Test pin dikembalikan ke toolbar + tambah assert cabang mobile.
+- Hasil: `pnpm check` 0, `pnpm test` 555/555. Tidak commit.
 - Kerja: Auto-fit lama cari font TERBESAR yang muat ~100% kotak (margin cuma padding 4px) → teks mepet outline, kelihatan "kegedean". Perubahan: (1) `contracts/layout.json`: `padding` 4→8, tambah `fillFactor: 0.85`. (2) `text/textLayout.ts`: `LAYOUT_FILL` + opts `fillFactor`; auto-fit (kotak + polygon) membungkus/menyusut thd area virtual kotak-dalam×fill; manual user pakai kotak penuh (tak disusutkan). (3) Rust `render/page.rs`: struct `fill_factor` + `layout_from_text` cerminkan rumus yang sama; test `lo <= 4.0` → ikut `layout().padding`. (4) Test: kontrak TS+`layout_matches_json_contract` assert `fillFactor`; `textLayout.test.ts` 3 test baru (margin ≤ fill×dalam, faktor kecil = font ≤, manual abaikan fill); 2 test lama dipin `fillFactor: 1`/komentar.
 - Hasil: Gate hijau — `cargo test` ok, `clippy` bersih, `pnpm test` 56 file/527 lolos, `pnpm check` 0 error. Kanvas recompute tiap redraw (langsung terlihat); layout TERSIMPAN ikut update saat save/translate berikutnya.
 - Keputusan: Tanpa openspec (tuning fix lanjutan, dua sisi diubah bersama jaga paritas). Tanpa commit/push.
@@ -409,3 +429,30 @@ menyentuh baris lama).
 - Hasil: `pnpm test` 532 lolos, `pnpm check` 0 error. Rust tak tersentuh. Tanpa commit/push.
 - Keputusan: Tanpa Figma/computer-use — aset SVG sudah ada dan portable; icon native dari `icon.svg` (bukan `logo_app.webp`) agar header ↔ OS konsisten. Warna brand maskot dipertahankan, aksen pink ikut token accent.
 - Lanjut: Smoke `pnpm tauri dev` — header logo Kuro, jalan batch (ring + persen), translate + detect (mini maskot di tombol busy); commit oleh pemilik (termasuk file biner icons/).
+
+## 2026-11-01 — Header space-between + update error ke toast
+
+- Kerja: (1) UpdateButton tak lagi render `<span>` inline di samping tombol — hasil cek (sukses/error) tampil sebagai toast fixed via `Snackbar` (prop baru `tone: success|error`, badge `!` + `danger-soft/danger`, token lama). String toast pindah ke i18n 3 bahasa (`checkUpdate/updateLatest/updateReady/updateDone`). (2) Baris switcher+toolbar jadi satu baris `justify-between` tanpa `flex-wrap` (setara Flutter spaceBetween): grup kiri (dropdown + `41 pages`, `whitespace-nowrap`) vs toolbar kanan (`ml-auto`, tanpa `flex-1` supaya ruang bebas jatuh di tengah); bar tetap ukur via `barEl`/`overflowAt` untuk ⋯. Test: `UpdateButton.test.ts` baru (4: tanpa teks samping, error→toast, latest, ready+relaunch), `snackbar.test.ts` +1 (tone error), `AppHeader.test.ts` +1 (justify-between, tanpa wrap, pages+RTL sebaris).
+- Hasil: `pnpm test` 563/563 (64 file), `pnpm check` 0 error. Rust tak tersentuh. Tanpa commit/push.
+- Keputusan: `{#key}` dibuang — outro `fly` bikin dua `role=status` sesaat (flaky `findByRole`); update pesan in-place. Assert dismissal toast tak dipasang di UpdateButton.test (outro tak selesai di jsdom, animate di-mock) — dicover `snackbar.test.ts`.
+- Lanjut: Smoke `pnpm tauri dev` — klik ↻ saat offline (toast error bawah, bar tak bergeser) + resize 768–1100px (41 pages … RTL satu baris, ruang di tengah, sisanya ke ⋯); commit oleh pemilik.
+
+## 2026-11-01 — Fix update di menu ⋯: label + toast global
+
+- Kerja: (1) Akar masalah ganda: baris update di menu ⋯ render `UpdateButton` ikon-saja tanpa teks; toast self-contained di dalam menu ter-clip `overflow-hidden` (dan di bar pun salah posisi karena `backdrop-blur` header jadi containing block `fixed`). (2) `UpdateButton` ditulis ulang presentasional: prop `label` (varian baris menu `role=menuitem` ikon+teks, mirip sibling) + `onToast(message, tone)`; tanpa state/UI toast sendiri. (3) Toast diangkat ke `App.updateToast` → `AlertBanners` (di `<main>`, bebas clip) via prop baru `onUpdateToast` di `AppHeader`; `Snackbar` ekspor tipe `SnackbarTone`. Tanpa string/key baru (label pakai `checkUpdate`).
+- Hasil: `pnpm test` 566/566, `pnpm check` 0 error. Rust tak tersentuh. Tanpa commit/push.
+- Keputusan: Satu kanal toast di `AlertBanners` (pemilik semua banner) ketimbang portal-`@attach` manual — ikut pola repo (state di App, aksi via callback).
+- Lanjut: Smoke `pnpm tauri dev` — sempitkan window sampai ↻ masuk ⋯, klik "Cek update" (baris berteks, toast muncul bawah layar); commit oleh pemilik.
+
+## 2026-11-01 — Samakan tinggi baris update di menu ⋯
+
+- Kerja: Baris "Check for update" lebih pendek karena ikonnya glyph teks `↻` (line box ±16px) sementara baris lain pakai `<Icon>` SVG `size-5` (20px). Tambah ikon `refresh` (Feather rotate-cw, stroke currentColor) ke set `Icon.svelte` + daftar `Icon.test.ts`; baris menu `UpdateButton` pakai pola sibling persis (`contents text-ink-3` + Icon default md). Test label diperketat (svg + `size-5`, bukan glyph).
+- Hasil: `pnpm test` 566/566, `pnpm check` 0 error. Rust tak tersentuh. Tanpa commit/push.
+- Lanjut: Smoke visual menu ⋯ (semua baris sama tinggi); commit oleh pemilik.
+
+## 2026-11-01 — Check-update masuk drawer + hapus Detect ganda
+
+- Kerja: (1) Akar drawer: class `.drow` scoped di `<style>` AppHeader tak berlaku di child `UpdateButton`, jadi dipindah ke `app.css` global (ikut preseden `.tnum`; aman untuk `lint.test.ts` yang hanya parse token `--ks-*`). (2) `UpdateButton` tambah `kind: "drawer"` (render `.drow` + ikon refresh + label) dan `onDone` (tutup drawer/menu saat diklik; cabang menu ⋯ juga panggil `onDone`). (3) Drawer: baris update setelah Providers (gate `!isMobile`), menu ⋯ teruskan `onDone` tutup menu. (4) Bar sempit: tombol "Detect all" dihapus — tinggal ☰; CTA Detect satu-satunya di drawer (baris primer 48px yang sudah ada).
+- Hasil: `pnpm test` 568/568, `pnpm check` 0 error/warning (1023 file). Rust tak tersentuh. Tanpa commit/push.
+- Keputusan: Detect di drawer cukup (sudah CTA primer penuh); bar sempit minimal ☰ saja.
+- Lanjut: Smoke `pnpm tauri dev` mode sempit — drawer berisi Detect sekali + baris "Cek update"; bar hanya ☰; commit oleh pemilik.

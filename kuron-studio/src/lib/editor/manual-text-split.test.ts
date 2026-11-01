@@ -74,7 +74,6 @@ describe("before|split|after (3.1–3.4)", () => {
   it("state mode + switcher Before|Split|After", () => {
     // Sejak FE-4 (2.1): state di panel, switcher di EditorToolbar.
     expect(panelSrc).toContain('let mode = $state<PaneMode>("before")');
-    expect(panelSrc).toContain("mode={mode}");
     expect(toolbarSrc).toContain('export type PaneMode = "before" | "split" | "after"');
     expect(toolbarSrc).toContain('[["before", "Before"], ["split", "Split"], ["after", "After"]]');
   });
@@ -97,7 +96,9 @@ describe("before|split|after (3.1–3.4)", () => {
   });
 
   it("scroll-sync: tiru scrollTop/scrollLeft di bawah guard flag anti-loop", () => {
-    const fn = panelSrc.slice(panelSrc.indexOf("function syncScroll"), panelSrc.indexOf("function syncScroll") + 300);
+    const fn = panelSrc.slice(panelSrc.indexOf("function syncScroll"), panelSrc.indexOf("function syncScroll") + 500);
+    // Stacked (mobile/column): tiap pane scroll sendiri, sync dimatikan.
+    expect(fn).toContain("if (resize.columnMode) return;");
     expect(fn).toContain("if (!from || !to || syncing) return;");
     expect(fn).toContain("to.scrollTop = from.scrollTop;");
     expect(fn).toContain("to.scrollLeft = from.scrollLeft;");

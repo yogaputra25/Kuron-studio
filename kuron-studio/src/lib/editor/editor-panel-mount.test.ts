@@ -39,5 +39,8 @@ describe("EditorPanel mount test", () => {
     expect(container).toBeTruthy();
     expect(getByRole("button", { name: "← Grid" })).toBeTruthy();
     expect(getByRole("button", { name: "Before" })).toBeTruthy();
+    // Palet tool sidebar selalu tampil; toolbar ramping tanpa scroll.
+    expect(getByRole("button", { name: "Rect" })).toBeTruthy();
+    expect(getByRole("button", { name: "Detect" })).toBeTruthy();
   });
 });

@@ -24,13 +24,21 @@
   aria-label={$t("sheetHandle")}
   tabindex="0"
   class={orientation === "vertical"
-    ? "w-2 shrink-0 cursor-col-resize touch-none border-l border-line bg-surface-2 hover:bg-hover"
+    ? "flex w-2 shrink-0 cursor-col-resize touch-none select-none items-center justify-center border-l border-line bg-surface-2 hover:bg-hover"
     : handle
-      ? "flex h-11 shrink-0 cursor-row-resize touch-none items-center justify-center border-t border-line bg-surface-2"
-      : "h-2 shrink-0 cursor-row-resize touch-none border-t border-line bg-surface-2 hover:bg-hover"}
+    ? "flex h-11 shrink-0 cursor-row-resize touch-none select-none items-center justify-center border-t border-line bg-surface-2"
+    : "flex h-2 shrink-0 cursor-row-resize touch-none select-none items-center justify-center border-t border-line bg-surface-2 hover:bg-hover"}
   onpointerdown={onDown}
   onpointermove={onMove}
   onpointerup={onUp}
   onpointercancel={onUp}
   onkeydown={onKey}
->{#if orientation === "horizontal" && handle}<span class="h-1 w-12 rounded-full bg-line"></span>{/if}</div>
+>{#if orientation === "vertical"}
+  <span class="flex flex-col items-center gap-1" aria-hidden="true">
+    <i class="size-1 rounded-full bg-ink-3"></i>
+    <i class="size-1 rounded-full bg-ink-3"></i>
+    <i class="size-1 rounded-full bg-ink-3"></i>
+  </span>
+{:else}
+  <span class="h-1.5 w-16 rounded-full bg-ink-3" aria-hidden="true"></span>
+{/if}</div>

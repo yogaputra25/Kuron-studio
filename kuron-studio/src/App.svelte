@@ -19,6 +19,7 @@
   import { allPages, childrenOf, folderPath, groupKanban, hasNesting, projectStats, subtreePages } from "./lib/library/library";
   import type { KanbanFilter, PageView, SortKey } from "./lib/library/library";
   import Button from "./lib/ui/Button.svelte";
+  import type { SnackbarTone } from "./lib/ui/Snackbar.svelte";
   import { fileName, sortPagesByBubbles, sortPagesByName, sortPagesByStatus } from "./lib/library/status";
   import Onboarding from "./lib/app/Onboarding.svelte";
   import FolderBar from "./lib/app/shell/FolderBar.svelte";
@@ -128,6 +129,8 @@
   let showDiagnostics = $state(false);
   /** Error invoke terakhir — banner merah di header, selalu terlihat. */
   let lastInvokeError = $state<{ command: string; error: string } | null>(null);
+  /** Hasil cek update (toast global) — dirender di AlertBanners, bukan inline. */
+  let updateToast = $state<{ message: string; tone: SnackbarTone } | null>(null);
   // Opts terakhir dari editor (provider + translate opts) — referensi langsung
   // milik EditorPanel, BUKAN salinan merge (FE-6): tak ada snapshot basi.
   let batchReq = $state<{ providerId: string; opts: TranslateOpts } | null>(null);
@@ -510,6 +513,7 @@
       onOpenDiagnostics={() => (showDiagnostics = true)}
       onAbout={() => (showAbout = true)}
       onPickProject={(id) => openProject(id)}
+      onUpdateToast={(message, tone) => (updateToast = { message, tone })}
     />
   {/if}
 
@@ -517,8 +521,10 @@
     {lastInvokeError}
     {error}
     {info}
+    {updateToast}
     onOpenDiagnostics={() => (showDiagnostics = true)}
     onClearInfo={() => (info = "")}
+    onClearUpdateToast={() => (updateToast = null)}
   />
 
   {#if !projectStore.loaded}

@@ -345,10 +345,14 @@ describe("mobile header gating (iOS/Android)", () => {
   });
 
   it("tombol desktop-only disembunyikan di mobile", () => {
-    for (const token of ["<UpdateButton", "onclick={onClean}"]) {
-      const i = headSrc.lastIndexOf(token);
-      expect(i, `${token} hilang dari AppHeader`).toBeGreaterThan(-1);
-      expect(headSrc.slice(Math.max(0, i - 150), i)).toContain("!isMobile");
+    const i = headSrc.lastIndexOf("<UpdateButton");
+    expect(i, "<UpdateButton hilang dari AppHeader").toBeGreaterThan(-1);
+    expect(headSrc.slice(Math.max(0, i - 150), i)).toContain("!isMobile");
+    // onClean tinggal di menu ⋯ + drawer: SEMUA pemanggilan wajib dalam gate !isMobile.
+    const calls = [...headSrc.matchAll(/onClean\(\)/g)];
+    expect(calls.length, "onClean hilang dari AppHeader").toBeGreaterThan(0);
+    for (const m of calls) {
+      expect(headSrc.slice(Math.max(0, (m.index ?? 0) - 600), m.index ?? 0), "onClean tanpa gate !isMobile").toContain("!isMobile");
     }
   });
 
@@ -363,9 +367,10 @@ describe("mobile header gating (iOS/Android)", () => {
     expect(headSrc).toContain('{$t("importAction")}');
   });
 
-  it("action bar scroll horizontal di layar kecil, wrap di desktop", () => {
+  it("action bar overflow dinamis ke menu ⋯ (bukan kepotong)", () => {
     expect(headSrc).toContain("overflow-x-auto");
-    expect(headSrc).toContain("sm:flex-none");
+    expect(headSrc).toContain("bind:this={barEl}");
+    expect(headSrc).toContain("overflowAt");
   });
 
   it("empty state tanpa sebut drag-drop di mobile", () => {

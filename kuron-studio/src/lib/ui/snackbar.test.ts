@@ -33,6 +33,19 @@ describe("Snackbar component", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
   });
+
+  it("tone error: badge bahaya, bukan centang sukses", () => {
+    const onClose = vi.fn();
+    const { getByRole, getByText } = renderWithI18n(Snackbar, {
+      props: { message: "update gagal: network down", tone: "error", onClose },
+    });
+
+    const statusEl = getByRole("status");
+    expect(statusEl).toBeTruthy();
+    expect(getByText("update gagal: network down")).toBeTruthy();
+    expect(statusEl.textContent ?? "").toContain("!");
+    expect(statusEl.textContent ?? "").not.toContain("✓");
+  });
 });
 
 describe("AlertBanners shell integration", () => {
@@ -89,5 +102,26 @@ describe("AlertBanners shell integration", () => {
     const detailBtn = getByRole("button", { name: "Detail" });
     await fireEvent.click(detailBtn);
     expect(onOpenDiagnostics).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders update toast (global, error tone) outside clipped menus", async () => {
+    const onClearUpdateToast = vi.fn();
+    const { getByRole, getByText } = renderWithI18n(AlertBanners, {
+      props: {
+        lastInvokeError: null,
+        error: "",
+        info: "",
+        updateToast: { message: "update gagal: 403", tone: "error" },
+        onOpenDiagnostics: vi.fn(),
+        onClearInfo: vi.fn(),
+        onClearUpdateToast,
+      },
+    });
+
+    const statusEl = getByRole("status");
+    expect(getByText("update gagal: 403")).toBeTruthy();
+    expect(statusEl.textContent ?? "").toContain("!");
+    await fireEvent.click(getByRole("button"));
+    expect(onClearUpdateToast).toHaveBeenCalledTimes(1);
   });
 });

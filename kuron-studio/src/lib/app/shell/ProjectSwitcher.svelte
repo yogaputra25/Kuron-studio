@@ -4,6 +4,7 @@
 <script lang="ts">
   import { scale } from "svelte/transition";
   import ProjectCard from "./ProjectCard.svelte";
+  import Icon from "../../ui/Icon.svelte";
   import { projectStats } from "../../library/library";
   import { t } from "../../app/i18n";
   import type { Project } from "../../contracts/types";
@@ -57,7 +58,7 @@
           <span class="block h-full rounded bg-accent" style="width: {Math.round(curStats.progress * 100)}%"></span>
         </span>
       {/if}
-      <span class="shrink-0 text-[10px] text-ink-3" aria-hidden="true">{showMenu ? "▴" : "▾"}</span>
+      <span class="shrink-0 text-ink-3" aria-hidden="true"><Icon name={showMenu ? "chevron-up" : "chevron-down"} size="sm" /></span>
     </button>
     {#if showMenu}
       <div
@@ -89,5 +90,5 @@
       </div>
     {/if}
   </div>
-  <span class="tnum text-xs text-ink-3">{curStats ? curStats.total : 0} {$t("pages")}</span>
+  <span class="tnum shrink-0 text-xs whitespace-nowrap text-ink-3">{curStats ? curStats.total : 0} {$t("pages")}</span>
 {/if}

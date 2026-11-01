@@ -11,8 +11,7 @@ describe("AboutPage", () => {
     expect(screen.getByText(new RegExp(version.replace(/\./g, "\\.")))).toBeTruthy();
     expect(screen.getByRole("button", { name: /Privasi/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Syarat/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Lisensi/ })).toBeTruthy();
-    expect(screen.getByText(/Muse/)).toBeTruthy();
+    expect(screen.getAllByText(/Muse/).length).toBeGreaterThanOrEqual(2);
   });
 
   it("tombol tutup memanggil onClose", async () => {

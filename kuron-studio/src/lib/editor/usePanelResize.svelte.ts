@@ -67,6 +67,10 @@ export function usePanelResize(deps: PanelResizeDeps) {
   function down(e: PointerEvent) {
     const body = deps.getBody();
     if (collapsed || !body) return;
+    // Drag sash tak boleh menyeleksi teks (rasa Ctrl+A): kunci selection
+    // selama drag, lepas lagi di up (termasuk pointercancel).
+    e.preventDefault();
+    if (typeof document !== "undefined") document.body.style.userSelect = "none";
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     const r = body.getBoundingClientRect();
     if (columnMode) {
@@ -89,6 +93,7 @@ export function usePanelResize(deps: PanelResizeDeps) {
   }
 
   function up() {
+    if (typeof document !== "undefined") document.body.style.userSelect = "";
     if (dragW !== null) {
       if (dragW < COLLAPSE_THRESHOLD) {
         collapsed = true;

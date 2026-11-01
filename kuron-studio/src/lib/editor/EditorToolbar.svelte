@@ -1,21 +1,13 @@
-<!-- Toolbar editor (FE-4): 12 kontrol bar atas.
-  Presentasional: mode/tool/status mengalir sebagai props, semua aksi naik
-  via callback. Daftar TOOLS milik toolbar (satu-satunya pemakai). -->
+<!-- Bar atas editor: identitas + (desktop) mode pane, Detect, Simpan.
+  Mobile (slim): hanya identitas; aksi pindah ke EditorActionBar di bawahnya. -->
 <script lang="ts">
   import Button from "../ui/Button.svelte";
+  import Icon from "../ui/Icon.svelte";
   import StatusBadge from "../ui/StatusBadge.svelte";
   import { t } from "../app/i18n";
-  import type { PageStatus, Tool } from "../contracts/types";
+  import type { PageStatus } from "../contracts/types";
 
   export type PaneMode = "before" | "split" | "after";
-
-  const TOOLS: [Tool, string][] = [
-    ["select", "Pilih"],
-    ["rect", "Rect"],
-    ["ellipse", "Elips"],
-    ["freeform", "Bebas"],
-    ["tail", "Ekor"],
-  ];
 
   interface Props {
     fileName: string;
@@ -24,18 +16,16 @@
     detectEngine: string;
     bubbleCount: number;
     mode: PaneMode;
-    tool: Tool;
-    readOnlyMode: boolean;
     collapsed: boolean;
     detecting: boolean;
     dirty: boolean;
     saving: boolean;
     onClose: () => void;
     onSetMode: (m: PaneMode) => void;
-    onSetTool: (t: Tool) => void;
     onToggleCollapse: () => void;
     onRunDetect: () => void;
     onSave: () => void;
+    slim?: boolean;
   }
 
   let {
@@ -45,94 +35,75 @@
     detectEngine,
     bubbleCount,
     mode,
-    tool,
-    readOnlyMode,
     collapsed,
     detecting,
     dirty,
     saving,
     onClose,
     onSetMode,
-    onSetTool,
     onToggleCollapse,
     onRunDetect,
     onSave,
+    slim = false,
   }: Props = $props();
 </script>
 
-<div class="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line bg-surface px-5 py-2.5">
-  <Button variant="ghost" size="sm" onclick={onClose}>← Grid</Button>
+<div class="flex items-center gap-x-3 gap-y-2 border-b border-line bg-surface px-4 py-2 sm:px-5">
+  <Button variant="ghost" size="md" class="shrink-0" onclick={onClose}>← Grid</Button>
 
-  <div class="flex min-w-0 items-center gap-2.5">
-    <span class="font-display max-w-48 truncate text-sm font-semibold" title={filePath}>
+  <div class="flex min-w-0 items-center gap-2">
+    <span class="font-display max-w-28 truncate text-sm font-semibold sm:max-w-48" title={filePath}>
       {fileName}
     </span>
-    <StatusBadge {status} />
+    <span class="hidden min-[400px]:inline"><StatusBadge {status} /></span>
     <span class="tnum hidden text-xs text-ink-3 lg:inline">
       engine: {detectEngine} · {bubbleCount} bubble
     </span>
   </div>
 
-  <div class="ml-auto flex max-w-full items-center gap-2 overflow-x-auto">
-    <div class="flex shrink-0 overflow-hidden rounded-md border border-line" role="group" aria-label="Mode pane">
-      {#each [["before", "Before"], ["split", "Split"], ["after", "After"]] as [m, label] (m)}
-        <button
-          class={[
-            "h-8 border-l border-line px-3 text-xs font-medium transition-colors first:border-l-0",
-            mode === m
-              ? "bg-accent text-accent-fg"
-              : "bg-surface-2 text-ink-2 hover:bg-hover hover:text-ink",
-          ]}
-          aria-pressed={mode === m}
-          onclick={() => onSetMode(m as PaneMode)}
-        >{label}</button>
-      {/each}
+  {#if !slim}
+    <div class="ml-auto flex items-center gap-1.5 sm:gap-2">
+      <div class="flex shrink-0 overflow-hidden rounded-md border border-line" role="group" aria-label="Mode pane">
+        {#each [["before", "Before"], ["split", "Split"], ["after", "After"]] as [m, label] (m)}
+          <button
+            class={[
+              "h-8 border-l border-line px-2 text-xs font-medium transition-colors first:border-l-0 sm:px-3",
+              mode === m
+                ? "bg-accent text-accent-fg"
+                : "bg-surface-2 text-ink-2 hover:bg-hover hover:text-ink",
+            ]}
+            aria-pressed={mode === m}
+            onclick={() => onSetMode(m as PaneMode)}
+          >{label}</button>
+        {/each}
+      </div>
+      <Button
+        variant="ghost"
+        size="md"
+        class="shrink-0"
+        onclick={onToggleCollapse}
+        title={collapsed ? $t("expandSidebar") : $t("collapseSidebar")}
+        aria-label={collapsed ? $t("expandSidebar") : $t("collapseSidebar")}
+        aria-pressed={collapsed}
+      >{collapsed ? "»" : "«"}</Button>
+      <Button
+        variant={bubbleCount === 0 && !detecting ? "primary" : "default"}
+        size="md"
+        class="shrink-0"
+        onclick={onRunDetect}
+        disabled={detecting}
+        title="Detect"
+      >{#snippet leading()}<Icon name="search" />{/snippet}<span>Detect</span></Button>
+      <!-- "Tersimpan" bukan primary: state itu sudah selesai, bukan aksi.
+           Warna coral dipakai hanya saat ada perubahan yang belum disimpan. -->
+      <Button
+        variant={dirty && !saving ? "primary" : "default"}
+        size="md"
+        class="shrink-0"
+        onclick={onSave}
+        disabled={saving || !dirty}
+        title="Simpan"
+      >{#snippet leading()}<Icon name="save" />{/snippet}<span>{saving ? "Simpan…" : dirty ? "Simpan*" : "Tersimpan"}</span></Button>
     </div>
-    <div class="flex shrink-0 overflow-hidden rounded-md border border-line" role="group" aria-label="Tool gambar" title={readOnlyMode ? "Gambar hanya di Before" : undefined}>
-      {#each TOOLS as [t, label] (t)}
-        {@const drawTool = t !== "select"}
-        {@const off = drawTool && readOnlyMode}
-        <button
-          class={[
-            "h-8 border-l border-line px-3 text-xs font-medium transition-colors first:border-l-0",
-            tool === t
-              ? "bg-accent text-accent-fg"
-              : "bg-surface-2 text-ink-2 hover:bg-hover hover:text-ink",
-            off ? "cursor-not-allowed opacity-40" : "",
-          ]}
-          aria-pressed={tool === t}
-          disabled={off}
-          title={off ? "Gambar hanya di Before" : label}
-          onclick={() => onSetTool(t as Tool)}
-        >{label}</button>
-      {/each}
-    </div>
-    <Button
-      variant="ghost"
-      size="sm"
-      class="shrink-0"
-      onclick={onToggleCollapse}
-      title={collapsed ? $t("expandSidebar") : $t("collapseSidebar")}
-      aria-label={collapsed ? $t("expandSidebar") : $t("collapseSidebar")}
-      aria-pressed={collapsed}
-    >{collapsed ? "»" : "«"}</Button>
-    <Button
-      variant={bubbleCount === 0 && !detecting ? "primary" : "default"}
-      size="sm"
-      class="shrink-0"
-      onclick={onRunDetect}
-      disabled={detecting}
-    >{detecting ? "Detect…" : "Detect"}</Button>
-    <!-- "Tersimpan" bukan primary: state itu sudah selesai, bukan aksi.
-         Warna coral dipakai hanya saat ada perubahan yang belum disimpan. -->
-    <Button
-      variant={dirty && !saving ? "primary" : "default"}
-      size="sm"
-      class="shrink-0"
-      onclick={onSave}
-      disabled={saving || !dirty}
-    >
-      {saving ? "Simpan…" : dirty ? "Simpan*" : "Tersimpan"}
-    </Button>
-  </div>
+  {/if}
 </div>

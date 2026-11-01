@@ -1,5 +1,6 @@
 <script lang="ts">
   import { t } from "../app/i18n";
+  import Icon from "./Icon.svelte";
   /** Satu opsi dropdown. */
   export interface LovOption {
     value: string;
@@ -84,7 +85,7 @@
       <span class="min-w-0 flex-1 truncate text-left {selected ? '' : 'text-ink-3'}">
         {selected?.label ?? placeholder}
       </span>
-      <span class="shrink-0 text-[10px] text-ink-3" aria-hidden="true">{open ? "▴" : "▾"}</span>
+      <span class="shrink-0 text-ink-3" aria-hidden="true"><Icon name={open ? "chevron-up" : "chevron-down"} size="sm" /></span>
     </button>
     {#if open}
       <div

@@ -4,12 +4,14 @@
   drawerOpen lokal. Sempit (`narrow` dari viewport): bar ringkas +
   drawer slide-over; tombol desktop-only tetap gate `isMobile`. -->
 <script lang="ts">
+  import { tick } from "svelte";
   import iconUrl from "../../../../icon.svg";
   import { isMobile } from "../../app/device";
   import Button from "../../ui/Button.svelte";
   import Icon from "../../ui/Icon.svelte";
   import { lang, t, theme, type Lang, type Theme } from "../../app/i18n";
   import UpdateButton from "../UpdateButton.svelte";
+  import type { SnackbarTone } from "../../ui/Snackbar.svelte";
   import ProjectSwitcher from "./ProjectSwitcher.svelte";
   import type { Project } from "../../contracts/types";
   import type { ReadingDirection } from "../../contracts/types";
@@ -37,6 +39,8 @@
     onOpenDiagnostics: () => void;
     onAbout: () => void;
     onPickProject: (id: string) => void;
+    /** Hasil cek update (sukses/error) → toast global di App/AlertBanners. */
+    onUpdateToast: (message: string, tone: SnackbarTone) => void;
   }
 
   let {
@@ -61,57 +65,90 @@
     onOpenDiagnostics,
     onAbout,
     onPickProject,
+    onUpdateToast,
   }: Props = $props();
+  const OV_COUNT = 5;
   let showImportMenu = $state(false);
+  let showMoreMenu = $state(false);
   let drawerOpen = $state(false);
 
   const cycleLang = () => {
     lang.update((v: Lang) => (v === "id" ? "en" : v === "en" ? "zh" : "id"));
   };
+  /** Overflow dinamis: index pertama yang pindah ke menu ⋯ (5 = semua muat). */
+  let overflowAt = $state(OV_COUNT);
+  let barEl: HTMLDivElement | null = $state(null);
+  let fitting = false;
+
+  /** Sesuaikan berapa aksi muat: sembunyikan satu-satu sampai muat,
+   * lalu coba tampilkan lagi satu-satu. Tanpa layout (SSR/jsdom):
+   * biarkan semua tampil (overflowAt = OV_COUNT). */
+  async function fitBar() {
+    const el = barEl;
+    if (!el || fitting) return;
+    fitting = true;
+    try {
+      await tick();
+      let guard = 0;
+      while (el.scrollWidth > el.clientWidth + 1 && overflowAt > 0 && guard++ < OV_COUNT + 2) {
+        overflowAt -= 1;
+        await tick();
+      }
+      guard = 0;
+      while (overflowAt < OV_COUNT && guard++ < OV_COUNT + 2) {
+        overflowAt += 1;
+        await tick();
+        if (el.scrollWidth > el.clientWidth + 1) {
+          overflowAt -= 1;
+          await tick();
+          break;
+        }
+      }
+    } finally {
+      fitting = false;
+    }
+  }
+
+  $effect(() => {
+    const el = barEl;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => { void fitBar(); });
+    ro.observe(el);
+    void fitBar();
+    return () => ro.disconnect();
+  });
+
+  // Ukur ulang saat isi/kondisi bar berubah (provider muncul/hilang, dsb).
+  $effect(() => {
+    current; canDetect; busy; isMobile; narrow; projects.length;
+    if (barEl) void fitBar();
+  });
 </script>
 
-<svelte:window onkeydown={(e) => { if (e.key === "Escape") { showImportMenu = false; drawerOpen = false; } }} />
+<svelte:window onkeydown={(e) => { if (e.key === "Escape") { showImportMenu = false; showMoreMenu = false; drawerOpen = false; } }} />
 
 {#snippet barActions()}
   <Button variant="ghost" size="sm" class="font-mono" onclick={onToggleReadingDir} title="Urutan baca bubble">
     {readingDir === "rtl" ? "RTL→" : "←LTR"}
   </Button>
   <Button variant="ghost" size="icon" onclick={() => theme.update((v: Theme) => (v === "dark" ? "light" : "dark"))} title="Tema gelap/terang" aria-label="Tema gelap/terang">
-    {$theme === "dark" ? "◐" : "◑"}
+    <Icon name={$theme === "dark" ? "moon" : "sun"} />
   </Button>
   <Button variant="ghost" size="icon" class="font-mono" onclick={cycleLang} title="Bahasa / Language / 语言" aria-label="Ganti bahasa">
     {$lang.toUpperCase()}
   </Button>
 
-  {#if !isMobile}<div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>{/if}
+  {#if !isMobile && overflowAt > 0}<div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>{/if}
 
-  <Button variant="ghost" size="sm" onclick={onProviders} title="Providers (Ctrl/⌘+,)">{$t("providers")}</Button>
-  {#if !isMobile}<UpdateButton />{/if}
-  <Button
-    variant="ghost"
-    size="sm"
-    onclick={onBatch}
-    disabled={!current}
-    title="Batch translate (Ctrl/⌘+B)"
-  >{$t("batch")}</Button>
-  <Button variant="ghost" size="sm" onclick={onGlossary} title="Glossary">{$t("glossary")}</Button>
-  <Button
-    variant="ghost"
-    size="sm"
-    onclick={onResults}
-    disabled={!current}
-    title="Hasil & Ekspor (Ctrl/⌘+E)"
-  >{$t("resultsExport")}</Button>
+  {#if overflowAt > 0}<Button variant="ghost" size="sm" onclick={onProviders} title="Providers (Ctrl/⌘+,)">{#snippet leading()}<Icon name="key" />{/snippet}{$t("providers")}</Button>{/if}
+  {#if !isMobile}{#if overflowAt > 1}<UpdateButton onToast={onUpdateToast} />{/if}{/if}
+  {#if overflowAt > 2}<Button variant="ghost" size="sm" onclick={onBatch} disabled={!current} title="Batch translate (Ctrl/⌘+B)">{#snippet leading()}<Icon name="layers" />{/snippet}{$t("batch")}</Button>{/if}
+  {#if overflowAt > 3}<Button variant="ghost" size="sm" onclick={onGlossary} title="Glossary">{#snippet leading()}<Icon name="book" />{/snippet}{$t("glossary")}</Button>{/if}
+  {#if overflowAt > 4}<Button variant="ghost" size="sm" onclick={onResults} disabled={!current} title="Hasil & Ekspor (Ctrl/⌘+E)">{#snippet leading()}<Icon name="download" />{/snippet}{$t("resultsExport")}</Button>{/if}
 
   <div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>
 
-  <Button
-    variant="primary"
-    size="sm"
-    onclick={onDetect}
-    disabled={!canDetect || busy}
-    title="Detect semua (Ctrl/⌘+D)"
-  >{$t("detectAll")}</Button>
+  <Button variant="primary" size="sm" onclick={onDetect} disabled={!canDetect || busy} title="Detect semua (Ctrl/⌘+D)">{#snippet leading()}<Icon name="search" />{/snippet}{$t("detectAll")}</Button>
   <div
     class="relative"
     onfocusout={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) showImportMenu = false; }}
@@ -125,7 +162,7 @@
       aria-haspopup="menu"
       aria-expanded={showImportMenu}
       title={$t("importAction") + " (Ctrl/⌘+O)"}
-    >⬆ {$t("importAction")} ▾</Button>
+    >{#snippet leading()}<Icon name="upload" />{/snippet}{$t("importAction")}{#snippet trailing()}<Icon name={showImportMenu ? "chevron-up" : "chevron-down"} size="sm" />{/snippet}</Button>
     {#if showImportMenu}
       <div
         class="absolute top-full z-50 mt-1 w-44 overflow-hidden rounded-md border border-line-strong bg-surface-2 py-1"
@@ -141,7 +178,7 @@
               if (e.key === "Escape") showImportMenu = false;
               if (e.key === "ArrowDown") (e.currentTarget.nextElementSibling as HTMLElement | null)?.focus();
             }}
-          >📁 {$t("importFolder")}</button>
+          ><span aria-hidden="true" class="contents text-ink-3"><Icon name="folder" /></span>{$t("importFolder")}</button>
         {/if}
         <button
           class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-raised"
@@ -153,48 +190,87 @@
             // opsi folder disembunyikan total, bukan disabled.
             if (e.key === "ArrowUp") (e.currentTarget.previousElementSibling as HTMLElement | null)?.focus();
           }}
-        >🖼️ {$t("importFiles")}</button>
+        ><span aria-hidden="true" class="contents text-ink-3"><Icon name="image" /></span>{$t("importFiles")}</button>
       </div>
     {/if}
   </div>
 
-  {#if !isMobile}<div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>{/if}
+  <div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>
 
-  {#if !isMobile}<Button
-    variant="default"
-    size="sm"
-    onclick={onClean}
-    disabled={!current || busy}
-    title={brokenCount > 0 ? `${brokenCount} halaman gagal preview` : $t("nothingToClean")}
+  <div
+    class="relative"
+    onfocusout={(e) => { if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node | null)) showMoreMenu = false; }}
   >
-    {#if brokenCount > 0}<span class="tnum text-danger">{brokenCount}</span>{/if}
-    {$t("cleanImages")}
-  </Button>{/if}
-  <Button
-    variant="danger"
-    size="sm"
-    onclick={onDelete}
-    disabled={!current}
-  >{$t("deleteProject")}</Button>
-
-  {#if !isMobile}<div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>{/if}
-
-  {#if !isMobile}<Button
-    variant={lastInvokeError ? "danger" : "ghost"}
-    size="icon"
-    onclick={onOpenDiagnostics}
-    title={lastInvokeError
-      ? `${lastInvokeError.command}: ${lastInvokeError.error}`
-      : "Diagnostics & log"}
-    aria-label="Diagnostics"
-  >⚙</Button>{/if}
-  <Button
-    variant="ghost"
-    size="sm"
-    onclick={onAbout}
-    title={$t("about")}
-    aria-label={$t("about")}
-  >ⓘ {$t("about")}</Button>
+    <Button
+      variant="ghost"
+      size="icon"
+      onclick={() => (showMoreMenu = !showMoreMenu)}
+      onkeydown={(e) => { if (e.key === "Escape") showMoreMenu = false; }}
+      aria-haspopup="menu"
+      aria-expanded={showMoreMenu}
+      title={$t("moreMenu")}
+      aria-label={$t("moreMenu")}
+    ><Icon name="dots" /></Button>
+    {#if showMoreMenu}
+      <div
+        class="absolute top-full right-0 z-50 mt-1 w-52 overflow-hidden rounded-md border border-line-strong bg-surface-2 py-1"
+        role="menu"
+        aria-label={$t("moreMenu")}
+      >
+        {#if overflowAt <= 0}
+          <button class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-raised" role="menuitem" onclick={() => { showMoreMenu = false; onProviders(); }}><span aria-hidden="true" class="contents text-ink-3"><Icon name="key" /></span>{$t("providers")}</button>
+        {/if}
+        {#if !isMobile && overflowAt <= 1}
+          <UpdateButton label={$t("checkUpdate")} onToast={onUpdateToast} onDone={() => (showMoreMenu = false)} />
+        {/if}
+        {#if overflowAt <= 2}
+          <button class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-raised" role="menuitem" onclick={() => { showMoreMenu = false; onBatch(); }} disabled={!current}><span aria-hidden="true" class="contents text-ink-3"><Icon name="layers" /></span>{$t("batch")}</button>
+        {/if}
+        {#if overflowAt <= 3}
+          <button class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-raised" role="menuitem" onclick={() => { showMoreMenu = false; onGlossary(); }}><span aria-hidden="true" class="contents text-ink-3"><Icon name="book" /></span>{$t("glossary")}</button>
+        {/if}
+        {#if overflowAt <= 4}
+          <button class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-raised" role="menuitem" onclick={() => { showMoreMenu = false; onResults(); }} disabled={!current}><span aria-hidden="true" class="contents text-ink-3"><Icon name="download" /></span>{$t("resultsExport")}</button>
+        {/if}
+        {#if overflowAt < 5}
+          <div class="mx-2 my-1 h-px bg-line" aria-hidden="true"></div>
+        {/if}
+        {#if !isMobile}
+          <button
+            class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-raised"
+            role="menuitem"
+            onclick={() => { showMoreMenu = false; onClean(); }}
+            disabled={!current || busy}
+            onkeydown={(e) => { if (e.key === "Escape") showMoreMenu = false; }}
+            title={brokenCount > 0 ? `${brokenCount} halaman gagal preview` : $t("nothingToClean")}
+          ><span aria-hidden="true" class="contents text-ink-3"><Icon name="minus-circle" /></span>{$t("cleanImages")}{#if brokenCount > 0}<span class="tnum ml-auto text-danger">{brokenCount}</span>{/if}</button>
+        {/if}
+        <button
+          class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs text-danger transition-colors hover:bg-danger-soft/40"
+          role="menuitem"
+          onclick={() => { showMoreMenu = false; onDelete(); }}
+          disabled={!current}
+        ><span aria-hidden="true" class="contents"><Icon name="trash" /></span>{$t("deleteProject")}</button>
+        {#if !isMobile}
+          <button
+            class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-raised"
+            role="menuitem"
+            onclick={() => { showMoreMenu = false; onOpenDiagnostics(); }}
+            onkeydown={(e) => { if (e.key === "Escape") showMoreMenu = false; }}
+            title={lastInvokeError
+              ? `${lastInvokeError.command}: ${lastInvokeError.error}`
+              : "Diagnostics & log"}
+          ><span aria-hidden="true" class="contents text-ink-3"><Icon name="activity" /></span>Diagnostics</button>
+        {/if}
+        <button
+          class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-raised"
+          role="menuitem"
+          onclick={() => { showMoreMenu = false; onAbout(); }}
+          onkeydown={(e) => { if (e.key === "Escape") showMoreMenu = false; }}
+        ><span aria-hidden="true" class="contents text-ink-3"><Icon name="info" /></span>{$t("about")}</button>
+      </div>
+    {/if}
+  </div>
 {/snippet}
 
 <header class="sticky top-0 z-30 border-b border-line bg-surface/80 backdrop-blur-md">
@@ -203,23 +279,19 @@
     <h1 class="font-display shrink-0 text-base font-semibold tracking-tight">Kuron Studio</h1>
     <p class="hidden text-[11px] text-ink-3 sm:block">{$t("appTagline")}</p>
   </div>
-  <div class="flex flex-wrap items-center gap-2 px-4 py-2">
+  <div class="flex items-center justify-between gap-3 px-4 py-2">
     {#if projects.length > 0}
-      <ProjectSwitcher {current} {projects} onPick={onPickProject} />
+      <div class="flex min-w-0 items-center gap-2">
+        <ProjectSwitcher {current} {projects} onPick={onPickProject} />
+      </div>
     {/if}
 
     {#if narrow}
       <div class="ml-auto flex items-center gap-1.5">
         <Button variant="ghost" size="icon" onclick={() => (drawerOpen = true)} aria-label={$t("openMenu")} aria-haspopup="dialog">☰</Button>
-        <Button
-          variant="primary"
-          size="sm"
-          onclick={onDetect}
-          disabled={!canDetect || busy}
-        >{$t("detectAll")}</Button>
       </div>
     {:else}
-      <div class="ml-auto flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto sm:flex-none sm:flex-wrap sm:overflow-visible">
+      <div bind:this={barEl} class="ml-auto flex min-w-0 items-center gap-1.5 overflow-x-auto sm:flex-nowrap sm:overflow-visible">
         {@render barActions()}
       </div>
     {/if}
@@ -248,13 +320,16 @@
         <Button variant="primary" class="min-h-[48px] w-full" onclick={() => { drawerOpen = false; onDetect(); }} disabled={!canDetect || busy}>{$t("detectAll")}</Button>
 
         <div class="dsec" aria-hidden="true"></div>
-        <button class="drow" onclick={() => { drawerOpen = false; onProviders(); }}><span aria-hidden="true" class="dic"><Icon name="key" /></span>{$t("providers")}<span aria-hidden="true" class="dchev">›</span></button>
+        <button class="drow" onclick={() => { drawerOpen = false; onProviders(); }}><span aria-hidden="true" class="dic"><Icon name="key" /></span>{$t("providers")}<span aria-hidden="true" class="dchev"><Icon name="chevron-right" size="sm" /></span></button>
+        {#if !isMobile}
+          <UpdateButton kind="drawer" label={$t("checkUpdate")} onToast={onUpdateToast} onDone={() => (drawerOpen = false)} />
+        {/if}
         <button class="drow" onclick={() => { drawerOpen = false; onBatch(); }} disabled={!current}><span aria-hidden="true" class="dic"><Icon name="layers" /></span>{$t("batch")}</button>
-        <button class="drow" onclick={() => { drawerOpen = false; onGlossary(); }}><span aria-hidden="true" class="dic"><Icon name="book" /></span>{$t("glossary")}<span aria-hidden="true" class="dchev">›</span></button>
-        <button class="drow" onclick={() => { drawerOpen = false; onResults(); }} disabled={!current}><span aria-hidden="true" class="dic"><Icon name="download" /></span>{$t("resultsExport")}<span aria-hidden="true" class="dchev">›</span></button>
+        <button class="drow" onclick={() => { drawerOpen = false; onGlossary(); }}><span aria-hidden="true" class="dic"><Icon name="book" /></span>{$t("glossary")}<span aria-hidden="true" class="dchev"><Icon name="chevron-right" size="sm" /></span></button>
+        <button class="drow" onclick={() => { drawerOpen = false; onResults(); }} disabled={!current}><span aria-hidden="true" class="dic"><Icon name="download" /></span>{$t("resultsExport")}<span aria-hidden="true" class="dchev"><Icon name="chevron-right" size="sm" /></span></button>
 
         <div class="dsec" aria-hidden="true"></div>
-        <button class="drow" aria-expanded={showImportMenu} onclick={() => (showImportMenu = !showImportMenu)} disabled={!current || busy}><span aria-hidden="true" class="dic"><Icon name="upload" /></span>{$t("importAction")}<span aria-hidden="true" class="dchev">{showImportMenu ? "▾" : "›"}</span></button>
+        <button class="drow" aria-expanded={showImportMenu} onclick={() => (showImportMenu = !showImportMenu)} disabled={!current || busy}><span aria-hidden="true" class="dic"><Icon name="upload" /></span>{$t("importAction")}<span aria-hidden="true" class="dchev"><Icon name={showImportMenu ? "chevron-down" : "chevron-right"} size="sm" /></span></button>
         {#if showImportMenu}
           {#if !isMobile}
             <button class="drow dsub" onclick={() => { drawerOpen = false; showImportMenu = false; onImportFolder(); }} disabled={!current || busy}><span aria-hidden="true" class="dic"><Icon name="folder" /></span>{$t("importFolder")}</button>
@@ -271,37 +346,11 @@
         <button class="drow" onclick={() => theme.update((v: Theme) => (v === "dark" ? "light" : "dark"))}><span aria-hidden="true" class="dic"><Icon name={$theme === "dark" ? "moon" : "sun"} /></span>{$t("drawerTheme")}<span class="dval">{$theme === "dark" ? $t("themeDark") : $t("themeLight")}</span></button>
         <button class="drow" onclick={cycleLang}><span aria-hidden="true" class="dic"><Icon name="globe" /></span>{$t("drawerLang")}<span class="tnum dval">{$lang.toUpperCase()}</span></button>
         {#if !isMobile}
-          <button class="drow" onclick={() => { drawerOpen = false; onOpenDiagnostics(); }}><span aria-hidden="true" class="dic"><Icon name="activity" /></span>Diagnostics<span aria-hidden="true" class="dchev">›</span></button>
+          <button class="drow" onclick={() => { drawerOpen = false; onOpenDiagnostics(); }}><span aria-hidden="true" class="dic"><Icon name="activity" /></span>Diagnostics<span aria-hidden="true" class="dchev"><Icon name="chevron-right" size="sm" /></span></button>
         {/if}
-        <button class="drow" onclick={() => { drawerOpen = false; onAbout(); }}><span aria-hidden="true" class="dic"><Icon name="info" /></span>{$t("about")}<span aria-hidden="true" class="dchev">›</span></button>
+        <button class="drow" onclick={() => { drawerOpen = false; onAbout(); }}><span aria-hidden="true" class="dic"><Icon name="info" /></span>{$t("about")}<span aria-hidden="true" class="dchev"><Icon name="chevron-right" size="sm" /></span></button>
       </nav>
     </div>
   </div>
 {/if}
 
-<style>
-  .drow {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    width: 100%;
-    min-height: 48px;
-    padding: 0.5rem 0.75rem;
-    border-radius: 0.625rem;
-    font-size: 0.875rem;
-    text-align: left;
-    color: var(--ks-text);
-    transition: background-color 120ms ease;
-  }
-  .drow:hover { background: var(--ks-raised); }
-  .drow:active { background: var(--ks-hover); }
-  .drow:disabled { opacity: 0.45; }
-  .dic { width: 1.25rem; text-align: center; color: var(--ks-text-3); flex-shrink: 0; }
-  .dval { margin-left: auto; color: var(--ks-text-3); font-size: 0.8rem; }
-  .dvalDanger { margin-left: auto; color: var(--ks-danger); font-size: 0.8rem; font-weight: 600; }
-  .dchev { margin-left: auto; color: var(--ks-text-3); }
-  .dsec { height: 1px; background: var(--ks-line); margin: 0.5rem 0.25rem; }
-  .dsub { padding-left: 2.5rem; }
-  .drowDanger { color: var(--ks-danger); }
-  .drowDanger .dic { color: var(--ks-danger); }
-</style>

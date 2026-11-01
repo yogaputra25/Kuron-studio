@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import panelSrc from "./EditorPanel.svelte?raw";
 import panesSrc from "./EditorPanes.svelte?raw";
 import toolbarSrc from "./EditorToolbar.svelte?raw";
+import actionBarSrc from "./EditorActionBar.svelte?raw";
 import canvasSrc from "./CanvasEditor.svelte?raw";
 
 // Kontrak change fix-pane-switch-editor, pola-sumber seperti edit-in-bubble.test.ts:
@@ -31,8 +32,9 @@ describe("pane-switch commit (§1)", () => {
     const fn = panelSrc.slice(panelSrc.indexOf("function setMode"), panelSrc.indexOf("function setMode") + 700);
     expect(fn).toContain("afterRef?.commitEditor();");
     expect(fn.indexOf("afterRef?.commitEditor();")).toBeLessThan(fn.indexOf("mode = m;"));
-    // Switcher lewat onSetMode di toolbar, panel teruskan ke setMode.
+    // Switcher ada di toolbar (desktop) + action bar (mobile), panel teruskan ke setMode.
     expect(toolbarSrc).toContain("onSetMode(m as PaneMode)");
+    expect(actionBarSrc).toContain("onSetMode(m as PaneMode)");
     expect(panelSrc).toContain("onSetMode={(m) => setMode(m)}");
   });
   it("redraw di-export + sinkronkan background (anti split-brain)", () => {

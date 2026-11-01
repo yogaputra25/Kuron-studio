@@ -5,10 +5,10 @@
 <script lang="ts">
   import FolderChip from "../../library/FolderChip.svelte";
   import Button from "../../ui/Button.svelte";
+  import Icon from "../../ui/Icon.svelte";
   import { allPages, chipSpecs, type FolderChipList, type FolderChipSpec } from "../../library/library";
   import { t } from "../../app/i18n";
   import type { ChapterFolder, Project } from "../../contracts/types";
-
   interface Props {
     current: Project | null;
     nested: boolean;
@@ -77,7 +77,7 @@
     >
     {#each rows as r, i (i)}
       {#if r.type === "sep"}
-        <span class="text-ink-3" aria-hidden="true">›</span>
+        <span class="text-ink-3" aria-hidden="true"><Icon name="chevron-right" size="sm" /></span>
       {:else if r.type === "divider"}
         <span class="mx-1 h-4 w-px bg-line" aria-hidden="true"></span>
       {:else}

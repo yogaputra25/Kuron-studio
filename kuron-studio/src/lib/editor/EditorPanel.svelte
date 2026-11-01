@@ -3,7 +3,9 @@
   import { onDestroy, onMount } from "svelte";
   import { api } from "../contracts/api";
   import TranslationCard from "./TranslationCard.svelte";
-  import EditorToolbar, { type PaneMode } from "./EditorToolbar.svelte";
+  import EditorToolbar from "./EditorToolbar.svelte";
+  import EditorActionBar from "./EditorActionBar.svelte";
+  import type { PaneMode } from "./EditorToolbar.svelte";
   import EditorPanes, { type CanvasApi } from "./EditorPanes.svelte";
   import TranslatePanel from "../provider/TranslatePanel.svelte";
   import { rev, shouldApplyBubbles, shouldApplyTranslation } from "./useSyncedPage.svelte";
@@ -19,6 +21,7 @@
   import { t } from "../app/i18n";
   import { statusAfterBubbleSave, statusAfterTranslationSave, translationComplete } from "../library/status";
   import Button from "../ui/Button.svelte";
+  import Icon, { type IconName } from "../ui/Icon.svelte";
   import KuroMascot from "../ui/KuroMascot.svelte";
   import { usePanelResize } from "./usePanelResize.svelte";
   import Divider from "../ui/Divider.svelte";
@@ -78,6 +81,13 @@
   // (ponytail: after-true via command render_page_png bila diprotes).
   let mode = $state<PaneMode>("before");
   let tool = $state<Tool>("select");
+  const TOOLS: [Tool, string, IconName][] = [
+    ["select", "Pilih", "select"],
+    ["rect", "Rect", "rect"],
+    ["ellipse", "Elips", "ellipse"],
+    ["freeform", "Bebas", "freeform"],
+    ["tail", "Ekor", "tail"],
+  ];
   // Mode After tunggal = tak ada pane editable → tool gambar tak berlaku (D1).
   const readOnlyMode = $derived(mode === "after");
   function setTool(t: Tool) {
@@ -354,6 +364,9 @@
   }
 
   function syncScroll(from: HTMLDivElement | null, to: HTMLDivElement | null) {
+    // Pane numpuk vertikal (mobile/column): tiap pane scroll sendiri.
+    // Sync hanya masuk akal saat sebelahan (bandingkan region yang sama).
+    if (resize.columnMode) return;
     if (!from || !to || syncing) return;
     syncing = true;
     to.scrollTop = from.scrollTop;
@@ -533,27 +546,56 @@ function setBubbleFontSize(v: number | null) {
 <svelte:window onkeydown={onKey} />
 
 <div class="flex h-full flex-col">
-  <EditorToolbar
-    fileName={page.path.split(/[/\\]/).pop() ?? page.path}
-    filePath={page.path}
-    status={page.status}
-    detectEngine={detectEngine}
-    bubbleCount={bubbles.length}
-    mode={mode}
-    tool={tool}
-    readOnlyMode={readOnlyMode}
-    collapsed={resize.collapsed}
-    detecting={detecting}
-    dirty={dirty}
-    saving={saving}
-    onClose={onClose}
-    onSetMode={(m) => setMode(m)}
-    onSetTool={(t) => setTool(t)}
-    onToggleCollapse={() => resize.toggleCollapsed()}
-    onRunDetect={() => void runDetect()}
-    onSave={() => void save()}
-  />
-
+  {#if resize.columnMode}
+    <EditorToolbar
+      fileName={page.path.split(/[/\\]/).pop() ?? page.path}
+      filePath={page.path}
+      status={page.status}
+      detectEngine={detectEngine}
+      bubbleCount={bubbles.length}
+      mode={mode}
+      collapsed={resize.collapsed}
+      {detecting}
+      {dirty}
+      {saving}
+      onClose={onClose}
+      onSetMode={(m) => setMode(m)}
+      onToggleCollapse={() => resize.toggleCollapsed()}
+      onRunDetect={() => void runDetect()}
+      onSave={() => void save()}
+      slim
+    />
+    <EditorActionBar
+      {mode}
+      collapsed={resize.collapsed}
+      {detecting}
+      {dirty}
+      {saving}
+      bubbleCount={bubbles.length}
+      onSetMode={(m) => setMode(m)}
+      onToggleCollapse={() => resize.toggleCollapsed()}
+      onRunDetect={() => void runDetect()}
+      onSave={() => void save()}
+    />
+  {:else}
+    <EditorToolbar
+      fileName={page.path.split(/[/\\]/).pop() ?? page.path}
+      filePath={page.path}
+      status={page.status}
+      detectEngine={detectEngine}
+      bubbleCount={bubbles.length}
+      mode={mode}
+      collapsed={resize.collapsed}
+      {detecting}
+      {dirty}
+      {saving}
+      onClose={onClose}
+      onSetMode={(m) => setMode(m)}
+      onToggleCollapse={() => resize.toggleCollapsed()}
+      onRunDetect={() => void runDetect()}
+      onSave={() => void save()}
+    />
+  {/if}
   {#if openError}
     <p role="alert" class="border-b border-danger/30 bg-danger-soft px-4 py-1.5 text-xs text-danger">{openError}</p>
   {/if}
@@ -621,6 +663,23 @@ function setBubbleFontSize(v: number | null) {
         {#if resize.columnMode && resize.snap === 100}
           <Button variant="ghost" size="sm" onclick={() => { resize.setSnap(40); redrawAfterLayout(); }} title={$t("shrinkSheet")} aria-label={$t("shrinkSheet")}>∨ {$t("shrinkSheet")}</Button>
         {/if}
+        <div class="grid grid-cols-5 gap-1 rounded-xl border border-line bg-surface-2/60 p-1.5" role="group" aria-label="Tool gambar">
+          {#each TOOLS as [t, label, icon] (t)}
+            {@const drawTool = t !== "select"}
+            {@const off = drawTool && readOnlyMode}
+            <button
+              class={[
+                "flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-lg text-[10px] font-medium transition-colors",
+                tool === t ? "bg-accent text-accent-fg" : "text-ink-2 hover:bg-hover hover:text-ink",
+                off ? "cursor-not-allowed opacity-40" : "",
+              ]}
+              disabled={off}
+              title={off ? "Gambar hanya di Before" : label}
+              aria-pressed={tool === t}
+              onclick={() => setTool(t)}
+            ><Icon name={icon} /><span>{label}</span></button>
+          {/each}
+        </div>
         <section>
           <h3 class="mb-2.5 flex items-baseline justify-between text-[11px] font-semibold uppercase tracking-wider text-ink-3">
             Bubble
