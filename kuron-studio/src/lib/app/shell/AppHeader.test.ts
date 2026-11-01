@@ -63,4 +63,13 @@ describe("AppHeader lebar vs sempit", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Tutup menu" }));
     expect(container.querySelector('[role="dialog"]')).toBeNull();
   });
+
+  it("sempit: import expand + baris pengaturan ada", async () => {
+    renderWithI18n(AppHeader, { props: props(true) });
+    await fireEvent.click(screen.getByRole("button", { name: "Buka menu" }));
+    await fireEvent.click(screen.getByRole("button", { name: /Import/ }));
+    expect(screen.getByRole("button", { name: /Import files/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Urutan baca/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Bahasa/ })).toBeTruthy();
+  });
 });

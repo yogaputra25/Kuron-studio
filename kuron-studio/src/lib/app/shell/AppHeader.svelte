@@ -71,20 +71,7 @@
 
 <svelte:window onkeydown={(e) => { if (e.key === "Escape") { showImportMenu = false; drawerOpen = false; } }} />
 
-{#snippet barActions(inDrawer = false)}
-  {#if inDrawer}
-    <div class="flex gap-1.5" role="group" aria-label="Tampilan">
-      <Button variant="ghost" size="sm" class="trio-btn min-h-[44px] flex-1 justify-center font-mono" onclick={onToggleReadingDir} title="Urutan baca bubble">
-        {readingDir === "rtl" ? "RTL→" : "←LTR"}
-      </Button>
-      <Button variant="ghost" size="sm" class="trio-btn min-h-[44px] flex-1 justify-center" onclick={() => theme.update((v: Theme) => (v === "dark" ? "light" : "dark"))} title="Tema gelap/terang" aria-label="Tema gelap/terang">
-        {$theme === "dark" ? "◐" : "◑"}
-      </Button>
-      <Button variant="ghost" size="sm" class="trio-btn min-h-[44px] flex-1 justify-center font-mono" onclick={cycleLang} title="Bahasa / Language / 语言" aria-label="Ganti bahasa">
-        {$lang.toUpperCase()}
-      </Button>
-    </div>
-  {:else}
+{#snippet barActions()}
   <Button variant="ghost" size="sm" class="font-mono" onclick={onToggleReadingDir} title="Urutan baca bubble">
     {readingDir === "rtl" ? "RTL→" : "←LTR"}
   </Button>
@@ -96,7 +83,6 @@
   </Button>
 
   {#if !isMobile}<div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>{/if}
-  {/if}
 
   <Button variant="ghost" size="sm" onclick={onProviders} title="Providers (Ctrl/⌘+,)">{$t("providers")}</Button>
   {#if !isMobile}<UpdateButton />{/if}
@@ -246,15 +232,75 @@
       role="dialog"
       aria-modal="true"
       aria-label={$t("openMenu")}
-      class="absolute left-0 top-0 flex h-full w-72 max-w-[85vw] flex-col gap-1 overflow-y-auto border-r border-line bg-surface p-3"
+      class="absolute left-0 top-0 flex h-full w-80 max-w-[88vw] flex-col overflow-y-auto border-r border-line bg-surface"
     >
-      <div class="mb-1 flex items-center gap-2">
-        <span class="font-display text-sm font-semibold tracking-tight">Kuron Studio</span>
-        <Button variant="ghost" size="icon" class="ml-auto" aria-label={$t("close")} onclick={() => (drawerOpen = false)}>×</Button>
+      <div class="flex items-center gap-2.5 border-b border-line px-4 py-3.5">
+        <img src={iconUrl} alt="" aria-hidden="true" class="size-8 shrink-0" />
+        <div class="min-w-0">
+          <p class="font-display text-sm font-semibold tracking-tight">Kuron Studio</p>
+          <p class="truncate text-[11px] text-ink-3">{$t("appTagline")}</p>
+        </div>
+        <Button variant="ghost" size="icon" class="ml-auto shrink-0" aria-label={$t("close")} onclick={() => (drawerOpen = false)}>×</Button>
       </div>
-      <div class="grid justify-items-stretch gap-1.5 [&_.h-5]:hidden [&_button]:min-h-[44px] [&_button]:w-full [&_button]:justify-start [&_button]:px-3 [&_.trio-btn]:w-auto [&_.trio-btn]:justify-center [&_.trio-btn]:px-2">
-        {@render barActions(true)}
-      </div>
+
+      <nav class="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2" aria-label={$t("openMenu")}>
+        <Button variant="primary" class="min-h-[48px] w-full" onclick={() => { drawerOpen = false; onDetect(); }} disabled={!canDetect || busy}>{$t("detectAll")}</Button>
+
+        <div class="dsec" aria-hidden="true"></div>
+        <button class="drow" onclick={() => { drawerOpen = false; onProviders(); }}><span aria-hidden="true" class="dic">◈</span>{$t("providers")}<span aria-hidden="true" class="dchev">›</span></button>
+        <button class="drow" onclick={() => { drawerOpen = false; onBatch(); }} disabled={!current}><span aria-hidden="true" class="dic">⧉</span>{$t("batch")}</button>
+        <button class="drow" onclick={() => { drawerOpen = false; onGlossary(); }}><span aria-hidden="true" class="dic">≣</span>{$t("glossary")}<span aria-hidden="true" class="dchev">›</span></button>
+        <button class="drow" onclick={() => { drawerOpen = false; onResults(); }} disabled={!current}><span aria-hidden="true" class="dic">▤</span>{$t("resultsExport")}<span aria-hidden="true" class="dchev">›</span></button>
+
+        <div class="dsec" aria-hidden="true"></div>
+        <button class="drow" aria-expanded={showImportMenu} onclick={() => (showImportMenu = !showImportMenu)} disabled={!current || busy}><span aria-hidden="true" class="dic">⬆</span>{$t("importAction")}<span aria-hidden="true" class="dchev">{showImportMenu ? "▾" : "›"}</span></button>
+        {#if showImportMenu}
+          {#if !isMobile}
+            <button class="drow dsub" onclick={() => { drawerOpen = false; showImportMenu = false; onImportFolder(); }} disabled={!current || busy}><span aria-hidden="true" class="dic">◫</span>{$t("importFolder")}</button>
+          {/if}
+          <button class="drow dsub" onclick={() => { drawerOpen = false; showImportMenu = false; onImportFiles(); }} disabled={!current || busy}><span aria-hidden="true" class="dic">▦</span>{$t("importFiles")}</button>
+        {/if}
+        {#if !isMobile}
+          <button class="drow" onclick={() => { drawerOpen = false; onClean(); }} disabled={!current || busy}><span aria-hidden="true" class="dic">◌</span>{$t("cleanImages")}{#if brokenCount > 0}<span class="tnum dvalDanger">{brokenCount}</span>{/if}</button>
+        {/if}
+        <button class="drow drowDanger" onclick={() => { drawerOpen = false; onDelete(); }} disabled={!current}><span aria-hidden="true" class="dic">☓</span>{$t("deleteProject")}</button>
+
+        <div class="dsec" aria-hidden="true"></div>
+        <button class="drow" onclick={() => onToggleReadingDir()}><span aria-hidden="true" class="dic">⇄</span>{$t("drawerReading")}<span class="tnum dval">{readingDir === "rtl" ? "RTL→" : "←LTR"}</span></button>
+        <button class="drow" onclick={() => theme.update((v: Theme) => (v === "dark" ? "light" : "dark"))}><span aria-hidden="true" class="dic">{$theme === "dark" ? "◐" : "◑"}</span>{$t("drawerTheme")}<span class="dval">{$theme === "dark" ? $t("themeDark") : $t("themeLight")}</span></button>
+        <button class="drow" onclick={cycleLang}><span aria-hidden="true" class="dic">◍</span>{$t("drawerLang")}<span class="tnum dval">{$lang.toUpperCase()}</span></button>
+        {#if !isMobile}
+          <button class="drow" onclick={() => { drawerOpen = false; onOpenDiagnostics(); }}><span aria-hidden="true" class="dic">⚙</span>Diagnostics<span aria-hidden="true" class="dchev">›</span></button>
+        {/if}
+        <button class="drow" onclick={() => { drawerOpen = false; onAbout(); }}><span aria-hidden="true" class="dic">ⓘ</span>{$t("about")}<span aria-hidden="true" class="dchev">›</span></button>
+      </nav>
     </div>
   </div>
 {/if}
+
+<style>
+  .drow {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    min-height: 48px;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.625rem;
+    font-size: 0.875rem;
+    text-align: left;
+    color: var(--ks-text);
+    transition: background-color 120ms ease;
+  }
+  .drow:hover { background: var(--ks-raised); }
+  .drow:active { background: var(--ks-hover); }
+  .drow:disabled { opacity: 0.45; }
+  .dic { width: 1.25rem; text-align: center; color: var(--ks-text-3); flex-shrink: 0; }
+  .dval { margin-left: auto; color: var(--ks-text-3); font-size: 0.8rem; }
+  .dvalDanger { margin-left: auto; color: var(--ks-danger); font-size: 0.8rem; font-weight: 600; }
+  .dchev { margin-left: auto; color: var(--ks-text-3); }
+  .dsec { height: 1px; background: var(--ks-line); margin: 0.5rem 0.25rem; }
+  .dsub { padding-left: 2.5rem; }
+  .drowDanger { color: var(--ks-danger); }
+  .drowDanger .dic { color: var(--ks-danger); }
+</style>
