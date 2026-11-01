@@ -198,6 +198,7 @@ const STR: Record<string, Record<Lang, string>> = {
   openMenu: { en: "Open menu", id: "Buka menu", zh: "打开菜单" },
   closeMenu: { en: "Close menu", id: "Tutup menu", zh: "关闭菜单" },
   about: { en: "About", id: "Tentang", zh: "关于" },
+  license: { en: "License", id: "Lisensi", zh: "许可证" },
   version: { en: "Version", id: "Versi", zh: "版本" },
   aboutIntro: { en: "Local-first manga translation workspace: detect bubbles, translate with your own AI provider, review, and export print-ready pages.", id: "Ruang kerja terjemahan manga yang local-first: deteksi bubble, terjemahkan dengan provider AI milikmu, review, dan export halaman siap cetak.", zh: "本地优先的漫画翻译工作区：检测气泡、使用你自己的AI服务商翻译、审阅并导出可打印页面。" },
   aboutFeatures: { en: "What you can do", id: "Yang bisa dilakukan", zh: "功能一览" },
@@ -205,12 +206,8 @@ const STR: Record<string, Record<Lang, string>> = {
   aboutFeatByok: { en: "Bring your own AI key (OpenAI-compatible). Keys stay in your OS keychain.", id: "Bawa API key AI sendiri (kompatibel OpenAI). Key tersimpan di keychain OS.", zh: "自带AI密钥（兼容OpenAI）。密钥保存在系统钥匙串中。" },
   aboutFeatExport: { en: "Export JSON, PNG, PSD, CBZ, or share a ZIP — statuses stay honest per page.", id: "Export JSON, PNG, PSD, CBZ, atau bagikan ZIP — status jujur per halaman.", zh: "导出JSON、PNG、PSD、CBZ或分享ZIP——每页状态真实可信。" },
   aboutPrivacy: { en: "Privacy", id: "Privasi", zh: "隐私" },
-  aboutPrivLocal: { en: "Projects and images live in your OS app-data folder, never in this repo.", id: "Project dan gambar tinggal di folder app-data OS, tidak pernah di repo ini.", zh: "项目和图片保存在系统应用数据目录，从不进入代码仓库。" },
-  aboutPrivKeys: { en: "API keys live in the OS keychain. The app never writes secrets to logs or files.", id: "API key tinggal di keychain OS. App tidak pernah menulis secret ke log/file.", zh: "API密钥保存在系统钥匙串。应用从不把密钥写入日志或文件。" },
-  aboutPrivNoAccount: { en: "No account, no tracking. Page images are sent only to the provider you chose, when you translate.", id: "Tanpa akun, tanpa pelacakan. Gambar halaman hanya dikirim ke provider pilihanmu saat translate.", zh: "无账号、无追踪。仅在翻译时才把页面图片发给你选定的服务商。" },
   aboutTerms: { en: "Terms", id: "Syarat", zh: "条款" },
-  aboutTermsContent: { en: "You are responsible for content you import and for complying with its license.", id: "Kamu bertanggung jawab atas konten yang diimport dan kepatuhan terhadap lisensinya.", zh: "你对导入的内容及其许可合规负责。" },
-  aboutTermsQuota: { en: "AI usage bills to your own provider key. Kuron Studio ships no key and no quota.", id: "Pemakaian AI ditagih ke key providermu sendiri. Kuron Studio tidak menyediakan key/kuota.", zh: "AI用量记在你自己的服务商密钥上。Kuron Studio不提供密钥与额度。" },
+  aboutCredits: { en: "AI translations powered by Muse (Meta) — thanks for the quota and the brains.", id: "Terjemahan AI ditenagai Muse (Meta) — terima kasih atas kuota dan kecerdasannya.", zh: "AI翻译由 Muse（Meta）驱动——感谢额度与智慧。" },
   batchDlgNeedProvider: { en: "Select a provider to start.", id: "Pilih provider dulu untuk mulai.", zh: "请先选择服务商再开始。" },
 };
 

@@ -353,6 +353,13 @@ menyentuh baris lama).
 - Lanjut: Push menumpuk (`d9b25bb`, `e1440b4`) di tangan pemilik.
 ## 2026-11-01 — Fix progress card offside + overlay translate ngikut bentuk bubble
 
+## 2026-11-01 — Drawer sempit + About, tutup #29/#14
+
+- Kerja: #14: `AppHeader` pakai snippet aksi tunggal; `narrow` dari `isNarrow()/watchViewport()` (App.svelte); bar ringkas + drawer (Esc/overlay/×, min-44px, divider hidden via arbitrary variant — terbukti di CSS hasil `vite build`); gating desktop-only tetap `isMobile` (lint source-scan hijau). About: `AboutPage.svelte` baru (Panel; versi dari package.json; fitur/privasi/syarat; 16 key × 3 bahasa) + mount OverlayHost + tombol ⓘ header/drawer. Test baru 5 (AppHeader.test, AboutPage.test). #29: opsi A dinyatakan terwujud. Insiden edit: 2x PUT timpa baris tetangga (onToggleReadingDir, showDiagnostics — dikembalikan), 1x tag duplikat, 1x `aside`→`div` (a11y), 1x backdrop vs × label tabrakan (`closeMenu` baru).
+- Hasil: `pnpm check` 0/0, `pnpm test` 539/539, `vite build` ok. Commit lokal `2f3e539` (di atas commit paralel pemilik). Issue #29 + #14 dikomentari + closed.
+- Keputusan: Satu komponen + snippet (bukan 2 file header) agar tombol tak duplikat; About selalu tersedia (drawer di sempit).
+- Lanjut: Push menumpuk di pemilik; smoke manual drawer (resize <768px) + About 3 bahasa.
+
 - Kerja: (1) `ProjectCard.svelte`: tombol card tak punya `relative` sehingga progress bar `absolute inset-x-0 bottom-0` menempel ke wrapper luar (`div.relative`) — offside dari card. Tambah `relative` di button + `overflow-hidden rounded-b-md` di track. (2) `render/overlay.ts`: background overlay selalu `Konva.Rect` inset (kotak hitam) walau bubble polygon/ellipse — ganti shape-aware samakan export `paint_patch`: polygon → isi `Konva.Line` polygon, `ellipse` → isi `Konva.Ellipse`, rect → isi penuh. Teks + auto-fit (`computeTextLayout`, `wrap:none`, `txt.height(boxH)` + `verticalAlign middle`) tak berubah.
 - Hasil: `pnpm test` 56 file/524 lolos, `pnpm check` 0 error. Rust tak tersentuh. Belum smoke visual (butuh `pnpm tauri dev` manual oleh pemilik).
 - Keputusan: Tanpa openspec (bugfix kecil, paritas kanvas→export sudah ada). Tanpa commit/push.

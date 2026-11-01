@@ -30,3 +30,8 @@ export function onTranslateProgress(cb: EventCallback<TranslateProgress>): () =>
 export function onDragDrop(cb: EventCallback<DragDropEvent>): () => void {
   return toSyncUnlisten(getCurrentWebview().onDragDropEvent(cb));
 }
+
+/** Menu About bawaan (desktop) -> buka AboutPage. Payload kosong. */
+export function onShowAbout(cb: EventCallback<unknown>): () => void {
+  return toSyncUnlisten(listen<unknown>("show-about", cb));
+}

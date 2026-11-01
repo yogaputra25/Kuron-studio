@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { tick } from "svelte";
-  import { onDragDrop } from "./lib/app/events";
+  import { onDragDrop, onShowAbout } from "./lib/app/events";
+  import { matchShortcut } from "./lib/app/shortcuts";
   import { pickFiles, pickFolder } from "./lib/app/dialogs";
 
   import { isMobile, isNarrow, watchViewport } from "./lib/app/device";
@@ -71,12 +72,24 @@
     window.scrollTo(0, scrollByView[v] ?? 0);
   }
 
-  /** G/L global khusus grid (abaikan saat editor/menu/input fokus). */
+  /** G/L global + shortcut desktop Cmd/Ctrl (abaikan saat editor/input fokus). */
   function onViewKey(e: KeyboardEvent) {
-    if (selectedPage || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (selectedPage) return;
     const t = e.target as HTMLElement | null;
     const tag = t?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || !!t?.isContentEditable) return;
+    // Cmd (macOS) / Ctrl + tombol: provider, batch, hasil, detect, import.
+    const act = matchShortcut(e);
+    if (act) {
+      e.preventDefault();
+      if (act === "providers") showProviders = true;
+      else if (act === "batch" && current) showBatchDialog = true;
+      else if (act === "results" && current) showReview = true;
+      else if (act === "detect" && !busy) void detectAll();
+      else if (act === "import-files" && current && !busy) void importFiles();
+      return;
+    }
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === "g" || e.key === "G") void setPageView("grid");
     else if (e.key === "l" || e.key === "L") void setPageView("list");
   }
@@ -457,10 +470,12 @@
     // onMount tidak boleh async di Svelte 5 — return cleanup langsung.
     narrow = isNarrow();
     const unwatchViewport = watchViewport(() => (narrow = isNarrow()));
+    const offShowAbout = onShowAbout(() => { showAbout = true; });
     return () => {
       offInvoke();
       offDragDrop();
       unwatchViewport();
+      offShowAbout();
       selection.dispose();
     };
   });

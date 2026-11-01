@@ -84,21 +84,22 @@
 
   {#if !isMobile}<div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>{/if}
 
-  <Button variant="ghost" size="sm" onclick={onProviders}>{$t("providers")}</Button>
+  <Button variant="ghost" size="sm" onclick={onProviders} title="Providers (Ctrl/⌘+,)">{$t("providers")}</Button>
   {#if !isMobile}<UpdateButton />{/if}
   <Button
     variant="ghost"
     size="sm"
     onclick={onBatch}
     disabled={!current}
-    title="Batch translate"
+    title="Batch translate (Ctrl/⌘+B)"
   >{$t("batch")}</Button>
-  <Button variant="ghost" size="sm" onclick={onGlossary}>{$t("glossary")}</Button>
+  <Button variant="ghost" size="sm" onclick={onGlossary} title="Glossary">{$t("glossary")}</Button>
   <Button
     variant="ghost"
     size="sm"
     onclick={onResults}
     disabled={!current}
+    title="Hasil & Ekspor (Ctrl/⌘+E)"
   >{$t("resultsExport")}</Button>
 
   <div class="mx-1 hidden h-5 w-px bg-line sm:block"></div>
@@ -108,6 +109,7 @@
     size="sm"
     onclick={onDetect}
     disabled={!canDetect || busy}
+    title="Detect semua (Ctrl/⌘+D)"
   >{$t("detectAll")}</Button>
   <div
     class="relative"
@@ -121,6 +123,7 @@
       disabled={!current || busy}
       aria-haspopup="menu"
       aria-expanded={showImportMenu}
+      title={$t("importAction") + " (Ctrl/⌘+O)"}
     >⬆ {$t("importAction")} ▾</Button>
     {#if showImportMenu}
       <div

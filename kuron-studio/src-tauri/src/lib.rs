@@ -11,6 +11,8 @@ pub mod glossary;
 pub mod import;
 pub mod jobs;
 pub mod logging;
+#[cfg(desktop)]
+pub mod menu;
 pub mod preview_cache;
 pub mod parser;
 pub mod prompt;
@@ -76,7 +78,7 @@ impl AppState {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     use error::AppError;
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
@@ -131,6 +133,10 @@ pub fn run() {
             // M4-7: updater (desktop only); endpoints/pubkey in tauri.conf.json.
             #[cfg(desktop)]
             app.handle().plugin(tauri_plugin_updater::Builder::new().build()).map_err(AppError::store)?;
+            // Menu kustom (desktop): About bawaan macOS tak memberi event,
+            // jadi About kita = item kustom -> event `show-about`.
+            #[cfg(desktop)]
+            app.handle().set_menu(menu::build(app.handle()).map_err(AppError::store)?).map_err(AppError::store)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -176,7 +182,17 @@ pub fn run() {
             clear_cache,
             diagnostics,
             read_log
-        ])
+        ]);
+        // Menu About kustom -> frontend (AboutPage). Predefined lain
+        // ditangani OS, tak perlu listener.
+        #[cfg(desktop)]
+        let builder = builder.on_menu_event(|app, event| {
+            use tauri::Emitter;
+            if event.id() == menu::SHOW_ABOUT_ID {
+                let _ = app.emit(menu::SHOW_ABOUT_ID, ());
+            }
+        });
+        builder
         .run(tauri::generate_context!())
         .expect("kuron-studio failed to run");
 }

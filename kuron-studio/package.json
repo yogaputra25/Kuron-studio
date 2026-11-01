@@ -4,8 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "sync:legal": "mkdir -p src/lib/app/legal && cp ../LICENSE ../PRIVACY.md ../TERMS.md src/lib/app/legal/",
+    "pretest": "pnpm sync:legal",
+    "prebuild": "pnpm sync:legal",
     "dev": "vite",
-    "dev:fresh": "node scripts/dev-fresh.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
