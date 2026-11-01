@@ -81,7 +81,7 @@
 {#if hasTranslation}
   <section class="border-t border-line pt-4">
     <div class="mb-3 flex items-center gap-2">
-      <h3 class="font-display text-sm font-semibold text-ink">Terjemahan</h3>
+      <h3 class="text-[11px] font-semibold uppercase tracking-wider text-ink-3">Terjemahan</h3>
       <StatusBadge status="translated" class="ml-auto" />
     </div>
 

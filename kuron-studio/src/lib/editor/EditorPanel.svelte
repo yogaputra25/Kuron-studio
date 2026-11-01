@@ -622,9 +622,9 @@ function setBubbleFontSize(v: number | null) {
           <Button variant="ghost" size="sm" onclick={() => { resize.setSnap(40); redrawAfterLayout(); }} title={$t("shrinkSheet")} aria-label={$t("shrinkSheet")}>∨ {$t("shrinkSheet")}</Button>
         {/if}
         <section>
-          <h3 class="font-display mb-2.5 flex items-baseline justify-between text-sm font-semibold text-ink">
+          <h3 class="mb-2.5 flex items-baseline justify-between text-[11px] font-semibold uppercase tracking-wider text-ink-3">
             Bubble
-            <span class="tnum text-xs font-normal text-ink-3">{bubbles.length}</span>
+            <span class="tnum text-xs font-normal normal-case tracking-normal text-ink-3">{bubbles.length}</span>
           </h3>
           {#if bubbles.length === 0}
             <p class="rounded-md border border-dashed border-line px-3 py-4 text-center text-xs leading-relaxed text-ink-3">
@@ -662,9 +662,9 @@ function setBubbleFontSize(v: number | null) {
         </section>
 
         <section class="border-t border-line pt-5">
-          <h3 class="font-display mb-2.5 text-sm font-semibold text-ink">Batch</h3>
+          <h3 class="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-ink-3">Batch</h3>
           <Button
-            variant="default"
+            variant={bubbles.length === 0 && !batching ? "primary" : "default"}
             block
             onclick={() => runDetectAll([page.id])}
             disabled={batching}

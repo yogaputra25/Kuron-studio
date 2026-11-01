@@ -73,7 +73,7 @@
     </span>
   </div>
 
-  <div class="ml-auto flex items-center gap-2">
+  <div class="ml-auto flex max-w-full items-center gap-2 overflow-x-auto">
     <div class="flex overflow-hidden rounded-md border border-line" role="group" aria-label="Mode pane">
       {#each [["before", "Before"], ["split", "Split"], ["after", "After"]] as [m, label] (m)}
         <button
@@ -116,7 +116,7 @@
       aria-pressed={collapsed}
     >{collapsed ? "»" : "«"}</Button>
     <Button
-      variant="default"
+      variant={bubbleCount === 0 && !detecting ? "primary" : "default"}
       size="sm"
       onclick={onRunDetect}
       disabled={detecting}

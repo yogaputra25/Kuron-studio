@@ -129,9 +129,9 @@
 </script>
 
 <div class="rounded-lg border border-line bg-surface-2/60 p-4">
-  <h3 class="font-display mb-4 flex items-baseline gap-1.5 text-sm font-semibold text-ink">
+  <h3 class="mb-4 flex items-baseline gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-3">
     Translate
-    <span class="tnum text-xs font-normal text-ink-3">· {bubblesCount} bubble</span>
+    <span class="tnum text-xs font-normal normal-case tracking-normal text-ink-3">· {bubblesCount} bubble</span>
   </h3>
 
   <div class="space-y-4">
