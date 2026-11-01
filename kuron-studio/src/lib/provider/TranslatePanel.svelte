@@ -5,6 +5,7 @@
   import type { AiModelOption, MosaicQuality, PageTranslation, ProviderView, ReadingDirection, TranslateStyle } from "../contracts/types";
   import { t } from "../app/i18n";
   import Button from "../ui/Button.svelte";
+  import KuroMascot from "../ui/KuroMascot.svelte";
   import Lov from "../ui/Lov.svelte";
 
   import type { TranslateOpts } from "./translateOpts";
@@ -244,7 +245,7 @@
         block
         onclick={busy ? cancel : translate}
         disabled={!busy && !providerId}
-      >{busy ? "Batal" : "Translate"}</Button>
+      >{#if busy}<span class="inline-flex items-center gap-1.5"><KuroMascot size={18} />Batal</span>{:else}Translate{/if}</Button>
 
       {#if info}
         <p role="status" class="mt-2 text-[11px] leading-relaxed text-ink-3">{info}</p>

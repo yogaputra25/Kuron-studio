@@ -6,6 +6,7 @@
   import { toBatchInput } from "./translateOpts";
   import { t } from "../app/i18n";
   import Button from "../ui/Button.svelte";
+  import KuroMascot from "../ui/KuroMascot.svelte";
   import Panel from "../ui/Panel.svelte";
   import type { BatchOpts, Page } from "../contracts/types";
 
@@ -68,22 +69,29 @@
 {/snippet}
 
 <Panel title={$t("batchTitle")} {onClose} {footer}>
-  <p class="tnum mb-2 text-xs text-ink-3">
-    {targets.length} halaman · {batch.done}/{batch.total} {$t("done")} · {$t("failed")}: {batch.failed.length}
-  </p>
+  <div class="mb-3 flex items-center gap-3">
+    {#if running}
+      <KuroMascot size={52} progress={pct} />
+    {/if}
+    <div class="min-w-0 flex-1">
+      <p class="tnum mb-2 text-xs text-ink-3">
+        {targets.length} halaman · {batch.done}/{batch.total} {$t("done")} · {$t("failed")}: {batch.failed.length}
+      </p>
 
-  <div
-    class="mb-3 h-1.5 overflow-hidden rounded-full bg-raised"
-    role="progressbar"
-    aria-valuenow={pct}
-    aria-valuemin={0}
-    aria-valuemax={100}
-    aria-label="Progres batch"
-  >
-    <div
-      class="h-full rounded-full bg-accent transition-[width] duration-200"
-      style={`width: ${pct}%`}
-    ></div>
+      <div
+        class="h-1.5 overflow-hidden rounded-full bg-raised"
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="Progres batch"
+      >
+        <div
+          class="h-full rounded-full bg-accent transition-[width] duration-200"
+          style={`width: ${pct}%`}
+        ></div>
+      </div>
+    </div>
   </div>
 
   {#if error}

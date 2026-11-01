@@ -46,7 +46,12 @@ describe("no raw Tailwind palette in Svelte (theme-token discipline)", () => {
   }
 });
 
-const HEX_ALLOWLIST: Record<string, string> = {};
+const HEX_ALLOWLIST: Record<string, string> = {
+  // Ilustrasi brand (bukan UI chrome): badan/mata/sparkle Kuro punya warna
+  // identitas sendiri yang tidak berubah ikut tema; aksen pink-nya tetap
+  // pakai var(--ks-accent).
+  "KuroMascot.svelte": "brand illustration palette",
+};
 
 describe("no hex/rgba literals in Svelte (illustration tokens only)", () => {
   const files = svelteFiles(SRC);

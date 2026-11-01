@@ -366,3 +366,10 @@ menyentuh baris lama).
 - Hasil: Gate hijau — `cargo test` 178 lib ok (1 flaky paralel `untranslated_bubble_save_sets_detected` lolos saat rerun, file tak tersentuh), clippy bersih, `pnpm test` 527 lolos, `pnpm check` 0 error. Tanpa commit/push.
 - Keputusan: Threat model jujur — enkripsi lindungi dari pengintip kasual/backup tanpa file kunci, bukan dari attacker se-uid; yang dihilangkan popup Keychain, bukan klaim absolut. Tanpa master password (UX lebih buruk). Hapus `keyring` = follow-up setelah satu rilis.
 - Lanjut: Smoke `pnpm tauri dev` — provider lama (keychain) harus termigrasi otomatis sekali (log `provider_keys_migrated`), popup Keychain tidak muncul lagi di get_providers/translate; commit oleh pemilik.
+
+## 2026-11-01 — Branding Kuro: logo + maskot loading
+
+- Kerja: (1) Openspec `changes/kuro-mascot-branding/`. (2) `kuron-studio/icon.svg` ditulis ulang → wajah Kuro adaptasi `prototype/kuro-a.svg` nhasixapp (body dicerahkan agar terbaca di bg gelap) — header (`AppHeader` impor file ini) ikut baru; regenerasi `src-tauri/icons/*` via `tauri icon icon.svg`. (3) Komponen baru `src/lib/ui/KuroMascot.svelte`: SVG inline, pink → `var(--ks-accent)` (ikut tema), kedip 4.2s + napas, mati saat `prefers-reduced-motion`, prop `progress` tampilkan ring ala `kuro-splash.svg`, dekoratif `aria-hidden`. (4) Pasang: BatchPanel ring 52px + persen saat running; TranslatePanel mini 18px di tombol Batal; EditorPanel mini 16px di tombol Detect saat batching. Empty state tidak digambar (DESIGN: empty state = aksi, bukan ilustrasi). (5) `HEX_ALLOWLIST` di `lint.test.ts` beri entri KuroMascot (palet ilustrasi brand, bukan chrome UI) — test kontrak token tetap hijau.
+- Hasil: `pnpm test` 532 lolos, `pnpm check` 0 error. Rust tak tersentuh. Tanpa commit/push.
+- Keputusan: Tanpa Figma/computer-use — aset SVG sudah ada dan portable; icon native dari `icon.svg` (bukan `logo_app.webp`) agar header ↔ OS konsisten. Warna brand maskot dipertahankan, aksen pink ikut token accent.
+- Lanjut: Smoke `pnpm tauri dev` — header logo Kuro, jalan batch (ring + persen), translate + detect (mini maskot di tombol busy); commit oleh pemilik (termasuk file biner icons/).

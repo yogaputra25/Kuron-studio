@@ -19,6 +19,7 @@
   import { t } from "../app/i18n";
   import { statusAfterBubbleSave, statusAfterTranslationSave, translationComplete } from "../library/status";
   import Button from "../ui/Button.svelte";
+  import KuroMascot from "../ui/KuroMascot.svelte";
   import { usePanelResize } from "./usePanelResize.svelte";
   import Divider from "../ui/Divider.svelte";
 
@@ -667,7 +668,7 @@ function setBubbleFontSize(v: number | null) {
             block
             onclick={() => runDetectAll([page.id])}
             disabled={batching}
-          >{batching ? $t("running") : "Detect halaman ini"}</Button>
+          >{#if batching}<span class="inline-flex items-center gap-1.5"><KuroMascot size={16} />{$t("running")}</span>{:else}Detect halaman ini{/if}</Button>
           <p class="mt-2.5 text-[11px] leading-relaxed text-ink-3">
             Hapus: pilih bubble + <kbd class="font-mono text-ink-2">Delete</kbd>.
             Simpan: <kbd class="font-mono text-ink-2">Ctrl</kbd>+<kbd class="font-mono text-ink-2">S</kbd>.
