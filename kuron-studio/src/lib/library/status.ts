@@ -69,15 +69,20 @@ export function sortPagesByBubbles(pages: Page[], dir: 1 | -1 = 1): Page[] {
     .map(({ p }) => p);
 }
 
-/** Bubble terjemahan minimal: cukup field `translated` untuk completeness. */
+/** Bubble terjemahan minimal: perlu `original` (sumber) + `translated` (hasil). */
 export interface TrBubble {
+  original: string;
   translated: string;
 }
 
-/** Lengkap = flag manual ATAU semua bubble ada isi (non-blank). */
+/** Lengkap = manual ATAU semua bubble BERISI terjemahan (non-blank).
+ * Bubble yang `original`-nya kosong ikut diabaikan: tidak ada teks sumber
+ * = tidak ada yang bisa diterjemahkan (mis. kepotong tepi gambar).
+ * Harus identik dengan backend `translation_complete` (translation.rs). */
 export function translationComplete(bubbles: TrBubble[], manualDone?: boolean): boolean {
   if (manualDone) return true;
-  return bubbles.length > 0 && bubbles.every((b) => b.translated.trim() !== "");
+  const withSource = bubbles.filter((b) => b.original.trim() !== "");
+  return withSource.length > 0 && withSource.every((b) => b.translated.trim() !== "");
 }
 
 /**

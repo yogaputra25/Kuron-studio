@@ -61,6 +61,8 @@ export interface BatchExtra {
   pageIds: string[];
   providerId: string;
   readingDirection: ReadingDirection;
+  /** Deadline per halaman (detik); undefined = hilang dari wire (backend default 900). */
+  timeoutSecs?: number | undefined;
 }
 
 /** Payload translate_batch: tanpa trim, tanpa glossary (verbatim lama). */
@@ -75,6 +77,7 @@ export function toBatchInput(opts: TranslateOpts, extra: BatchExtra): TranslateB
     readingDirection: extra.readingDirection,
     ...(opts.customPrompt ? { customPrompt: opts.customPrompt } : {}),
     ...(opts.model ? { model: opts.model } : {}),
+    ...(extra.timeoutSecs != null ? { timeoutSecs: extra.timeoutSecs } : {}),
   };
 }
 

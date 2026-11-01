@@ -251,6 +251,8 @@ export interface TranslateBatchInput {
   skipSfx: boolean;
   mosaicQuality: MosaicQuality;
   readingDirection: ReadingDirection;
+  /** Deadline per halaman (detik); absen = backend pakai default 900. */
+  timeoutSecs?: number;
   glossary?: string;
   customPrompt?: string;
   model?: string;

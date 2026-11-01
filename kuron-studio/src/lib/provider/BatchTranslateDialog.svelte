@@ -59,7 +59,10 @@
   let skipSfx = $state(savedOpts.skipSfx);
   let mosaicQuality = $state<MosaicQuality>(savedOpts.mosaicQuality as MosaicQuality);
   let customPrompt = $state(savedOpts.customPrompt);
-  let scope = $state<"selected" | "folder" | "visible">("selected");
+  // eslint-disable-next-line svelte/no-state-referenced-locally
+  // Sengaja nilai awal: dialog mount ulang tiap dibuka, jadi ini = seleksi saat dibuka.
+  // svelte-ignore state_referenced_locally
+  let scope = $state<"selected" | "folder" | "visible">(selectedIds.length > 0 ? "selected" : "visible");
   /** Lewati halaman berstatus translated. */
   let skipDone = $state(true);
 
@@ -121,7 +124,7 @@
   });
 
   function submit() {
-    if (!providerId) return;
+    if (!providerId || pageIds.length === 0) return;
     const opts: TranslateOpts = {
       targetLang,
       style,
@@ -231,10 +234,12 @@
     <p class="text-[11px] leading-relaxed text-ink-3">{$t("batchDlgNoBubbleNote")}</p>
 
     <div class="flex items-center gap-2 border-t border-line pt-4">
-      <Button variant="primary" onclick={submit} disabled={!providerId}>{$t("batchDlgStart")}</Button>
+      <Button variant="primary" onclick={submit} disabled={!providerId || pageIds.length === 0}>{$t("batchDlgStart")}</Button>
       <Button variant="default" onclick={onClose}>{$t("batchDlgCancel")}</Button>
       {#if !providerId}
         <p role="status" class="text-[11px] leading-relaxed text-ink-3">{$t("batchDlgNeedProvider")}</p>
+      {:else if pageIds.length === 0}
+        <p role="status" class="text-[11px] leading-relaxed text-ink-3">{$t("batchDlgEmptyScope")}</p>
       {/if}
     </div>
   </div>

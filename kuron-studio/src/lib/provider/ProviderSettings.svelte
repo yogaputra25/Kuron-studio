@@ -8,6 +8,7 @@
   import Field from "../ui/Field.svelte";
   import Panel from "../ui/Panel.svelte";
   import Lov from "../ui/Lov.svelte";
+  import { read, STORAGE_KEYS, write } from "../app/storage";
 
   interface Props {
     onClose: () => void;
@@ -31,6 +32,20 @@
   let validMsg = $state("");
   let validOk = $state<boolean | null>(null);
   let visionOnly = $state(false);
+  // Timeout batch per halaman (menit). Disimpan via write() saat berubah & valid;
+  // baca awal pakai guard 1..1440, fallback 15 (default).
+  let batchTimeout = $state(
+    String(read(STORAGE_KEYS.batchTimeout, 15, (v) => Number.isFinite(v) && v >= 1 && v <= 1440)),
+  );
+  const batchTimeoutNum = $derived(Number(batchTimeout));
+  const batchTimeoutError = $derived(
+    batchTimeout.trim() === "" || !Number.isFinite(batchTimeoutNum) || batchTimeoutNum < 1 || batchTimeoutNum > 1440
+      ? $t("batchTimeoutInvalid")
+      : "",
+  );
+  function saveBatchTimeout() {
+    if (!batchTimeoutError) write(STORAGE_KEYS.batchTimeout, batchTimeoutNum);
+  }
   const shownModels = $derived(visionOnly ? models.filter((m) => m.vision) : models);
 
   const typeLabel = (t: string) => PROVIDER_TYPES.find((p) => p.value === t)?.label ?? t;
@@ -221,6 +236,19 @@
       <li class="py-4 text-center text-xs text-ink-3">Belum ada provider. Tambah di bawah.</li>
     {/each}
   </ul>
+  <div class="mb-4 rounded-lg border border-line bg-surface-2/60 p-4">
+    <h3 class="font-display mb-3 text-sm font-semibold text-ink">{$t("batch")}</h3>
+    <Field
+      label={$t("batchTimeoutLabel")}
+      type="number"
+      min="1"
+      max="1440"
+      bind:value={batchTimeout}
+      hint={$t("batchTimeoutHint")}
+      error={batchTimeoutError}
+      oninput={saveBatchTimeout}
+    />
+  </div>
 
   <div class="rounded-lg border border-line bg-surface-2/60 p-5">
     <h3 class="font-display mb-4 text-sm font-semibold text-ink">
