@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  LAYOUT_FILL,
   LAYOUT_LINE_HEIGHT,
   LAYOUT_MAX_FONT,
   LAYOUT_MIN_FONT,
@@ -42,8 +43,8 @@ describe("wrapLines", () => {
 
 describe("computeTextLayout", () => {
   it("memilih ukuran terbesar yang bloknya masih muat tinggi kotak", () => {
-    // innerH = 20 (padding 0). Satu baris butuh fontSize * 1.25 <= 20 → fs <= 16.
-    const out = computeTextLayout("aaaa bbbb", 100, 20, mono, { padding: 0 });
+    // innerH = 20 (padding 0, fill 1). Satu baris butuh fontSize * 1.25 <= 20 → fs <= 16.
+    const out = computeTextLayout("aaaa bbbb", 100, 20, mono, { padding: 0, fillFactor: 1 });
     expect(out.fontSize).toBe(16);
     expect(out.lines).toEqual(["aaaa bbbb"]);
   });
@@ -54,7 +55,7 @@ describe("computeTextLayout", () => {
   });
 
   it("padding mempersempit lebar efektif dan memendekkan blok", () => {
-    // Lebar dalam = 100 - 8 = 92 → 18 karakter (@fs10 = 90px) muat, 19 tidak.
+    // Lebar dalam = (100 - 2*padding) × fill → 19 a (@fs10 = 95px) tak muat sebaris.
     const out = computeTextLayout("a".repeat(19), 100, 400, mono, { max: 10, min: 10 });
     expect(out.padding).toBe(LAYOUT_PADDING);
     expect(out.lines.length).toBe(2);
@@ -87,6 +88,29 @@ describe("ukuran font manual (export-text-parity)", () => {
   it("null atau 0 kembali ke auto-fit", () => {
     expect(computeTextLayout("halo", 400, 400, mono, { fontSize: null }).fontSize).toBe(LAYOUT_MAX_FONT);
     expect(computeTextLayout("halo", 400, 400, mono, { fontSize: 0 }).fontSize).toBe(LAYOUT_MAX_FONT);
+  });
+});
+
+describe("faktor isi (fillFactor)", () => {
+  it("default menyisakan margin: blok <= fill × tinggi kotak-dalam", () => {
+    const text = "kata ".repeat(20).trim();
+    const lay = computeTextLayout(text, 200, 200, mono);
+    const inner = 200 - LAYOUT_PADDING * 2;
+    expect(lay.lines.length * lay.fontSize * LAYOUT_LINE_HEIGHT)
+      .toBeLessThanOrEqual(inner * LAYOUT_FILL + 1e-9);
+  });
+
+  it("faktor lebih kecil = font lebih kecil atau sama", () => {
+    const text = "kata ".repeat(20).trim();
+    const penuh = computeTextLayout(text, 200, 200, mono, { fillFactor: 1 });
+    const hemat = computeTextLayout(text, 200, 200, mono, { fillFactor: 0.5 });
+    expect(hemat.fontSize).toBeLessThanOrEqual(penuh.fontSize);
+  });
+
+  it("manual user tidak kena faktor isi", () => {
+    const a = computeTextLayout("aaaa bbbb cccc", 60, 400, mono, { fontSize: 20 });
+    const b = computeTextLayout("aaaa bbbb cccc", 60, 400, mono, { fontSize: 20, fillFactor: 0.5 });
+    expect(b.lines).toEqual(a.lines);
   });
 });
 

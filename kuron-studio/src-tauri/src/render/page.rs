@@ -267,6 +267,7 @@ fn draw_text(img: &mut RgbImage, s: &str, x0: i32, y0: i32, px: f32) {
 struct LayoutContracts {
     line_height: f32,
     padding: i32,
+    fill_factor: f32,
     min_font: f32,
     max_font: f32,
     font_step: f32,
@@ -287,14 +288,17 @@ fn layout() -> &'static LayoutContracts {
 }
 
 /// Port `computeTextLayout` (`src/lib/textLayout.ts`) untuk jalur fallback:
-/// ukuran huruf TERBESAR yang blok teksnya masih muat TINGGI kotak.
+/// ukuran huruf TERBESAR yang blok teksnya masih muat `fill_factor` × kotak.
+/// Auto-fit membungkus + menyusut terhadap area virtual itu, jadi hasil akhir
+/// menyisakan margin di semua sisi (tanpa ini teks mepet outline).
 ///
 /// Aturannya harus sama dengan kanvas; yang berbeda hanya sumber metrik
 /// (TTF sistem di sini, Konva di kanvas). Kalau satu sisi mengubah rumusnya,
 /// ubah keduanya — atau test kontrak konstanta akan gagal lebih dulu.
 fn layout_from_text(text: &str, w: i32, h: i32, shape: Option<&[[i32; 2]]>) -> (f32, Vec<String>) {
-    let inner_w = (w - layout().padding * 2).max(1) as u32;
-    let inner_h = (h - layout().padding * 2).max(1) as f32;
+    let fill = layout().fill_factor;
+    let inner_w = (((w - layout().padding * 2).max(1) as f32) * fill).max(1.0) as u32;
+    let inner_h = (((h - layout().padding * 2).max(1) as f32) * fill).max(1.0);
     let valid_shape = shape.filter(|s| s.len() >= 3);
     if valid_shape.is_none() {
         let mut font = layout().max_font;
@@ -786,6 +790,7 @@ mod tests {
         let f = |k: &str| v[k].as_f64().unwrap() as f32;
         assert_eq!(l.line_height, f("lineHeight"));
         assert_eq!(l.padding, v["padding"].as_i64().unwrap() as i32);
+        assert_eq!(l.fill_factor, f("fillFactor"));
         assert_eq!(l.min_font, f("minFont"));
         assert_eq!(l.max_font, f("maxFont"));
         assert_eq!(l.font_step, f("fontStep"));
@@ -1076,7 +1081,7 @@ mod text_position_tests {
         let s = tailed_shape();
         let (lo, hi) = body_span(&s, 200, 300, layout().padding).expect("badan harus ketemu");
         assert!(hi <= 152.0, "ekor (mulai y=150) harus di luar span: hi={hi}");
-        assert!(lo <= 4.0, "badan mulai dari atas");
+        assert!(lo <= layout().padding as f32, "badan mulai dari atas");
         let text = "kata ".repeat(30).trim().to_string();
         let (font, lines) = layout_from_text(&text, 200, 300, Some(&s));
         assert!(font > layout().min_font, "font tidak terjepit selebar ekor");

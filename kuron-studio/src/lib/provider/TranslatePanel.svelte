@@ -20,9 +20,15 @@
     onOptsChange: (o: TranslateOpts) => void;
     onTranslated: (t: PageTranslation) => void;
     onError: (msg: string) => void;
+    /**
+     * Dipanggil sebelum translate; kembalikan false untuk membatalkan
+     * (mis. penyimpanan gagal). Dipakai EditorPanel untuk menyimpan bubble
+     * manual dulu — backend hanya membaca geometri TERSIMPAN, bukan kanvas.
+     */
+    onBeforeTranslate?: () => Promise<boolean>;
   }
 
-  let { pageId, providerId, bubblesCount, readingDir, originals, onProviderChange, onOptsChange, onTranslated, onError }: Props = $props();
+  let { pageId, providerId, bubblesCount, readingDir, originals, onProviderChange, onOptsChange, onTranslated, onError, onBeforeTranslate }: Props = $props();
 
   let providers = $state<ProviderView[]>([]);
   let targetLang = $state("id");
@@ -89,6 +95,10 @@
     busy = true; cancelled = false; info = "";
     const t0 = performance.now();
     try {
+      if (onBeforeTranslate) {
+        const ok = await onBeforeTranslate();
+        if (!ok || cancelled) return; // save gagal / dibatalkan: jangan translate geometri basi
+      }
       const t = await api.translatePage(toTranslateArgs(
         { targetLang, style, skipSfx, mosaicQuality, customPrompt, model },
         { pageId, providerId, readingDirection: readingDir, glossary },

@@ -1,6 +1,6 @@
 // Overlay teks terjemahan (FE-5 canvas-redraw-split 2.2).
-// Pindah verbatim dari redraw(): bg rect + teks per baris di chord
-// (cermin draw_layout Rust) atau blok tengah. Putih/hitam = konstanta
+// Pindah verbatim dari redraw(): bg ngikut bentuk bubble + teks per baris
+// di chord (cermin draw_layout Rust) atau blok tengah. Putih/hitam = konstanta
 // fungsional (lihat themeColors.ts), bukan token tema.
 import Konva from "konva";
 import type { BubbleBox, BubbleTranslation } from "../../contracts/types";
@@ -32,16 +32,44 @@ export function appendOverlay(o: OverlayOpts): void {
   const boxW = Math.max(12, (b.w - lay.padding * 2) * s);
   const boxH = Math.max(12, (b.h - lay.padding * 2) * s);
 
-  const bgR = new Konva.Rect({
-    x: pad,
-    y: pad,
-    width: boxW,
-    height: boxH,
-    fill: tr.needsWhitePatch ? "#ffffff" : "rgba(0,0,0,0.78)",
-    cornerRadius: 4,
-    listening: false,
-  });
-  group.add(bgR);
+  // Background mengikuti bentuk bubble (bukan kotak inset): polygon → isi
+  // polygon, ellipse → isi elips, rect → isi penuh. Paritas dengan export
+  // (`paint_patch` di render/page.rs) yang mengisi shape. Ukuran font tetap
+  // dari `computeTextLayout` (auto-fit terbesar yang muat).
+  const bgFill = tr.needsWhitePatch ? "#ffffff" : "rgba(0,0,0,0.78)";
+  if (shapeRel && shapeRel.length >= 3) {
+    group.add(
+      new Konva.Line({
+        points: shapeRel.flatMap(([px, py]) => [px * s, py * s]),
+        closed: true,
+        fill: bgFill,
+        listening: false,
+      }),
+    );
+  } else if (b.kind === "ellipse") {
+    group.add(
+      new Konva.Ellipse({
+        x: (b.w * s) / 2,
+        y: (b.h * s) / 2,
+        radiusX: (b.w * s) / 2,
+        radiusY: (b.h * s) / 2,
+        fill: bgFill,
+        listening: false,
+      }),
+    );
+  } else {
+    group.add(
+      new Konva.Rect({
+        x: 0,
+        y: 0,
+        width: b.w * s,
+        height: b.h * s,
+        fill: bgFill,
+        cornerRadius: 6,
+        listening: false,
+      }),
+    );
+  }
   const txtFill = tr.needsWhitePatch ? "#111" : "#fff";
   // text-fit-polygon: bila shape ada, tiap baris digambar sendiri
   // tengah pada chord-nya (cermin `draw_layout` Rust). Tanpa shape =

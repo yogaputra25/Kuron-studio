@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   BODY_MIN_FRAC,
+  LAYOUT_FILL,
   LAYOUT_FONT_STEP,
   LAYOUT_LINE_HEIGHT,
   LAYOUT_MAX_FONT,
@@ -27,6 +28,7 @@ describe("layout constants contract (TS canvas == JSON)", () => {
     expect(LAYOUT_FONT_STEP).toBe(layout.fontStep);
     expect(LAYOUT_LINE_HEIGHT).toBe(layout.lineHeight);
     expect(LAYOUT_PADDING).toBe(layout.padding);
+    expect(LAYOUT_FILL).toBe(layout.fillFactor);
     expect(BODY_MIN_FRAC).toBe(layout.bodyMinFrac);
   });
 

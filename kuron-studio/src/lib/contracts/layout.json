@@ -1,6 +1,7 @@
 {
   "lineHeight": 1.25,
-  "padding": 4,
+  "padding": 8,
+  "fillFactor": 0.7,
   "minFont": 10,
   "maxFont": 72,
   "fontStep": 0.5,

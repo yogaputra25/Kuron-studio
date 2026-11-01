@@ -55,12 +55,24 @@ export const LAYOUT_PADDING: number = layout.padding;
 export const LAYOUT_MIN_FONT: number = layout.minFont;
 export const LAYOUT_MAX_FONT: number = layout.maxFont;
 export const LAYOUT_FONT_STEP: number = layout.fontStep;
+/**
+ * Fraksi area teks yang boleh diisi. Auto-fit mencari font terbesar yang
+ * bloknya muat `fill` × kotak-dalam — sisanya margin napas di semua sisi.
+ * Tanpa ini teks mengisi ~100% kotak dan mepet ke outline (terlihat
+ * "kegedean"). Manual user (`fontSize`) tidak kena faktor ini.
+ */
+export const LAYOUT_FILL: number = layout.fillFactor;
 export interface LayoutOpts {
   padding?: number;
   lineHeight?: number;
   min?: number;
   max?: number;
   step?: number;
+  /**
+   * Fraksi isi area teks (0..1]. Default `LAYOUT_FILL` dari `layout.json`.
+   * `1` = perilaku lama (isi penuh). Bisa dioverride test.
+   */
+  fillFactor?: number;
   /**
    * Ukuran manual dari user. Bila diisi, auto-fit DILEWATI — ukuran itu
    * dipakai apa adanya (teks boleh luber; itu keputusan user, dan export
@@ -265,7 +277,7 @@ export function lineBands(
 
 /**
  * Hitung layout final: ukuran huruf terbesar yang blok teksnya masih muat
- * tinggi kotak, beserta baris finalnya.
+ * `fillFactor` × kotak-dalam, beserta baris finalnya.
  *
  * Tinggi blok dihitung aritmetika (`n * fontSize * lineHeight`), bukan lewat
  * pengukuran perender: kanvas (Konva) dan export (Rust) sama-sama memajukan
@@ -284,9 +296,14 @@ export function computeTextLayout(
   const min = opts.min ?? LAYOUT_MIN_FONT;
   const max = Math.max(opts.max ?? LAYOUT_MAX_FONT, min);
   const step = opts.step ?? LAYOUT_FONT_STEP;
-
-  const innerW = Math.max(1, w - padding * 2);
-  const innerH = Math.max(1, h - padding * 2);
+  // Area teks virtual = kotak-dalam × fill. Auto-fit membungkus + menyusut
+  // terhadap area ini, jadi hasil akhir menyisakan margin di semua sisi.
+  // Manual user memakai kotak-dalam penuh (keputusan eksplisit, boleh luber).
+  const fill = opts.fillFactor ?? LAYOUT_FILL;
+  const rawW = Math.max(1, w - padding * 2);
+  const rawH = Math.max(1, h - padding * 2);
+  const innerW = Math.max(1, rawW * fill);
+  const innerH = Math.max(1, rawH * fill);
 
   const manual = opts.fontSize ?? 0;
   // Jalur polygon: tiap baris dibatasi chord pada pitanya (D1). Tanpa shape
@@ -333,8 +350,10 @@ export function computeTextLayout(
   }
 
   // Ukuran manual dari user: lewati auto-fit (nilai `manual` di atas).
+  // Dibungkus pada kotak-dalam PENUH (tanpa faktor isi): ukuran eksplisit
+  // user tidak disusutkan diam-diam.
   if (manual > 0) {
-    return { fontSize: manual, lineHeight, padding, lines: wrapLines(text, innerW, manual, m) };
+    return { fontSize: manual, lineHeight, padding, lines: wrapLines(text, rawW, manual, m) };
   }
 
   if (!(step > 0)) {

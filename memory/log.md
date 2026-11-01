@@ -331,3 +331,31 @@ menyentuh baris lama).
 - Hasil: `pnpm test` 56 file/524 lolos (naik dari 497: test baru Yoga `BatchTranslateDialog` + `progressStats` + port kita), `pnpm check` 1008 file 0 error, `cargo test` 12 suite ok, `clippy` bersih.
 - Keputusan: Resolve = gabung dua intent (konsolidasi lint + struktur baru Yoga; behavioral + assertion baru Yoga), bukan pilih satu sisi. Satu `git add` sempat tak menempel (`UU` persisten) — diverifikasi via `git ls-files -u` + add ulang sebelum commit.
 - Lanjut: Push + review PR #78 oleh pemilik; smoke manual translate.
+
+## 2026-11-01 — Tutup epik #38/#39 (verifikasi + sisa DoD di main)
+
+- Kerja: Verifikasi DoD kedua epic di `main`. #38 kurang 2: (1) `commands/import/` → `src/import.rs` top-level (pure move, `git mv`; wiring `lib.rs`/`folder_ops.rs`/`tests/common`, `super::` → path absolut). (2) `cancel`/`prev_status` keluar dari `AppState` → `translate/cancel.rs::CancelState` (manage terpisah); pipeline pakai `Ctx{app,cancel}`; 5 command ambil `State<CancelState>` (JS unchanged); `JobRegistry::cancel/is_cancelled` teruskan CancelState; semua constructor test + mock app diperbarui. Insiden kecil: 1x `#[tauri::command]` terhapus (PUT timpa atribut — dikembalikan), 1x `&Ctx` tanpa lifetime (E0726 — 11 titik), 1x `jobs` mod tertimpa (dikembalikan), 2 screenshot liar ikut `git add -A` (dikeluarkan via amend, file diamankan di `/tmp/kuron-stray/`).
+- Hasil: Gate hijau — `cargo test` 175 lib + 11 target ok, `clippy` bersih, `pnpm test` 524/524, `pnpm check` 0 error. Baris: 283/88/134. Commit lokal `d9b25bb` di `main` (BELUM push). Issue #38 + #39 dikomentari bukti + ditutup via `gh` (completed).
+- Keputusan: Edge `import.rs` → `commands::project::{extensions,image_exts}` disengaja (konstanta kontrak milik lane #60); satu edge test-only ke `commands::detect` diterima. Push + smoke manual oleh pemilik.
+- Lanjut: Push `main`, smoke manual translate, epik #37 FE (milik Yoga: #50 dkk), fitur #65/#66/#67.
+
+## 2026-11-01 — Fix progress card offside + overlay translate ngikut bentuk bubble
+
+- Kerja: (1) `ProjectCard.svelte`: tombol card tak punya `relative` sehingga progress bar `absolute inset-x-0 bottom-0` menempel ke wrapper luar (`div.relative`) — offside dari card. Tambah `relative` di button + `overflow-hidden rounded-b-md` di track. (2) `render/overlay.ts`: background overlay selalu `Konva.Rect` inset (kotak hitam) walau bubble polygon/ellipse — ganti shape-aware samakan export `paint_patch`: polygon → isi `Konva.Line` polygon, `ellipse` → isi `Konva.Ellipse`, rect → isi penuh. Teks + auto-fit (`computeTextLayout`, `wrap:none`, `txt.height(boxH)` + `verticalAlign middle`) tak berubah.
+- Hasil: `pnpm test` 56 file/524 lolos, `pnpm check` 0 error. Rust tak tersentuh. Belum smoke visual (butuh `pnpm tauri dev` manual oleh pemilik).
+- Keputusan: Tanpa openspec (bugfix kecil, paritas kanvas→export sudah ada). Tanpa commit/push.
+- Lanjut: Smoke `pnpm tauri dev`: cek card project + panel After/Split untuk bubble polygon/ellipse/rect; commit oleh pemilik.
+
+## 2026-11-01 — Font translate kekecilan-kebesaran: fill 85% + margin (lanjut fix bubble)
+
+- Kerja: Auto-fit lama cari font TERBESAR yang muat ~100% kotak (margin cuma padding 4px) → teks mepet outline, kelihatan "kegedean". Perubahan: (1) `contracts/layout.json`: `padding` 4→8, tambah `fillFactor: 0.85`. (2) `text/textLayout.ts`: `LAYOUT_FILL` + opts `fillFactor`; auto-fit (kotak + polygon) membungkus/menyusut thd area virtual kotak-dalam×fill; manual user pakai kotak penuh (tak disusutkan). (3) Rust `render/page.rs`: struct `fill_factor` + `layout_from_text` cerminkan rumus yang sama; test `lo <= 4.0` → ikut `layout().padding`. (4) Test: kontrak TS+`layout_matches_json_contract` assert `fillFactor`; `textLayout.test.ts` 3 test baru (margin ≤ fill×dalam, faktor kecil = font ≤, manual abaikan fill); 2 test lama dipin `fillFactor: 1`/komentar.
+- Hasil: Gate hijau — `cargo test` ok, `clippy` bersih, `pnpm test` 56 file/527 lolos, `pnpm check` 0 error. Kanvas recompute tiap redraw (langsung terlihat); layout TERSIMPAN ikut update saat save/translate berikutnya.
+- Keputusan: Tanpa openspec (tuning fix lanjutan, dua sisi diubah bersama jaga paritas). Tanpa commit/push.
+- Lanjut: Smoke `pnpm tauri dev` + save ulang (Ctrl+S) tiap halaman yang sudah diterjemahkan agar layout tersimpan + export PNG ikut mengecil; commit oleh pemilik.
+
+## 2026-11-01 — Fill 70% + bubble manual tak ikut translate (fix)
+
+- Kerja: (1) `fillFactor` 0.85→0.7 di `contracts/layout.json` — auto-fit kini berhenti di 70% area kotak, margin 30% menelan selisih ukur-vs-render (kasus p011: blok 337.5/346px = 0,9% dari luber). Padding tetap 8. (2) Bug bubble manual tak ke-translate: `api.translatePage` hanya kirim pageId, backend `load_snapshot` baca geometri TERSIMPAN — gambar manual/Detect yang belum Simpan (tombol `Simpan*`) diam-diam tak ikut. Fix: `TranslatePanel` prop opsional `onBeforeTranslate` (abort bila false/cancel); `EditorPanel.save()` kembalikan boolean + `saveBeforeTranslate()` simpan dulu bila dirty, dipasang ke TranslatePanel.
+- Hasil: Gate hijau — `cargo test` ok (175 lib + integrasi), `clippy` bersih, `pnpm test` 56 file/527 lolos, `pnpm check` 0 error. Rust ikut berubah (struct `fill_factor` + `layout_from_text` + test `lo<=padding`), paritas kanvas-export terjaga.
+- Keputusan: Tanpa openspec (tuning + bugfix kecil). Tanpa commit/push.
+- Lanjut: Smoke `pnpm tauri dev` — gambar bubble manual → langsung Translate (harus ikut, tanpa Ctrl+S dulu); save ulang halaman lama agar layout 70% tersimpan + export ikut.

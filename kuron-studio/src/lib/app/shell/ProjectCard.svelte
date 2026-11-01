@@ -37,7 +37,7 @@
 {:else}
   <div class="relative w-36 shrink-0 self-center">
     <button
-      class="block w-full overflow-hidden rounded-md border px-2.5 pt-1.5 pb-2.5 text-left transition-colors {selected
+      class="relative block w-full overflow-hidden rounded-md border px-2.5 pt-1.5 pb-2.5 text-left transition-colors {selected
         ? 'border-accent bg-accent/10'
         : 'border-line bg-surface hover:border-accent/60'}"
       onclick={() => onOpen(project.id)}
@@ -47,7 +47,7 @@
       <div class="tnum mt-0.5 text-[10px] {st.failed > 0 ? 'text-danger' : 'text-ink-3'}">
         {st.done}/{st.total} · {pct}%{st.failed > 0 ? ` · ${st.failed}` : ""}
       </div>
-      <div class="absolute inset-x-0 bottom-0 h-0.5 bg-raised">
+      <div class="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden rounded-b-md bg-raised">
         <div class="h-full bg-accent" style="width: {pct}%"></div>
       </div>
     </button>

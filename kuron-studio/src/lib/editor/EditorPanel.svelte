@@ -222,7 +222,7 @@
     }
   }
 
-  async function save() {
+  async function save(): Promise<boolean> {
     saving = true;
     error = "";
     try {
@@ -230,11 +230,23 @@
       bubbles = cleaned;
       dirty = false;
       onSaved({ ...page, bubbles: cleaned, status: statusAfterBubbleSave(page.status, !!(translation ?? page.translation), cleaned.length) });
+      return true;
     } catch (e) {
       error = String(e);
+      return false;
     } finally {
       saving = false;
     }
+  }
+
+  /**
+   * Translate backend membaca geometri TERSIMPAN (`load_snapshot`), bukan
+   * kanvas. Tanpa ini bubble manual (atau hasil Detect yang belum disimpan —
+   * tombol Simpan bertanda *) diam-diam tak ikut diterjemahkan.
+   */
+  async function saveBeforeTranslate(): Promise<boolean> {
+    if (!dirty) return true;
+    return await save();
   }
 
   /** Tandai-selesai manual: paksa Sudah walau sebagian bubble kosong (SFX). */
@@ -672,6 +684,7 @@ function setBubbleFontSize(v: number | null) {
             onProviderChange={(id) => { providerId = id; if (opts) onBatchOpts({ providerId: id, opts }); }}
             onOptsChange={(o) => { opts = o; onBatchOpts({ providerId, opts: o }); }}
             onTranslated={onTranslated}
+            onBeforeTranslate={saveBeforeTranslate}
             onError={(m) => {
               error = m;
               onSaved({ ...page, bubbles: $state.snapshot(bubbles), status: "failed" });
