@@ -635,10 +635,10 @@ function setBubbleFontSize(v: number | null) {
             <ol class="space-y-1.5">
               {#each bubbles as b, i (i)}
                 <li
-                  class="group flex items-center gap-2.5 rounded-md border border-line bg-surface-2 px-2.5 py-2
+                  class="group flex items-center gap-2.5 rounded-md border border-line bg-surface-2 px-2.5 py-1.5
                          transition-colors hover:border-line-strong"
                 >
-                  <span class="tnum flex size-5 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[10px] font-bold text-accent">
+                  <span class="tnum flex size-[18px] shrink-0 items-center justify-center rounded-full bg-accent-soft text-[10px] font-bold text-accent">
                     {nums.get(i) ?? i + 1}
                   </span>
                   <span class="tnum truncate text-[11px] text-ink-2">{b.kind ?? "rect"} · {b.w}×{b.h}</span>

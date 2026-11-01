@@ -74,7 +74,7 @@
   </div>
 
   <div class="ml-auto flex max-w-full items-center gap-2 overflow-x-auto">
-    <div class="flex overflow-hidden rounded-md border border-line" role="group" aria-label="Mode pane">
+    <div class="flex shrink-0 overflow-hidden rounded-md border border-line" role="group" aria-label="Mode pane">
       {#each [["before", "Before"], ["split", "Split"], ["after", "After"]] as [m, label] (m)}
         <button
           class={[
@@ -88,7 +88,7 @@
         >{label}</button>
       {/each}
     </div>
-    <div class="flex overflow-hidden rounded-md border border-line" role="group" aria-label="Tool gambar" title={readOnlyMode ? "Gambar hanya di Before" : undefined}>
+    <div class="flex shrink-0 overflow-hidden rounded-md border border-line" role="group" aria-label="Tool gambar" title={readOnlyMode ? "Gambar hanya di Before" : undefined}>
       {#each TOOLS as [t, label] (t)}
         {@const drawTool = t !== "select"}
         {@const off = drawTool && readOnlyMode}
@@ -110,14 +110,13 @@
     <Button
       variant="ghost"
       size="sm"
+      class="shrink-0"
       onclick={onToggleCollapse}
-      title={collapsed ? $t("expandSidebar") : $t("collapseSidebar")}
-      aria-label={collapsed ? $t("expandSidebar") : $t("collapseSidebar")}
-      aria-pressed={collapsed}
     >{collapsed ? "»" : "«"}</Button>
     <Button
       variant={bubbleCount === 0 && !detecting ? "primary" : "default"}
       size="sm"
+      class="shrink-0"
       onclick={onRunDetect}
       disabled={detecting}
     >{detecting ? "Detect…" : "Detect"}</Button>
@@ -126,10 +125,9 @@
     <Button
       variant={dirty && !saving ? "primary" : "default"}
       size="sm"
+      class="shrink-0"
       onclick={onSave}
       disabled={saving || !dirty}
     >
-      {saving ? "Simpan…" : dirty ? "Simpan*" : "Tersimpan"}
-    </Button>
   </div>
 </div>
