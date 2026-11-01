@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent } from "@testing-library/svelte";
 import { renderWithI18n } from "../test-utils";
 import EditorPanel from "./EditorPanel.svelte";
 import type { Page } from "../contracts/types";
@@ -40,27 +39,5 @@ describe("EditorPanel mount test", () => {
     expect(container).toBeTruthy();
     expect(getByRole("button", { name: "← Grid" })).toBeTruthy();
     expect(getByRole("button", { name: "Before" })).toBeTruthy();
-  });
-
-  it("FAB membuka palet tool; Detect/Simpan tersembunyi sampai dibuka", async () => {
-    const { getByRole, queryByRole } = renderWithI18n(EditorPanel, {
-      props: {
-        projectId: "proj-1",
-        page: dummyPage,
-        fullImageUrl: "http://example.com/page-1.jpg",
-        readingDir: "rtl",
-        onClose: vi.fn(),
-        onSaved: vi.fn(),
-        onBatchOpts: vi.fn(),
-      },
-    });
-    expect(queryByRole("button", { name: "Rect" })).toBeNull();
-    await fireEvent.click(getByRole("button", { name: "Buka tool" }));
-    expect(getByRole("button", { name: "Rect" })).toBeTruthy();
-    expect(getByRole("button", { name: "Detect" })).toBeTruthy();
-    expect(getByRole("button", { name: /Tersimpan/ })).toBeTruthy();
-    // Pilih tool menutup palet lagi.
-    await fireEvent.click(getByRole("button", { name: "Rect" }));
-    expect(queryByRole("button", { name: "Rect" })).toBeNull();
   });
 });

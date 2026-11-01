@@ -4,7 +4,6 @@
   import { api } from "../contracts/api";
   import TranslationCard from "./TranslationCard.svelte";
   import EditorToolbar, { type PaneMode } from "./EditorToolbar.svelte";
-  import EditorToolsFab from "./EditorToolsFab.svelte";
   import EditorPanes, { type CanvasApi } from "./EditorPanes.svelte";
   import TranslatePanel from "../provider/TranslatePanel.svelte";
   import { rev, shouldApplyBubbles, shouldApplyTranslation } from "./useSyncedPage.svelte";
@@ -79,7 +78,6 @@
   // (ponytail: after-true via command render_page_png bila diprotes).
   let mode = $state<PaneMode>("before");
   let tool = $state<Tool>("select");
-  let toolsOpen = $state(false);
   // Mode After tunggal = tak ada pane editable → tool gambar tak berlaku (D1).
   const readOnlyMode = $derived(mode === "after");
   function setTool(t: Tool) {
@@ -283,8 +281,7 @@
       e.preventDefault();
       void save();
     } else if (e.key === "Escape") {
-      if (toolsOpen) toolsOpen = false;
-      else onClose();
+      onClose();
     }
   }
 
@@ -543,10 +540,18 @@ function setBubbleFontSize(v: number | null) {
     detectEngine={detectEngine}
     bubbleCount={bubbles.length}
     mode={mode}
+    tool={tool}
+    readOnlyMode={readOnlyMode}
     collapsed={resize.collapsed}
+    detecting={detecting}
+    dirty={dirty}
+    saving={saving}
     onClose={onClose}
     onSetMode={(m) => setMode(m)}
+    onSetTool={(t) => setTool(t)}
     onToggleCollapse={() => resize.toggleCollapsed()}
+    onRunDetect={() => void runDetect()}
+    onSave={() => void save()}
   />
 
   {#if openError}
@@ -569,7 +574,6 @@ function setBubbleFontSize(v: number | null) {
     </div>
   {:else}
   <div class="flex min-h-0 flex-1" class:flex-col={resize.columnMode} bind:this={bodyEl}>
-    <div class="relative min-h-0 min-w-0 flex-1">
     <EditorPanes
       mode={mode}
       columnMode={resize.columnMode}
@@ -595,20 +599,6 @@ function setBubbleFontSize(v: number | null) {
       onToolDone={() => setTool("select")}
       onEditTranslation={(i, v) => editTr(i, "translated", v)}
     />
-    <EditorToolsFab
-      open={toolsOpen}
-      {tool}
-      {readOnlyMode}
-      {detecting}
-      {dirty}
-      {saving}
-      bubbleCount={bubbles.length}
-      onToggle={() => (toolsOpen = !toolsOpen)}
-      onPickTool={(t) => { setTool(t); toolsOpen = false; }}
-      onRunDetect={() => { toolsOpen = false; void runDetect(); }}
-      onSave={() => { toolsOpen = false; void save(); }}
-    />
-    </div>
     {#if !resize.collapsed}
       <Divider
         orientation={resize.columnMode ? "horizontal" : "vertical"}

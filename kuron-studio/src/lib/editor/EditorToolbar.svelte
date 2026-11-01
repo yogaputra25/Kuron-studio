@@ -1,13 +1,21 @@
-<!-- Toolbar editor (FE-4): bar atas ramping — kembali, file+status,
-  mode pane, collapse. Tool gambar + Detect + Simpan tinggal di
-  EditorToolsFab (overlay kanan-bawah kanvas). -->
+<!-- Toolbar editor (FE-4): 12 kontrol bar atas.
+  Presentasional: mode/tool/status mengalir sebagai props, semua aksi naik
+  via callback. Daftar TOOLS milik toolbar (satu-satunya pemakai). -->
 <script lang="ts">
   import Button from "../ui/Button.svelte";
   import StatusBadge from "../ui/StatusBadge.svelte";
   import { t } from "../app/i18n";
-  import type { PageStatus } from "../contracts/types";
+  import type { PageStatus, Tool } from "../contracts/types";
 
   export type PaneMode = "before" | "split" | "after";
+
+  const TOOLS: [Tool, string][] = [
+    ["select", "Pilih"],
+    ["rect", "Rect"],
+    ["ellipse", "Elips"],
+    ["freeform", "Bebas"],
+    ["tail", "Ekor"],
+  ];
 
   interface Props {
     fileName: string;
@@ -16,10 +24,18 @@
     detectEngine: string;
     bubbleCount: number;
     mode: PaneMode;
+    tool: Tool;
+    readOnlyMode: boolean;
     collapsed: boolean;
+    detecting: boolean;
+    dirty: boolean;
+    saving: boolean;
     onClose: () => void;
     onSetMode: (m: PaneMode) => void;
+    onSetTool: (t: Tool) => void;
     onToggleCollapse: () => void;
+    onRunDetect: () => void;
+    onSave: () => void;
   }
 
   let {
@@ -29,10 +45,18 @@
     detectEngine,
     bubbleCount,
     mode,
+    tool,
+    readOnlyMode,
     collapsed,
+    detecting,
+    dirty,
+    saving,
     onClose,
     onSetMode,
+    onSetTool,
     onToggleCollapse,
+    onRunDetect,
+    onSave,
   }: Props = $props();
 </script>
 
@@ -64,6 +88,25 @@
         >{label}</button>
       {/each}
     </div>
+    <div class="flex shrink-0 overflow-hidden rounded-md border border-line" role="group" aria-label="Tool gambar" title={readOnlyMode ? "Gambar hanya di Before" : undefined}>
+      {#each TOOLS as [t, label] (t)}
+        {@const drawTool = t !== "select"}
+        {@const off = drawTool && readOnlyMode}
+        <button
+          class={[
+            "h-8 border-l border-line px-3 text-xs font-medium transition-colors first:border-l-0",
+            tool === t
+              ? "bg-accent text-accent-fg"
+              : "bg-surface-2 text-ink-2 hover:bg-hover hover:text-ink",
+            off ? "cursor-not-allowed opacity-40" : "",
+          ]}
+          aria-pressed={tool === t}
+          disabled={off}
+          title={off ? "Gambar hanya di Before" : label}
+          onclick={() => onSetTool(t as Tool)}
+        >{label}</button>
+      {/each}
+    </div>
     <Button
       variant="ghost"
       size="sm"
@@ -73,5 +116,23 @@
       aria-label={collapsed ? $t("expandSidebar") : $t("collapseSidebar")}
       aria-pressed={collapsed}
     >{collapsed ? "»" : "«"}</Button>
+    <Button
+      variant={bubbleCount === 0 && !detecting ? "primary" : "default"}
+      size="sm"
+      class="shrink-0"
+      onclick={onRunDetect}
+      disabled={detecting}
+    >{detecting ? "Detect…" : "Detect"}</Button>
+    <!-- "Tersimpan" bukan primary: state itu sudah selesai, bukan aksi.
+         Warna coral dipakai hanya saat ada perubahan yang belum disimpan. -->
+    <Button
+      variant={dirty && !saving ? "primary" : "default"}
+      size="sm"
+      class="shrink-0"
+      onclick={onSave}
+      disabled={saving || !dirty}
+    >
+      {saving ? "Simpan…" : dirty ? "Simpan*" : "Tersimpan"}
+    </Button>
   </div>
 </div>

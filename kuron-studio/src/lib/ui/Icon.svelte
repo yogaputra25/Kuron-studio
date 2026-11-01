@@ -5,7 +5,7 @@
   export type IconName =
     | "key" | "layers" | "book" | "download" | "upload" | "folder"
     | "image" | "minus-circle" | "trash" | "repeat" | "sun" | "moon"
-    | "globe" | "activity" | "info" | "pen";
+    | "globe" | "activity" | "info";
 
   const PATHS: Record<IconName, string> = {
     key: '<circle cx="8" cy="16" r="4.5"/><path d="M11.2 12.8 20 4"/><path d="m15.5 8.5 2.5 2.5"/>',
@@ -27,7 +27,6 @@
     repeat:
       '<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
-    pen: '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
     moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
     globe:
       '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',

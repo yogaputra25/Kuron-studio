@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import panelSrc from "./EditorPanel.svelte?raw";
 import cardSrc from "./TranslationCard.svelte?raw";
 import geomSrc from "./GeometryControls.svelte?raw";
-import fabSrc from "./EditorToolsFab.svelte?raw";
+import toolbarSrc from "./EditorToolbar.svelte?raw";
 import panesSrc from "./EditorPanes.svelte?raw";
 import handlesSrc from "./render/handles.ts?raw";
 import toolsSrc from "./drawingTools.ts?raw";
@@ -11,12 +11,12 @@ import canvasSrc from "./CanvasEditor.svelte?raw";
 // Kontrak change draw-tools-feedback: tool tak-pernah-tampak-rusak.
 // Pola-sumber seperti edit-in-bubble.test.ts (Konva runtime tak di-mount).
 describe("draw tools feedback (§1)", () => {
-  it("palet FAB draw disabled saat After + alasan terlihat", () => {
-    // Palet FAB (ganti toolbar): tombol di EditorToolsFab, panel pasok readOnlyMode.
+  it("toolbar draw disabled saat After + alasan terlihat", () => {
+    // Sejak FE-4 (2.1): tombol di EditorToolbar, panel pasok readOnlyMode.
     expect(panelSrc).toContain("readOnlyMode");
-    expect(panelSrc).toContain("{readOnlyMode}");
-    expect(fabSrc).toContain("Gambar hanya di Before");
-    expect(fabSrc).toContain("disabled={off}");
+    expect(panelSrc).toContain("readOnlyMode={readOnlyMode}");
+    expect(toolbarSrc).toContain("Gambar hanya di Before");
+    expect(toolbarSrc).toContain("disabled={off}");
   });
 
   it("callback onDrawHint opsional, Before pasang + clear saat sukses", () => {

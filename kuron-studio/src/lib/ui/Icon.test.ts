@@ -5,7 +5,7 @@ import Icon, { type IconName } from "./Icon.svelte";
 
 const names: IconName[] = [
   "key", "layers", "book", "download", "upload", "folder", "image",
-  "minus-circle", "trash", "repeat", "sun", "moon", "globe", "activity", "info", "pen",
+  "minus-circle", "trash", "repeat", "sun", "moon", "globe", "activity", "info",
 ];
 
 describe("Icon", () => {
