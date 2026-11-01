@@ -13,6 +13,7 @@
   import ReviewGrid from "../../export/ReviewGrid.svelte";
   import ProviderSettings from "../../provider/ProviderSettings.svelte";
   import DiagnosticsPanel from "../../app/DiagnosticsPanel.svelte";
+  import AboutPage from "../../app/AboutPage.svelte";
   import type { Page } from "../../contracts/types";
   import type { Project } from "../../contracts/types";
   import type { ReadingDirection } from "../../contracts/types";
@@ -44,6 +45,7 @@
     showReview: boolean;
     showProviders: boolean;
     showDiagnostics: boolean;
+    showAbout: boolean;
     scopedPages: Page[];
     onCloseEditor: () => void;
     onSaved: (updated: Page) => void;
@@ -65,6 +67,7 @@
     onRefreshReview: () => void;
     onProvidersClose: () => void;
     onDiagnosticsClose: () => void;
+    onAboutClose: () => void;
   }
 
   let {
@@ -88,6 +91,7 @@
     showReview,
     showProviders,
     showDiagnostics,
+    showAbout,
     scopedPages,
     onCloseEditor,
     onSaved,
@@ -105,6 +109,7 @@
     onRefreshReview,
     onProvidersClose,
     onDiagnosticsClose,
+    onAboutClose,
   }: Props = $props();
   // Derivasi render-time dari referensi tunggal (bukan state tersimpan):
   // selalu segar dari EditorPanel.opts, tak ada snapshot basi.
@@ -194,4 +199,8 @@
 
 {#if showDiagnostics}
   <DiagnosticsPanel onClose={onDiagnosticsClose} />
+{/if}
+
+{#if showAbout}
+  <AboutPage onClose={onAboutClose} />
 {/if}

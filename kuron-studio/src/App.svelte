@@ -4,7 +4,7 @@
   import { onDragDrop } from "./lib/app/events";
   import { pickFiles, pickFolder } from "./lib/app/dialogs";
 
-  import { isMobile } from "./lib/app/device";
+  import { isMobile, isNarrow, watchViewport } from "./lib/app/device";
   import { read, STORAGE_KEYS, write } from "./lib/app/storage";
   import { api } from "./lib/contracts/api";
   import AlertBanners from "./lib/app/shell/AlertBanners.svelte";
@@ -109,6 +109,9 @@
   let showBatchDialog = $state(false);
   let showGlossary = $state(false);
   let showReview = $state(false);
+  /** Viewport sempit (<768px): header ringkas + drawer (#14). */
+  let narrow = $state(false);
+  let showAbout = $state(false);
   let showDiagnostics = $state(false);
   /** Error invoke terakhir — banner merah di header, selalu terlihat. */
   let lastInvokeError = $state<{ command: string; error: string } | null>(null);
@@ -452,9 +455,12 @@
       }
     });
     // onMount tidak boleh async di Svelte 5 — return cleanup langsung.
+    narrow = isNarrow();
+    const unwatchViewport = watchViewport(() => (narrow = isNarrow()));
     return () => {
       offInvoke();
       offDragDrop();
+      unwatchViewport();
       selection.dispose();
     };
   });
@@ -475,6 +481,7 @@
       {lastInvokeError}
       brokenCount={queue.failed}
       canDetect={!!current && scopedPages.length > 0}
+      {narrow}
       onToggleReadingDir={() => (readingDir = readingDir === "rtl" ? "ltr" : "rtl")}
       onProviders={() => (showProviders = true)}
       onBatch={() => (showBatchDialog = true)}
@@ -486,6 +493,7 @@
       onClean={() => void cleanPages()}
       onDelete={() => void deleteProject()}
       onOpenDiagnostics={() => (showDiagnostics = true)}
+      onAbout={() => (showAbout = true)}
       onPickProject={(id) => openProject(id)}
     />
   {/if}
@@ -647,6 +655,7 @@
     {showReview}
     {showProviders}
     {showDiagnostics}
+    {showAbout}
     scopedPages={visiblePages}
     onCloseEditor={closeEditor}
     {onSaved}
@@ -669,6 +678,7 @@
     onRefreshReview={() => { const c = projectStore.current; if (c) void refreshProject(c.id); }}
     onProvidersClose={() => (showProviders = false)}
     onDiagnosticsClose={() => (showDiagnostics = false)}
+    onAboutClose={() => (showAbout = false)}
   />
 
 </main>
