@@ -6,16 +6,15 @@
 //!   busy tanpa claim). Antar-batch tetap dijaga `claim_page` via store.
 //! - `semaphore` membatasi POST LLM paralel (default 3, sama seperti
 //!   semaphore inline lama di `commands::batch`).
-//! - `cancel` / `is_cancelled` meneruskan flag `AppState` — satu-satunya
-//!   sumber kebenaran cancel. Bentuk `AppState` TIDAK diubah (lane ini
-//!   tidak memindah `cancel`/`prev_status` keluar).
+//! - `cancel` / `is_cancelled` meneruskan flag `CancelState` — satu-satunya
+//!   sumber kebenaran cancel (#38: keluar dari `AppState`).
 
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
 use tokio::sync::Semaphore;
 
-use crate::AppState;
+use crate::translate::CancelState;
 
 /// Batas POST LLM paralel batch.
 pub const DEFAULT_BATCH_CONCURRENCY: usize = 3;
@@ -56,13 +55,14 @@ impl JobRegistry {
         Arc::clone(&self.permits)
     }
 
-    /// Teruskan permintaan batal ke flag `AppState`.
-    pub fn cancel(&self, state: &AppState, page_id: &str) {
-        state.request_cancel(page_id);
+    /// Teruskan permintaan batal ke `CancelState` — satu-satunya sumber
+    /// kebenaran cancel (#38: keluar dari `AppState`).
+    pub fn cancel(&self, cancel: &CancelState, page_id: &str) {
+        cancel.request_cancel(page_id);
     }
 
-    pub fn is_cancelled(&self, state: &AppState, page_id: &str) -> bool {
-        state.is_cancelled(page_id)
+    pub fn is_cancelled(&self, cancel: &CancelState, page_id: &str) -> bool {
+        cancel.is_cancelled(page_id)
     }
 
     pub fn inflight_count(&self) -> usize {
@@ -79,42 +79,7 @@ impl Default for JobRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commands::detect::DetectState;
-    use crate::domain::{Page, PageStatus, Project};
-    use crate::store::ProjectStore;
 
-    fn test_state() -> AppState {
-        let dir = std::env::temp_dir().join(format!(
-            "kuron-jobs-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let mut store = ProjectStore::load(dir.clone()).unwrap();
-        let mut proj = Project::new("ch".into());
-        proj.folders[0].pages.push(Page {
-            id: "p0".into(),
-            path: "ch/001.png".into(),
-            width: 800,
-            height: 1200,
-            status: PageStatus::Detected,
-            bubbles: vec![],
-            translation: None,
-        });
-        store.projects.insert("p".into(), proj);
-        AppState {
-            store: Mutex::new(store),
-            detect: DetectState::default(),
-            http: reqwest::Client::new(),
-            db: Mutex::new(rusqlite::Connection::open_in_memory().unwrap()),
-            previews: Mutex::new(crate::preview_cache::PreviewCaches::new()),
-            cancel: Mutex::new(HashSet::new()),
-            prev_status: Mutex::new(std::collections::HashMap::new()),
-            data_dir: dir,
-        }
-    }
 
     #[test]
     fn admit_dedup_dan_release() {
@@ -149,16 +114,16 @@ mod tests {
     }
 
     #[test]
-    fn cancel_meneruskan_flag_appstate() {
+    fn cancel_meneruskan_flag_cancelstate() {
         let reg = JobRegistry::default();
-        let st = test_state();
+        let cs = CancelState::default();
         assert!(reg.admit("p0"));
-        assert!(!reg.is_cancelled(&st, "p0"));
-        reg.cancel(&st, "p0");
-        assert!(reg.is_cancelled(&st, "p0"));
-        // Idempotent + release tak mencabut cancel (flag milik AppState).
-        reg.cancel(&st, "p0");
+        assert!(!reg.is_cancelled(&cs, "p0"));
+        reg.cancel(&cs, "p0");
+        assert!(reg.is_cancelled(&cs, "p0"));
+        // Idempotent + release tak mencabut cancel (flag milik CancelState).
+        reg.cancel(&cs, "p0");
         reg.release("p0");
-        assert!(reg.is_cancelled(&st, "p0"));
+        assert!(reg.is_cancelled(&cs, "p0"));
     }
 }

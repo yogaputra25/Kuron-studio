@@ -15,6 +15,8 @@ use crate::translation::{
 };
 use crate::AppState;
 
+use super::{Ctx, CancelState};
+
 use super::provider_bind::{bind_provider, ProviderBinding};
 use super::snapshot::load_snapshot;
 
@@ -60,12 +62,12 @@ pub fn translate_text_to_page(job: CoreJob<'_>) -> Result<PageTranslation, AppEr
 }
 
 /// Klaim atomik: halaman Translating ditolak ("busy") oleh penelepon kedua.
-/// Stash status pra-klaim ke `AppState::prev_status` (path cancel restore ini,
-/// bukan `fail_page`). `&AppState` (bukan `&State`) agar unit-test tanpa
+/// Stash status pra-klaim ke `CancelState` (path cancel restore ini,
+/// bukan `fail_page`). `&Ctx` (bukan `&State`) agar unit-test tanpa
 /// runtime Tauri. Flag cancel basi SENGAJA tak dibuang di sini.
-pub fn claim_page(state: &AppState, page_id: &str) -> Result<(), AppError> {
+pub fn claim_page(ctx: &Ctx<'_>, page_id: &str) -> Result<(), AppError> {
     let prev = {
-        let mut store = crate::error::lock_or_err(&state.store)?;
+        let mut store = crate::error::lock_or_err(&ctx.app.store)?;
         let page = store.find_page_mut(page_id).ok_or_else(|| crate::error::AppError::page_not_found(page_id))?;
         if page.status == crate::domain::PageStatus::Translating {
             return Err(crate::error::AppError::busy("halaman sedang diterjemahkan"));
@@ -75,7 +77,7 @@ pub fn claim_page(state: &AppState, page_id: &str) -> Result<(), AppError> {
         store.save_public()?;
         prev
     };
-    state.stash_prev(page_id, prev);
+    ctx.cancel.stash_prev(page_id, prev);
     Ok(())
 }
 
@@ -92,11 +94,11 @@ pub const CANCELLED_MSG: &str = "dibatalkan oleh user";
 
 /// Path cancel: kembalikan status pra-klaim + buang flag. Bukan `fail_page`.
 /// Tanpa stash (tak pernah klaim) = no-op status, flag tetap dibuang.
-pub fn restore_cancelled(state: &AppState, page_id: &str) -> Result<(), AppError> {
-    let prev = state.take_prev(page_id);
-    state.clear_cancel(page_id);
+pub fn restore_cancelled(ctx: &Ctx<'_>, page_id: &str) -> Result<(), AppError> {
+    let prev = ctx.cancel.take_prev(page_id);
+    ctx.cancel.clear_cancel(page_id);
     if let Some(st) = prev {
-        let mut store = crate::error::lock_or_err(&state.store)?;
+        let mut store = crate::error::lock_or_err(&ctx.app.store)?;
         if let Some(page) = store.find_page_mut(page_id) {
             page.status = st;
             store.save_public()?;
@@ -109,14 +111,14 @@ pub fn restore_cancelled(state: &AppState, page_id: &str) -> Result<(), AppError
 /// Error `Cancelled` -> panggil `restore_cancelled` (status kembali pra-klaim).
 /// Error lainnya -> catat status `failed` via `fail_page`.
 /// Perbandingan cancel via `matches!` atas varian, bukan string.
-pub fn cancel_or_fail(state: &AppState, page_id: &str, e: AppError) -> AppError {
+pub fn cancel_or_fail(ctx: &Ctx<'_>, page_id: &str, e: AppError) -> AppError {
     if matches!(e, AppError::Cancelled) {
-        let _ = restore_cancelled(state, page_id);
+        let _ = restore_cancelled(ctx, page_id);
         e
     } else {
-        state.clear_cancel(page_id);
-        state.take_prev(page_id);
-        fail_page(state, page_id, e)
+        ctx.cancel.clear_cancel(page_id);
+        ctx.cancel.take_prev(page_id);
+        fail_page(ctx.app, page_id, e)
     }
 }
 
@@ -148,7 +150,7 @@ pub fn effective_glossary(
 /// Cek ulang pasca-parse: POST yg keburu selesai saat cancel DIBUANG (satu
 /// call token tetap kepakai — sadar, bukan refund).
 pub async fn backoff_translate(
-    state: &AppState,
+    cancel: &CancelState,
     page_id: &str,
     client: &reqwest::Client,
     rec: &ProviderRecord,
@@ -157,8 +159,8 @@ pub async fn backoff_translate(
 ) -> Result<String, crate::error::AppError> {
     let mut last = crate::error::AppError::provider("rate_limited: retry later");
     for (n, wait) in [0u64, 2, 4, 8].iter().enumerate() {
-        if state.is_cancelled(page_id) {
-            state.clear_cancel(page_id);
+        if cancel.is_cancelled(page_id) {
+            cancel.clear_cancel(page_id);
             return Err(crate::error::AppError::cancelled());
         }
         if *wait > 0 {
@@ -166,19 +168,19 @@ pub async fn backoff_translate(
                 _ = tokio::time::sleep(std::time::Duration::from_secs(*wait)) => {}
                 _ = async {
                     loop {
-                        if state.is_cancelled(page_id) { break; }
+                        if cancel.is_cancelled(page_id) { break; }
                         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                     }
                 } => {
-                    state.clear_cancel(page_id);
+                    cancel.clear_cancel(page_id);
                     return Err(crate::error::AppError::cancelled());
                 }
             }
         }
         match provider::translate_image(client, rec, prompt, jpeg).await {
             Ok(t) => {
-                if state.is_cancelled(page_id) {
-                    state.clear_cancel(page_id);
+                if cancel.is_cancelled(page_id) {
+                    cancel.clear_cancel(page_id);
                     return Err(crate::error::AppError::cancelled());
                 }
                 return Ok(t);
@@ -226,17 +228,17 @@ pub struct PagePrep {
 /// Mengembalikan prep agnostik + binding; gagal-bind = halaman belum mulai
 /// kerja → status pulih pra-klaim (bukan `fail_page`), klaim dilepas.
 pub async fn prepare_page(
-    state: &AppState,
+    ctx: &Ctx<'_>,
     opts: PrepOpts<'_>,
 ) -> Result<(PagePrep, ProviderBinding), AppError> {
-    let snap = load_snapshot(state, opts.page_id)?;
-    claim_page(state, opts.page_id)?;
+    let snap = load_snapshot(ctx.app, opts.page_id)?;
+    claim_page(ctx, opts.page_id)?;
 
     let style = TranslateStyle::from_str(opts.style);
     let ordered = order_indices(&snap.bubbles, opts.reading_direction);
     let quality = quality_of(opts.mosaic_quality);
     let page_bytes =
-        std::fs::read(&snap.path).map_err(|e| fail_page(state, opts.page_id, AppError::io(format!("read: {e}"))))?;
+        std::fs::read(&snap.path).map_err(|e| fail_page(ctx.app, opts.page_id, AppError::io(format!("read: {e}"))))?;
     let ordered_bubbles: Vec<BubbleBox> =
         ordered.iter().map(|&i| snap.bubbles[i].clone()).collect();
     let jpeg = tauri::async_runtime::spawn_blocking(move || {
@@ -249,9 +251,9 @@ pub async fn prepare_page(
     .await
     .map_err(|e| AppError::io(format!("image task: {e}")))
     .and_then(|r| r)
-    .map_err(|e| fail_page(state, opts.page_id, e))?;
+    .map_err(|e| fail_page(ctx.app, opts.page_id, e))?;
 
-    let gloss = effective_glossary(state, opts.glossary, snap.prev.as_ref());
+    let gloss = effective_glossary(ctx.app, opts.glossary, snap.prev.as_ref());
     let prompt = if snap.bubbles.is_empty() {
         append_custom(
             append_glossary(
@@ -281,7 +283,7 @@ pub async fn prepare_page(
         prompt,
         jpeg,
     };
-    let binding = bind_provider(state, &opts, &prep, gloss.as_deref())?;
+    let binding = bind_provider(ctx, &opts, &prep, gloss.as_deref())?;
     Ok((prep, binding))
 }
 
@@ -292,7 +294,7 @@ pub fn cache_lookup(state: &AppState, key: &str) -> Result<Option<String>, AppEr
 
 /// Terapkan payload cache: preservasi edit user + persist translated.
 pub fn apply_cached(
-    state: &AppState,
+    ctx: &Ctx<'_>,
     page_id: &str,
     payload: &str,
     prev: Option<&PageTranslation>,
@@ -300,9 +302,9 @@ pub fn apply_cached(
     let mut page_t: PageTranslation = serde_json::from_str(payload)?;
     page_t.page_id = page_id.to_string();
     page_t.bubbles = preserve_user_edits(page_t.bubbles, prev);
-    persist_result(state, page_id, &page_t)?;
-    state.clear_cancel(page_id);
-    state.take_prev(page_id);
+    persist_result(ctx, page_id, &page_t)?;
+    ctx.cancel.clear_cancel(page_id);
+    ctx.cancel.take_prev(page_id);
     Ok(page_t)
 }
 
@@ -324,17 +326,17 @@ pub fn map_text(prep: &PagePrep, model: &str, text: &str) -> Result<PageTranslat
 
 /// Simpan hasil ke cache + persist translated.
 pub fn store_result(
-    state: &AppState,
+    ctx: &Ctx<'_>,
     prep: &PagePrep,
     binding: &ProviderBinding,
     page_t: &PageTranslation,
 ) -> Result<(), AppError> {
     let payload = serde_json::to_string(page_t)?;
-    let db = crate::error::lock_or_err(&state.db)?;
+    let db = crate::error::lock_or_err(&ctx.app.db)?;
     cache::cache_set(&db, &binding.cache_key, &payload)?;
-    let r = persist_result(state, &prep.page_id, page_t);
-    state.clear_cancel(&prep.page_id);
-    state.take_prev(&prep.page_id);
+    let r = persist_result(ctx, &prep.page_id, page_t);
+    ctx.cancel.clear_cancel(&prep.page_id);
+    ctx.cancel.take_prev(&prep.page_id);
     r
 }
 
@@ -344,40 +346,40 @@ pub fn store_result(
 /// tanpa sentuh cache/POST. Lalu cache → POST (backoff) → map → retry POST
 /// sekali saat parse gagal → store.
 pub async fn translate_prep(
-    state: &AppState,
+    ctx: &Ctx<'_>,
     prep: &PagePrep,
     binding: &ProviderBinding,
 ) -> Result<PageTranslation, AppError> {
-    if state.is_cancelled(&prep.page_id) {
-        return Err(cancel_or_fail(state, &prep.page_id, crate::error::AppError::cancelled()));
+    if ctx.cancel.is_cancelled(&prep.page_id) {
+        return Err(cancel_or_fail(ctx, &prep.page_id, crate::error::AppError::cancelled()));
     }
-    if let Some(payload) = cache_lookup(state, &binding.cache_key)? {
-        return apply_cached(state, &prep.page_id, &payload, prep.prev.as_ref());
+    if let Some(payload) = cache_lookup(ctx.app, &binding.cache_key)? {
+        return apply_cached(ctx, &prep.page_id, &payload, prep.prev.as_ref());
     }
-    let text = backoff_translate(state, &prep.page_id, &binding.client, &binding.rec, &prep.prompt, &prep.jpeg)
+    let text = backoff_translate(ctx.cancel, &prep.page_id, &binding.client, &binding.rec, &prep.prompt, &prep.jpeg)
         .await
-        .map_err(|e| cancel_or_fail(state, &prep.page_id, e))?;
+        .map_err(|e| cancel_or_fail(ctx, &prep.page_id, e))?;
     let page_t = match map_text(prep, &binding.rec.model, &text) {
         Ok(p) => p,
         Err(first) => {
-            let text2 = backoff_translate(state, &prep.page_id, &binding.client, &binding.rec, &prep.prompt, &prep.jpeg)
+            let text2 = backoff_translate(ctx.cancel, &prep.page_id, &binding.client, &binding.rec, &prep.prompt, &prep.jpeg)
                 .await
-                .map_err(|e| cancel_or_fail(state, &prep.page_id, e))?;
-            map_text(prep, &binding.rec.model, &text2).map_err(|_| cancel_or_fail(state, &prep.page_id, first))?
+                .map_err(|e| cancel_or_fail(ctx, &prep.page_id, e))?;
+            map_text(prep, &binding.rec.model, &text2).map_err(|_| cancel_or_fail(ctx, &prep.page_id, first))?
         }
     };
-    store_result(state, prep, binding, &page_t)?;
+    store_result(ctx, prep, binding, &page_t)?;
     Ok(page_t)
 }
 
 /// Inti `save_translation` tanpa runtime Tauri (bisa di-unit-test).
 pub fn save_translation_inner(
-    state: &AppState,
+    ctx: &Ctx<'_>,
     page_id: &str,
     bubbles: Vec<BubbleTranslation>,
 ) -> Result<PageTranslation, AppError> {
-    let prev = state.take_prev(page_id);
-    let mut store = crate::error::lock_or_err(&state.store)?;
+    let prev = ctx.cancel.take_prev(page_id);
+    let mut store = crate::error::lock_or_err(&ctx.app.store)?;
     let page = store.find_page_mut(page_id).ok_or_else(|| crate::error::AppError::page_not_found(page_id))?;
     let mut page_t = page.translation.clone().unwrap_or(PageTranslation {
         page_id: page_id.to_string(),
@@ -425,12 +427,12 @@ pub fn mark_page_completed_inner(
 /// (semua terisi ATAU flag manual); selain itu status lama dipertahankan,
 /// transient `Translating` pulih ke pra-klaim (stash) atau Detected/Idle.
 pub fn persist_result(
-    state: &AppState,
+    ctx: &Ctx<'_>,
     page_id: &str,
     t: &PageTranslation,
 ) -> Result<(), AppError> {
-    let prev = state.take_prev(page_id);
-    let mut store = crate::error::lock_or_err(&state.store)?;
+    let prev = ctx.cancel.take_prev(page_id);
+    let mut store = crate::error::lock_or_err(&ctx.app.store)?;
     let page = store.find_page_mut(page_id).ok_or_else(|| crate::error::AppError::page_not_found(page_id))?;
     // Override manual nempel: re-translate tak mencabut tandai-selesai user.
     let mut merged = t.clone();
@@ -444,13 +446,13 @@ pub fn persist_result(
 
 /// Persist PageTranslation penuh + status jujur (dipakai retry/export flow).
 pub fn persist_translation(
-    state: &AppState,
+    ctx: &Ctx<'_>,
     page_id: &str,
     t: &PageTranslation,
 ) -> Result<(), AppError> {
-    let r = persist_result(state, page_id, t);
-    state.clear_cancel(page_id);
-    state.take_prev(page_id);
+    let r = persist_result(ctx, page_id, t);
+    ctx.cancel.clear_cancel(page_id);
+    ctx.cancel.take_prev(page_id);
     r
 }
 
@@ -507,10 +509,12 @@ mod tests {
             http: reqwest::Client::new(),
             db: std::sync::Mutex::new(rusqlite::Connection::open_in_memory().unwrap()),
             previews: std::sync::Mutex::new(crate::preview_cache::PreviewCaches::new()),
-            cancel: std::sync::Mutex::new(std::collections::HashSet::new()),
-            prev_status: std::sync::Mutex::new(std::collections::HashMap::new()),
             data_dir: dir,
         }
+    }
+
+    fn ctx_of<'a>(st: &'a AppState, cs: &'a CancelState) -> Ctx<'a> {
+        Ctx { app: st, cancel: cs }
     }
 
     fn page_status_of(state: &AppState, id: &str) -> PageStatus {
@@ -527,50 +531,58 @@ mod tests {
     #[test]
     fn cancel_restores_preclaim_status_translated() {
         let st = test_state_with_page("p0", PageStatus::Translated);
-        claim_page(&st, "p0").unwrap();
+        let cs = CancelState::default();
+        let ctx = ctx_of(&st, &cs);
+        claim_page(&ctx, "p0").unwrap();
         assert_eq!(page_status_of(&st, "p0"), PageStatus::Translating);
-        st.request_cancel("p0");
-        let msg = cancel_or_fail(&st, "p0", AppError::cancelled());
+        cs.request_cancel("p0");
+        let msg = cancel_or_fail(&ctx, "p0", AppError::cancelled());
         assert_eq!(msg.to_string(), CANCELLED_MSG);
         assert_eq!(page_status_of(&st, "p0"), PageStatus::Translated);
-        assert!(!st.is_cancelled("p0"));
-        assert!(st.take_prev("p0").is_none());
+        assert!(!cs.is_cancelled("p0"));
+        assert!(cs.take_prev("p0").is_none());
     }
 
     #[test]
     fn cancel_restores_preclaim_status_detected() {
         let st = test_state_with_page("p0", PageStatus::Detected);
-        claim_page(&st, "p0").unwrap();
-        st.request_cancel("p0");
-        cancel_or_fail(&st, "p0", AppError::cancelled());
+        let cs = CancelState::default();
+        let ctx = ctx_of(&st, &cs);
+        claim_page(&ctx, "p0").unwrap();
+        cs.request_cancel("p0");
+        cancel_or_fail(&ctx, "p0", AppError::cancelled());
         assert_eq!(page_status_of(&st, "p0"), PageStatus::Detected);
     }
 
     #[test]
     fn cancel_without_claim_is_noop_status_but_clears_flag() {
         let st = test_state_with_page("p0", PageStatus::Idle);
-        st.request_cancel("p0");
-        let msg = cancel_or_fail(&st, "p0", AppError::cancelled());
+        let cs = CancelState::default();
+        let ctx = ctx_of(&st, &cs);
+        cs.request_cancel("p0");
+        let msg = cancel_or_fail(&ctx, "p0", AppError::cancelled());
         assert_eq!(msg.to_string(), CANCELLED_MSG);
         assert_eq!(page_status_of(&st, "p0"), PageStatus::Idle);
-        assert!(!st.is_cancelled("p0"));
+        assert!(!cs.is_cancelled("p0"));
     }
 
     #[test]
     fn noncancel_error_still_fails_and_cleans_stash() {
         let st = test_state_with_page("p0", PageStatus::Detected);
-        claim_page(&st, "p0").unwrap();
-        let e = cancel_or_fail(&st, "p0", AppError::parse("boom"));
+        let cs = CancelState::default();
+        let ctx = ctx_of(&st, &cs);
+        claim_page(&ctx, "p0").unwrap();
+        let e = cancel_or_fail(&ctx, "p0", AppError::parse("boom"));
         assert_eq!(e.to_string(), "boom");
         assert_eq!(page_status_of(&st, "p0"), PageStatus::Failed);
-        assert!(st.take_prev("p0").is_none());
-        assert!(!st.is_cancelled("p0"));
+        assert!(cs.take_prev("p0").is_none());
+        assert!(!cs.is_cancelled("p0"));
     }
 
     #[tokio::test]
     async fn backoff_aborts_on_preset_flag_without_provider_call() {
-        let st = test_state_with_page("p0", PageStatus::Detected);
-        st.request_cancel("p0");
+        let cs = CancelState::default();
+        cs.request_cancel("p0");
         // base_url tak-routable: bila provider sempat dipanggil, Err non-cancel.
         let rec = ProviderRecord {
             id: "x".into(),
@@ -581,9 +593,9 @@ mod tests {
             model: "m".into(),
         };
         let client = reqwest::Client::new();
-        let r = backoff_translate(&st, "p0", &client, &rec, "p", &[]).await;
+        let r = backoff_translate(&cs, "p0", &client, &rec, "p", &[]).await;
         assert_eq!(r, Err(AppError::cancelled()));
-        assert!(!st.is_cancelled("p0"));
+        assert!(!cs.is_cancelled("p0"));
     }
 
     #[tokio::test]
@@ -591,9 +603,11 @@ mod tests {
         // Job antre batch yang keburu dibatalkan: restore pra-klaim tanpa
         // sentuh cache (db in-memory tanpa tabel) maupun POST (tak-routable).
         let st = test_state_with_page("p0", PageStatus::Detected);
-        claim_page(&st, "p0").unwrap();
+        let cs = CancelState::default();
+        let ctx = ctx_of(&st, &cs);
+        claim_page(&ctx, "p0").unwrap();
         assert_eq!(page_status_of(&st, "p0"), PageStatus::Translating);
-        st.request_cancel("p0");
+        cs.request_cancel("p0");
         let prep = PagePrep {
             page_id: "p0".into(),
             target_lang: "id".into(),
@@ -618,11 +632,11 @@ mod tests {
             client: reqwest::Client::new(),
             cache_key: "tak-ada".into(),
         };
-        let r = translate_prep(&st, &prep, &binding).await;
+        let r = translate_prep(&ctx, &prep, &binding).await;
         assert_eq!(r, Err(AppError::cancelled()));
         assert_eq!(page_status_of(&st, "p0"), PageStatus::Detected);
-        assert!(!st.is_cancelled("p0"));
-        assert!(st.take_prev("p0").is_none());
+        assert!(!cs.is_cancelled("p0"));
+        assert!(cs.take_prev("p0").is_none());
     }
 
     #[test]
@@ -685,23 +699,29 @@ mod tests {
     #[test]
     fn partial_save_keeps_previous_status() {
         let st = test_state_with_page("p0", PageStatus::Detected);
+        let cs = CancelState::default();
+        let ctx = ctx_of(&st, &cs);
         seed_tr(&st, PageStatus::Detected, tr_full(&["isi", ""]));
-        save_translation_inner(&st, "p0", tr_full(&["isi", ""])).unwrap();
+        save_translation_inner(&ctx, "p0", tr_full(&["isi", ""])).unwrap();
         assert_eq!(page_status_of(&st, "p0"), PageStatus::Detected);
     }
 
     #[test]
     fn complete_save_marks_translated() {
         let st = test_state_with_page("p0", PageStatus::Detected);
+        let cs = CancelState::default();
+        let ctx = ctx_of(&st, &cs);
         seed_tr(&st, PageStatus::Detected, tr_full(&["isi", ""]));
-        save_translation_inner(&st, "p0", tr_full(&["isi", "lengkap"])).unwrap();
+        save_translation_inner(&ctx, "p0", tr_full(&["isi", "lengkap"])).unwrap();
         assert_eq!(page_status_of(&st, "p0"), PageStatus::Translated);
     }
 
     #[test]
     fn empty_manual_save_is_not_translated() {
         let st = test_state_with_page("p0", PageStatus::Idle);
-        save_translation_inner(&st, "p0", vec![]).unwrap();
+        let cs = CancelState::default();
+        let ctx = ctx_of(&st, &cs);
+        save_translation_inner(&ctx, "p0", vec![]).unwrap();
         assert_eq!(page_status_of(&st, "p0"), PageStatus::Idle);
     }
 
@@ -726,24 +746,28 @@ mod tests {
     #[test]
     fn persist_partial_translating_restores_preclaim() {
         let st = test_state_with_page("p0", PageStatus::Detected);
+        let cs = CancelState::default();
+        let ctx = ctx_of(&st, &cs);
         seed_tr(&st, PageStatus::Detected, tr_full(&["isi", ""]));
-        claim_page(&st, "p0").unwrap();
+        claim_page(&ctx, "p0").unwrap();
         let t = st.store.lock().unwrap().find_page("p0").unwrap().translation.clone().unwrap();
-        persist_result(&st, "p0", &t).unwrap();
+        persist_result(&ctx, "p0", &t).unwrap();
         assert_eq!(page_status_of(&st, "p0"), PageStatus::Detected);
     }
 
     #[test]
     fn persist_sticky_manual_survives_retranslate() {
         let st = test_state_with_page("p0", PageStatus::Detected);
+        let cs = CancelState::default();
+        let ctx = ctx_of(&st, &cs);
         seed_tr(&st, PageStatus::Detected, tr_full(&["isi", ""]));
         mark_page_completed_inner(&st, "p0", true).unwrap();
-        claim_page(&st, "p0").unwrap();
+        claim_page(&ctx, "p0").unwrap();
         let fresh = PageTranslation {
             page_id: "p0".into(), target_lang: "id".into(), style: "s".into(),
             model: "m2".into(), manual_done: false, bubbles: tr_full(&["baru", ""]),
         };
-        persist_result(&st, "p0", &fresh).unwrap();
+        persist_result(&ctx, "p0", &fresh).unwrap();
         let pg = st.store.lock().unwrap().find_page("p0").unwrap();
         assert!(pg.translation.as_ref().unwrap().manual_done);
         assert_eq!(pg.status, PageStatus::Translated);

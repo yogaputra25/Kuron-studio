@@ -10,8 +10,8 @@ pub use crate::translate::{
     effective_glossary, fail_page, load_provider, load_snapshot, map_text,
     mark_page_completed_inner, persist_result, persist_translation, prepare_page, quality_of,
     restore_cancelled, save_translation_inner, store_result, translate_prep,
-    translate_text_to_page, CANCELLED_MSG, CoreJob, PagePrep, PageSnapshot, PrepOpts,
-    ProviderBinding,
+    translate_text_to_page, CancelState, Ctx, CANCELLED_MSG, CoreJob, PagePrep, PageSnapshot,
+    PrepOpts, ProviderBinding,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,10 +45,12 @@ fn default_dir() -> String { "rtl".to_string() }
 #[tauri::command(rename_all = "snake_case")]
 pub async fn translate_page(
     state: State<'_, AppState>,
+    cancel: State<'_, CancelState>,
     input: TranslatePageInput,
 ) -> Result<PageTranslation, String> {
+    let ctx = Ctx { app: state.inner(), cancel: cancel.inner() };
     let (prep, binding) = prepare_page(
-        state.inner(),
+        &ctx,
         PrepOpts {
             page_id: &input.page_id,
             provider_id: &input.provider_id,
@@ -63,28 +65,30 @@ pub async fn translate_page(
         },
     )
     .await?;
-    Ok(translate_prep(state.inner(), &prep, &binding).await?)
+    Ok(translate_prep(&ctx, &prep, &binding).await?)
 }
 
 /// Batalkan translate berjalan untuk satu halaman (opsi B cancel): set flag di
-/// `AppState::cancel`; worker berhenti di cek berikut tanpa persist tanpa fail,
+/// `CancelState`; worker berhenti di cek berikut tanpa persist tanpa fail,
 /// status dikembalikan ke pra-klaim. Idempotent; halaman tak dikenal = Ok.
 #[tauri::command(rename_all = "snake_case")]
 pub fn cancel_translate(
-    state: State<'_, AppState>,
+    cancel: State<'_, CancelState>,
     page_id: String,
 ) -> Result<(), String> {
-    state.request_cancel(&page_id);
+    cancel.request_cancel(&page_id);
     Ok(())
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub fn save_translation(
     state: State<'_, AppState>,
+    cancel: State<'_, CancelState>,
     page_id: String,
     bubbles: Vec<BubbleTranslation>,
 ) -> Result<PageTranslation, String> {
-    Ok(save_translation_inner(state.inner(), &page_id, bubbles)?)
+    let ctx = Ctx { app: state.inner(), cancel: cancel.inner() };
+    Ok(save_translation_inner(&ctx, &page_id, bubbles)?)
 }
 
 /// Tandai-selesai manual per halaman: paksa `translated` walau sebagian

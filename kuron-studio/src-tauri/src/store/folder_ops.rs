@@ -11,7 +11,7 @@ use crate::store::ProjectStore;
 
 /// Halaman bisa dibaca = file ada dan decoder bisa ambil dimensi.
 fn is_page_readable(path: &str) -> bool {
-    crate::commands::import::page_from_file(Path::new(path)).is_some()
+    crate::import::page_from_file(Path::new(path)).is_some()
 }
 
 /// Guard hapus file fisik: hanya file di bawah store dir (hasil ekstraksi

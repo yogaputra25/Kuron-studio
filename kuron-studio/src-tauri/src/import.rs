@@ -10,7 +10,7 @@ use crate::error::AppError;
 // `commands::project`, yang hanya untuk kompatibilitas path lama).
 use crate::domain::{Page, PageStatus};
 
-use super::project::{extensions, image_exts};
+use crate::commands::project::{extensions, image_exts};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -540,7 +540,7 @@ pub fn import_pages(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::import::*;
 
     /// Unik per test — `SystemTime` bisa kembalikan nanosecond yang sama.
     fn temp_dir(tag: &str) -> PathBuf {
@@ -670,7 +670,7 @@ mod tests {
 
 #[cfg(test)]
 mod pdf_tests {
-    use super::*;
+    use crate::import::*;
     use lopdf::{Dictionary, Object, Stream};
 
     fn temp_dir(tag: &str) -> PathBuf {

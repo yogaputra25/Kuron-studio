@@ -6,7 +6,6 @@
 //!
 //! Semua interaksi command lewat mock app IPC via `tauri::test`.
 
-use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
@@ -74,13 +73,12 @@ pub fn test_app_tagged(tag: &str) -> (tauri::AppHandle<tauri::test::MockRuntime>
         http,
         db: Mutex::new(db),
         previews: Mutex::new(PreviewCaches::new()),
-        cancel: Mutex::new(HashSet::new()),
-        prev_status: Mutex::new(HashMap::new()),
         data_dir: dir.0.clone(),
     };
 
     let app = tauri::test::mock_builder()
         .manage(state)
+        .manage(kuron_studio_lib::translate::CancelState::default())
         .invoke_handler(tauri::generate_handler![
             // project
             kuron_studio_lib::commands::project::list_projects,
@@ -93,7 +91,7 @@ pub fn test_app_tagged(tag: &str) -> (tauri::AppHandle<tauri::test::MockRuntime>
             kuron_studio_lib::commands::project::move_pages,
             kuron_studio_lib::commands::project::clean_pages,
             // import
-            kuron_studio_lib::commands::import::import_pages,
+            kuron_studio_lib::import::import_pages,
             // detect
             kuron_studio_lib::commands::detect::save_bubbles,
             kuron_studio_lib::commands::detect::detect_status,

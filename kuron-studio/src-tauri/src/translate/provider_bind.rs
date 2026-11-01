@@ -6,7 +6,7 @@ use crate::error::AppError;
 use crate::provider::config::ProviderRecord;
 use crate::AppState;
 
-use super::pipeline::{restore_cancelled, PagePrep, PrepOpts};
+use super::{pipeline::{restore_cancelled, PagePrep, PrepOpts}, Ctx};
 
 pub fn load_provider(
     state: &AppState,
@@ -34,15 +34,15 @@ pub struct ProviderBinding {
 /// Gagal di sini = halaman belum mulai kerja → status pulih pra-klaim
 /// (bukan `fail_page`), klaim dilepas.
 pub fn bind_provider(
-    state: &AppState,
+    ctx: &Ctx<'_>,
     opts: &PrepOpts<'_>,
     prep: &PagePrep,
     gloss: Option<&str>,
 ) -> Result<ProviderBinding, AppError> {
     let bubbles_json = serde_json::to_string(&prep.bubbles)?;
-    let (client, mut rec) = load_provider(state, opts.provider_id)
+    let (client, mut rec) = load_provider(ctx.app, opts.provider_id)
         .inspect_err(|_| {
-            let _ = restore_cancelled(state, opts.page_id);
+            let _ = restore_cancelled(ctx, opts.page_id);
         })?;
     rec.model = crate::provider::effective_model(&rec, opts.model);
     let key = cache::cache_key(cache::CacheKey {

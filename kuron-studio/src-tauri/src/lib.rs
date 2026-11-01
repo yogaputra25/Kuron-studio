@@ -8,6 +8,7 @@ pub mod secrets;
 pub mod store;
 pub mod domain;
 pub mod glossary;
+pub mod import;
 pub mod jobs;
 pub mod logging;
 pub mod preview_cache;
@@ -20,7 +21,6 @@ pub mod translate;
 pub mod commands;
 
 pub use error::AppError;
-use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use tauri::Manager;
 
@@ -35,8 +35,7 @@ use commands::glossary::{
     glossary_list, glossary_update,
 };
 use commands::image::get_image_preview;
-use commands::import::import_pages;
-use crate::domain::PageStatus;
+use crate::import::import_pages;
 use crate::store::ProjectStore;
 use commands::project::{
     clean_pages, create_folder, create_project, create_sample_project,
@@ -54,39 +53,12 @@ pub struct AppState {
     pub db: Mutex<rusqlite::Connection>,
     /// Cache preview gambar sesi (grid-preview-perf D4): tier thumb + full.
     pub previews: Mutex<preview_cache::PreviewCaches>,
-    /// Halaman yang diminta batal (opsi B cancel): diisi `cancel_translate`,
-    /// dibaca `backoff_translate` tiap iterasi + saat sleep via `select!`.
-    pub cancel: Mutex<HashSet<String>>,
-    /// Status sebelum `claim_page` (Translating menimpa); path cancel restore
-    /// ini via helper, bukan `fail_page`.
-    pub prev_status: Mutex<HashMap<String, PageStatus>>,
     /// App data dir (`…/kuron-studio`). Disimpan di state supaya command
     /// bisa menemukan projects.json + log file tanpa menebak path.
     pub data_dir: std::path::PathBuf,
 }
 
 impl AppState {
-    pub fn stash_prev(&self, page_id: &str, st: PageStatus) {
-        if let Ok(mut m) = self.prev_status.lock() {
-            m.insert(page_id.to_string(), st);
-        }
-    }
-    pub fn take_prev(&self, page_id: &str) -> Option<PageStatus> {
-        self.prev_status.lock().ok()?.remove(page_id)
-    }
-    pub fn clear_cancel(&self, page_id: &str) {
-        if let Ok(mut c) = self.cancel.lock() {
-            c.remove(page_id);
-        }
-    }
-    pub fn request_cancel(&self, page_id: &str) {
-        if let Ok(mut c) = self.cancel.lock() {
-            c.insert(page_id.to_string());
-        }
-    }
-    pub fn is_cancelled(&self, page_id: &str) -> bool {
-        self.cancel.lock().map(|c| c.contains(page_id)).unwrap_or(false)
-    }
     pub fn data_dir(&self) -> String {
         self.data_dir.to_string_lossy().to_string()
     }
@@ -143,10 +115,9 @@ pub fn run() {
                 http,
                 db: Mutex::new(db),
                 previews: Mutex::new(preview_cache::PreviewCaches::new()),
-                cancel: Mutex::new(HashSet::new()),
-                prev_status: Mutex::new(HashMap::new()),
                 data_dir: dir,
             });
+            app.manage(translate::CancelState::default());
             // M4-7: updater (desktop only); endpoints/pubkey in tauri.conf.json.
             #[cfg(desktop)]
             app.handle().plugin(tauri_plugin_updater::Builder::new().build()).map_err(AppError::store)?;
