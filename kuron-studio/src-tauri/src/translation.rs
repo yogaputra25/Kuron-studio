@@ -74,14 +74,17 @@ pub struct PageTranslation {
     pub manual_done: bool,
 }
 
-/// Lengkap = manual ATAU semua bubble ada isi terjemahan (non-blank).
-/// Bubble kosong = belum diterjemahkan; vec kosong tak pernah lengkap.
+/// Lengkap = manual ATAU semua bubble BERISI terjemahan (non-blank).
+/// Bubble yang `original`-nya kosong ikut diabaikan: tidak ada teks sumber
+/// = tidak ada yang bisa diterjemahkan (mis. kepotong tepi gambar).
+/// Vec kosong tak pernah lengkap.
 pub fn translation_complete(t: &PageTranslation) -> bool {
     if t.manual_done {
         return true;
     }
-    !t.bubbles.is_empty()
-        && t.bubbles.iter().all(|b| !b.translated.trim().is_empty())
+    let with_source: Vec<&BubbleTranslation> =
+        t.bubbles.iter().filter(|b| !b.original.trim().is_empty()).collect();
+    !with_source.is_empty() && with_source.iter().all(|b| !b.translated.trim().is_empty())
 }
 
 /// Provider boleh mengosongkan `translated` (mis. SFX yang ia pilih tak
@@ -385,6 +388,18 @@ mod tests {
         assert!(!translation_complete(&pt(vec![], false)));
         assert!(translation_complete(&pt(vec![], true)));
         assert!(translation_complete(&pt(vec![b("a"), b("")], true)));
+    }
+
+    #[test]
+    fn empty_original_dikesampingkan_kepotong() {
+        let b = |o: &str, t: &str| BubbleTranslation { index: 0, x: 0, y: 0, w: 10, h: 10, shape: None, layout: None, font_size: None, original: o.into(), reading: "".into(), translated: t.into(), ai_original: "".into(), ai_reading: "".into(), ai_translated: "".into(), needs_white_patch: false, is_user_edited: false };
+        let pt = |bubbles: Vec<BubbleTranslation>| PageTranslation { page_id: "p".into(), target_lang: "id".into(), style: "".into(), model: "".into(), manual_done: false, bubbles };
+        // Kasus p029: 1 terisi + 2 original-kosong = lengkap.
+        assert!(translation_complete(&pt(vec![b("a", "A"), b("", ""), b("  ", "")])));
+        // Semua original kosong = tetap belum lengkap.
+        assert!(!translation_complete(&pt(vec![b("", ""), b("  ", "")])));
+        // Original berisi + terjemahan kosong = belum (tak berubah).
+        assert!(!translation_complete(&pt(vec![b("a", "A"), b("b", "")])));
     }
 
     #[test]

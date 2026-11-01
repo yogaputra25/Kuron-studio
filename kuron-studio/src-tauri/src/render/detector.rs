@@ -1,10 +1,11 @@
 //! Session ONNX lazy + thread-safe untuk `bubble.onnx`.
 //!
-//! `BubbleDetector` dipegang `DetectState` (Mutex): load sekali via
-//! `ensure_loaded`, infer per page dari bytes file. Berat (infer) jalan di
-//! `spawn_blocking` agar async runtime Tauri tak tersumbat; `ort::Session`
-//! dipakai dari satu thread blocking dalam satu waktu (Mutex).
-//! `intra_threads=2` sesuai M1-4; session di-reuse antar page.
+//! `BubbleDetector` dipegang `DetectorState` sebagai pool: satu session per
+//! slot worker (lihat `pool_size`). `ort::Session: Send` tapi bukan `Sync`,
+//! jadi sharing 1 session antar thread dilarang tipe — pool session independen
+//! adalah satu-satunya paralelisme riil. Tiap slot dilindungi `Mutex` sendiri.
+//! Berat (infer) jalan di `spawn_blocking` agar async runtime Tauri tak tersumbat.
+//! `intra_threads=2` per session sesuai M1-4; session di-reuse antar page.
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -116,10 +117,11 @@ fn model_input_name(session: &ort::session::Session) -> Result<String, AppError>
         .ok_or_else(|| AppError::provider("model tanpa input".to_string()))
 }
 
-/// State deteksi: path model + session lazy. `Mutex` agar `&self` di command
-/// bisa pinjam mutabel untuk infer berurutan (batch loop serial).
+/// State deteksi: pool session lazy + pin per slot worker.
+/// `Mutex` per slot: worker yang di-pin ke slot berbeda tak pernah berebut;
+/// `detect_bytes` (single/editor) memakai slot 0.
 pub struct DetectorState {
-    inner: Mutex<BubbleDetector>,
+    pool: Vec<Mutex<BubbleDetector>>,
 }
 
 impl std::fmt::Debug for DetectorState {
@@ -135,13 +137,49 @@ impl Default for DetectorState {
 }
 
 impl DetectorState {
+    /// Jumlah slot paralel: core/2 (tiap session sudah 2 intra-thread),
+    /// clamp 1..=4. Mesin 2-core = serial (tanpa regresi).
+    pub fn pool_size() -> usize {
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(2)
+            .div_ceil(2)
+            .clamp(1, 4)
+    }
     pub fn new() -> Self {
         Self {
-            inner: Mutex::new(BubbleDetector::empty()),
+            pool: (0..Self::pool_size())
+                .map(|_| Mutex::new(BubbleDetector::empty()))
+                .collect(),
         }
     }
+    pub fn pool_len(&self) -> usize {
+        self.pool.len()
+    }
     pub fn detect_bytes(&self, model_path: &PathBuf, page_bytes: &[u8]) -> Result<Vec<BubbleBox>, AppError> {
-        let mut det = crate::error::lock_or_err(&self.inner)?;
+        self.detect_bytes_on(0, model_path, page_bytes)
+    }
+    /// Infer via slot pool (pin per worker): tanpa kontensi antar slot.
+    pub fn detect_bytes_on(
+        &self,
+        slot: usize,
+        model_path: &PathBuf,
+        page_bytes: &[u8],
+    ) -> Result<Vec<BubbleBox>, AppError> {
+        let idx = slot % self.pool.len().max(1);
+        let mut det = crate::error::lock_or_err(&self.pool[idx])?;
         det.detect_bytes(model_path, page_bytes)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pool_size_masuk_akal_dan_konsisten() {
+        let n = DetectorState::pool_size();
+        assert!((1..=4).contains(&n), "pool_size dalam 1..=4, dapat {n}");
+        assert_eq!(DetectorState::new().pool_len(), n);
     }
 }

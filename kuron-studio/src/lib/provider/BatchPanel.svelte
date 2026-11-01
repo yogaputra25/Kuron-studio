@@ -5,6 +5,7 @@
   import { initialBatchState, reduceProgress } from "./batch";
   import { toBatchInput } from "./translateOpts";
   import { t } from "../app/i18n";
+  import { read, STORAGE_KEYS } from "../app/storage";
   import Button from "../ui/Button.svelte";
   import KuroMascot from "../ui/KuroMascot.svelte";
   import Panel from "../ui/Panel.svelte";
@@ -36,13 +37,19 @@
     batch = reduceProgress(batch, e.payload);
   });
   onDestroy(() => { offProgress(); });
+  // Deadline per halaman (detik) dari simpanan menit; guard invalid → fallback 15
+  // (normalisasi ke default — <=0/NaN tak pernah dikirim).
+  function batchTimeoutSecs(): number {
+    const mins = read(STORAGE_KEYS.batchTimeout, 15, (v) => Number.isFinite(v) && v >= 1 && v <= 1440);
+    return Math.round(mins * 60);
+  }
 
   async function run(ids: string[]) {
     running = true;
     error = "";
     batch = initialBatchState(ids.length);
     try {
-      await api.translateBatch(toBatchInput(opts, { pageIds: ids, providerId: opts.providerId, readingDirection: opts.readingDirection }));
+      await api.translateBatch(toBatchInput(opts, { pageIds: ids, providerId: opts.providerId, readingDirection: opts.readingDirection, timeoutSecs: batchTimeoutSecs() }));
     } catch (e) {
       error = String(e);
     } finally {
@@ -77,6 +84,9 @@
       <p class="tnum mb-2 text-xs text-ink-3">
         {targets.length} halaman · {batch.done}/{batch.total} {$t("done")} · {$t("failed")}: {batch.failed.length}
       </p>
+      {#if running && batch.done === 0}
+        <p class="mb-2 text-[11px] text-ink-3" role="status" aria-label={$t("batchPreparingLabel")}>{Object.values(batch.messages).at(-1) ?? ""}</p>
+      {/if}
 
       <div
         class="h-1.5 overflow-hidden rounded-full bg-raised"

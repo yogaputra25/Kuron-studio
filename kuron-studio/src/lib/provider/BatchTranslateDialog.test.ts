@@ -41,11 +41,18 @@ describe("batch dialog: scope + skip → pageIds benar", () => {
   });
 });
 
-describe("batch dialog: Mulai disabled tanpa provider", () => {
+describe("batch dialog: Mulai disabled tanpa provider / cakupan kosong", () => {
   it("tombol Start disabled sampai provider dipilih + hint", () => {
-    expect(dlg).toContain("disabled={!providerId}");
-    expect(dlg).toContain("if (!providerId) return;");
+    expect(dlg).toContain("disabled={!providerId || pageIds.length === 0}");
+    expect(dlg).toContain("if (!providerId || pageIds.length === 0) return;");
     expect(dlg).toContain("batchDlgNeedProvider");
+  });
+  it("cakupan kosong disabled + hint cakupan", () => {
+    expect(dlg).toContain("pageIds.length === 0");
+    expect(dlg).toContain("batchDlgEmptyScope");
+  });
+  it("default scope cerdas: tanpa pilihan buka di visible", () => {
+    expect(dlg).toContain('selectedIds.length > 0 ? "selected" : "visible"');
   });
 });
 

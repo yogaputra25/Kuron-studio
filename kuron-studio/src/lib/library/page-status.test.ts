@@ -7,18 +7,24 @@ import TranslationCard from "../editor/TranslationCard.svelte";
 import { api } from "../contracts/api";
 
 describe("translationComplete", () => {
-  it("lengkap bila semua terisi", () => {
-    expect(translationComplete([{ translated: "a" }, { translated: "b" }])).toBe(true);
+  it("lengkap bila semua BERISI terisi", () => {
+    expect(translationComplete([{ original: "a", translated: "A" }, { original: "b", translated: "B" }])).toBe(true);
   });
 
   it("sebagian / kosong / blank tak lengkap", () => {
-    expect(translationComplete([{ translated: "a" }, { translated: "" }])).toBe(false);
-    expect(translationComplete([{ translated: "  " }])).toBe(false);
+    expect(translationComplete([{ original: "a", translated: "A" }, { original: "b", translated: "" }])).toBe(false);
+    expect(translationComplete([{ original: "a", translated: "  " }])).toBe(false);
     expect(translationComplete([])).toBe(false);
   });
 
+  it("original kosong diabaikan (kepotong/tak terbaca)", () => {
+    expect(translationComplete([{ original: "a", translated: "A" }, { original: "", translated: "" }, { original: "  ", translated: "" }])).toBe(true);
+    expect(translationComplete([{ original: "", translated: "" }])).toBe(false);
+    expect(translationComplete([{ original: "", translated: "x" }])).toBe(false);
+  });
+
   it("flag manual menang", () => {
-    expect(translationComplete([{ translated: "a" }, { translated: "" }], true)).toBe(true);
+    expect(translationComplete([{ original: "a", translated: "A" }, { original: "b", translated: "" }], true)).toBe(true);
   });
 });
 
@@ -36,16 +42,16 @@ describe("statusAfterBubbleSave", () => {
 
 describe("statusAfterTranslationSave", () => {
   it("lengkap jadi translated", () => {
-    expect(statusAfterTranslationSave("detected", [{ translated: "x" }], false)).toBe("translated");
+    expect(statusAfterTranslationSave("detected", [{ original: "o", translated: "x" }], false)).toBe("translated");
   });
 
   it("sebagian mempertahankan status lama", () => {
-    expect(statusAfterTranslationSave("detected", [{ translated: "x" }, { translated: "" }])).toBe("detected");
+    expect(statusAfterTranslationSave("detected", [{ original: "o", translated: "x" }, { original: "o", translated: "" }])).toBe("detected");
     expect(statusAfterTranslationSave("idle", [])).toBe("idle");
   });
 
   it("transient translating jatuh ke detected", () => {
-    expect(statusAfterTranslationSave("translating", [{ translated: "" }])).toBe("detected");
+    expect(statusAfterTranslationSave("translating", [{ original: "o", translated: "" }])).toBe("detected");
   });
 });
 

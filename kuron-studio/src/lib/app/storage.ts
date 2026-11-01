@@ -54,6 +54,7 @@ export const STORAGE_KEYS = {
   sidebarW: defineKey("kuron-sidebar-w:v1", num),
   batchProvider: defineKey("kuron-batch-provider:v1", rawString),
   batchOpts: defineKey<TranslateOpts>("kuron-batch-opts:v1", json<TranslateOpts>()),
+  batchTimeout: defineKey("kuron-batch-timeout:v1", num),
 } as const;
 
 function getItem(key: string): string | null {

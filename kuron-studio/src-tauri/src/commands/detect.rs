@@ -2,7 +2,7 @@ use serde::Serialize;
 use std::future::Future;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::bubble::{model_search_paths, post_process, sanitize_bubbles, BubbleBox};
 use crate::error::AppError;
@@ -92,6 +92,16 @@ pub async fn detect_bubbles(
     state: State<'_, AppState>,
     page_id: String,
 ) -> Result<Vec<BubbleBox>, String> {
+    detect_bubbles_on(state, 0, page_id).await
+}
+
+/// Inti detect satu halaman dengan pin slot pool (batch paralel).
+/// Slot 0 = jalur single/editor (perilaku lama tak berubah).
+async fn detect_bubbles_on(
+    state: State<'_, AppState>,
+    slot: usize,
+    page_id: String,
+) -> Result<Vec<BubbleBox>, String> {
     set_page_status(state.clone(), &page_id, "detecting")?;
     let status = state.detect.status();
     let Some(model_path) = status.model_path.map(PathBuf::from) else {
@@ -103,7 +113,7 @@ pub async fn detect_bubbles(
     let path_for_infer = page_path.clone();
     let boxes = tauri::async_runtime::spawn_blocking(move || {
         let bytes = std::fs::read(&path_for_infer).map_err(|e| AppError::io(format!("read: {e}")))?;
-        detector.detect_bytes(&model_path, &bytes)
+        detector.detect_bytes_on(slot, &model_path, &bytes)
     })
     .await
     .map_err(|e| AppError::io(format!("infer task: {e}")))??;
@@ -134,15 +144,24 @@ pub async fn detect_bubbles_batch(
     page_ids: Vec<String>,
 ) -> Result<Vec<Vec<BubbleBox>>, String> {
     // detect-ux-pack 2.1: satu gagal → catat + lanjut, bukan abort (`?`).
+    // Paralel bounded: semaphore = slot pool session (tanpa kontensi Mutex).
+    let slots = state.detect.detector.pool_len().max(1);
+    let budget = std::time::Duration::from_secs(
+        crate::commands::batch::DEFAULT_BATCH_PAGE_TIMEOUT_SECS,
+    );
     let out = collect_batch(
         &page_ids,
-        |id: String| {
-            let state = state.clone();
+        |n: usize, id: String| {
+            // Hanya tangkap yang 'static (AppHandle); State dibuat fresh di dalam.
+            let handle = app.clone();
+            let slot = n % slots;
             async move {
-                match detect_bubbles(state.clone(), id.clone()).await {
+                let state: State<'_, AppState> = handle.state();
+                match detect_bubbles_on(state, slot, id.clone()).await {
                     Ok(b) => (b, true, String::new()),
                     Err(e) => {
-                        let _ = set_page_status(state.clone(), &id, "failed");
+                        let state2: State<'_, AppState> = handle.state();
+                        let _ = set_page_status(state2, &id, "failed");
                         (Vec::new(), false, e)
                     }
                 }
@@ -151,33 +170,76 @@ pub async fn detect_bubbles_batch(
         |ev| {
             let _ = app.emit("detect_progress", ev);
         },
+        budget,
+        slots,
     )
     .await;
     Ok(out)
 }
 
+/// Pesan timeout detect (menit bulat, selaras pesan timeout batch).
+fn detect_timeout_message(budget_secs: u64) -> String {
+    format!("timeout {} mnt, dilewati", budget_secs / 60)
+}
+
+/// Satu slot hasil worker: indeks input + id + outcome (boxes, ok, pesan).
+type DetectSlot = (usize, String, (Vec<BubbleBox>, bool, String));
+
 /// Inti loop batch tanpa AppHandle/State: urutan = input, gagal lanjut.
 /// Murni sisi orkestrasi (fetch di-inject) → unit-test tanpa Tauri runtime.
+/// Paralel bounded: event di-emit LANGSUNG tiap worker selesai (done monoton =
+/// hitungan selesai) supaya UI bergerak real-time; hasil return tetap
+/// dirakit berurutan input via slot berindeks + sort.
 async fn collect_batch<Fut>(
     page_ids: &[String],
-    mut fetch: impl FnMut(String) -> Fut,
+    mut fetch: impl FnMut(usize, String) -> Fut,
     mut emit: impl FnMut(DetectProgress),
+    budget: std::time::Duration,
+    max_concurrent: usize,
 ) -> Vec<Vec<BubbleBox>>
 where
-    Fut: Future<Output = (Vec<BubbleBox>, bool, String)>,
+    Fut: Future<Output = (Vec<BubbleBox>, bool, String)> + Send + 'static,
 {
     let total = page_ids.len();
-    let mut all = Vec::with_capacity(total);
-    for (i, id) in page_ids.iter().enumerate() {
-        let (boxes, ok, message) = fetch(id.clone()).await;
-        all.push(boxes);
-        emit(DetectProgress {
-            page_id: id.clone(),
-            done: i + 1,
-            total,
-            ok,
-            message,
+    let permits = std::sync::Arc::new(tokio::sync::Semaphore::new(max_concurrent.max(1)));
+    let mut set = tokio::task::JoinSet::new();
+    for (n, id) in page_ids.iter().enumerate() {
+        let permits = std::sync::Arc::clone(&permits);
+        let id = id.clone();
+        // Future dibuat di task utama (fetch FnMut, tak perlu Send);
+        // yang dikirim ke worker hanya future-nya (harus Send + 'static).
+        let fut = fetch(n, id.clone());
+        set.spawn(async move {
+            let _permit = permits.acquire_owned().await;
+            let out = match tokio::time::timeout(budget, fut).await {
+                Ok(out) => out,
+                Err(_) => (Vec::new(), false, detect_timeout_message(budget.as_secs())),
+            };
+            (n, id, out)
         });
+    }
+    let mut slots: Vec<DetectSlot> = Vec::with_capacity(total);
+    // Emit LANGSUNG tiap worker selesai (done = hitungan selesai, monoton):
+    // UI bergerak real-time walau batch ratusan halaman. Urutan hasil akhir
+    // tetap input-order via sort di bawah (replay hanya untuk return value).
+    let mut completed = 0usize;
+    while let Some(res) = set.join_next().await {
+        if let Ok((n, id, (boxes, ok, message))) = res {
+            completed += 1;
+            emit(DetectProgress {
+                page_id: id.clone(),
+                done: completed,
+                total,
+                ok,
+                message: message.clone(),
+            });
+            slots.push((n, id, (boxes, ok, message)));
+        }
+    }
+    slots.sort_by_key(|(n, _, _)| *n);
+    let mut all = Vec::with_capacity(total);
+    for (_, _, (boxes, _, _)) in slots {
+        all.push(boxes);
     }
     all
 }
@@ -207,7 +269,7 @@ mod tests {
         let mut events = Vec::new();
         let out = collect_batch(
             &ids,
-            |id| async move {
+            |_n, id| async move {
                 if id == "p2" {
                     (Vec::new(), false, "decode failed".to_string())
                 } else {
@@ -215,6 +277,8 @@ mod tests {
                 }
             },
             |ev| events.push(ev),
+            std::time::Duration::from_secs(30),
+            2,
         )
         .await;
         assert_eq!(out.len(), 3);
@@ -224,9 +288,74 @@ mod tests {
         assert_eq!(events.len(), 3);
         assert_eq!(events.iter().map(|e| e.done).collect::<Vec<_>>(), vec![1, 2, 3]);
         assert!(events.iter().all(|e| e.total == 3));
-        assert_eq!(events.iter().map(|e| e.ok).collect::<Vec<_>>(), vec![true, false, true]);
-        assert_eq!(events[1].page_id, "p2");
-        assert_eq!(events[1].message, "decode failed");
+        // Urutan event = urutan selesai (acak); hasil return tetap input-order.
+        let mut ids: Vec<&str> = events.iter().map(|e| e.page_id.as_str()).collect();
+        ids.sort_unstable();
+        assert_eq!(ids, vec!["p1", "p2", "p3"]);
+        let failed = events.iter().find(|e| !e.ok).expect("satu gagal");
+        assert_eq!(failed.page_id, "p2");
+        assert_eq!(failed.message, "decode failed");
+    }
+
+    /// Paralel: selesai acak → hasil + event tetap berurutan input.
+    #[tokio::test]
+    async fn selesai_acak_tetap_urut() {
+        let ids = ["p0".to_string(), "p1".to_string(), "p2".to_string()];
+        let mut events = Vec::new();
+        let out = collect_batch(
+            &ids,
+            |_n, id| async move {
+                // p0 paling lambat, p2 tercepat: tanpa reorder, urutan rusak.
+                let ms = match id.as_str() {
+                    "p0" => 60,
+                    "p1" => 30,
+                    _ => 0,
+                };
+                tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+                (vec![box_at(1)], true, String::new())
+            },
+            |ev| events.push(ev),
+            std::time::Duration::from_secs(30),
+            3,
+        )
+        .await;
+        assert_eq!(out.len(), 3);
+        assert_eq!(events.iter().map(|e| e.done).collect::<Vec<_>>(), vec![1, 2, 3]);
+        // Event mengikuti urutan SELESAI (p2 tercepat): hasil tetap input-order.
+        assert_eq!(
+            events.iter().map(|e| e.page_id.as_str()).collect::<Vec<_>>(),
+            vec!["p2", "p1", "p0"]
+        );
+    }
+
+    /// Halaman macet (melebihi budget) → failed berpesan timeout, antrean lanjut.
+    #[tokio::test]
+    async fn timeout_macet_dilewati_antrean_lanjut() {
+        let ids = ["p0".to_string(), "p1".to_string()];
+        let mut events = Vec::new();
+        let out = collect_batch(
+            &ids,
+            |_n, id| async move {
+                if id == "p0" {
+                    tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                }
+                (vec![box_at(1)], true, String::new())
+            },
+            |ev| events.push(ev),
+            std::time::Duration::from_secs(1),
+            2,
+        )
+        .await;
+        assert_eq!(out.len(), 2);
+        assert!(out[0].is_empty(), "p0 kedaluwarsa → kosong");
+        assert_eq!(out[1].len(), 1, "p1 tetap jalan");
+        // p1 (cepat) selesai dulu, p0 menyusul via timeout 1 dtk.
+        assert_eq!(events.iter().map(|e| e.done).collect::<Vec<_>>(), vec![1, 2]);
+        assert_eq!(events[0].page_id, "p1");
+        assert!(events[0].ok);
+        assert_eq!(events[1].page_id, "p0");
+        assert!(!events[1].ok);
+        assert!(events[1].message.contains("timeout"), "pesan: {}", events[1].message);
     }
     use crate::store::ProjectStore;
     use crate::domain::{Page, PageStatus, Project};

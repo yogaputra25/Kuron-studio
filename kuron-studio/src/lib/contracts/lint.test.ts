@@ -33,7 +33,7 @@ describe("no raw Tailwind palette in Svelte (theme-token discipline)", () => {
   });
 
   for (const file of files) {
-    const name = file.split("/").pop()!;
+    const name = file.split(/[/\\]/).pop()!;
     if (ALLOWLIST[name]) continue;
     it(`${name} uses tokens only`, () => {
       const src = readFileSync(file, "utf8");
@@ -58,7 +58,7 @@ describe("no hex/rgba literals in Svelte (illustration tokens only)", () => {
   const HEX = /#[0-9a-fA-F]{3,8}\b/g;
   const RGB_FN = /\brgba?\(/g;
   for (const file of files) {
-    const name = file.split("/").pop()!;
+    const name = file.split(/[/\\]/).pop()!;
     if (HEX_ALLOWLIST[name] ?? ALLOWLIST[name]) continue;
     it(`${name} has no hex/rgba literals`, () => {
       const src = readFileSync(file, "utf8");
@@ -75,7 +75,7 @@ describe("no hex/rgba literals in Svelte (illustration tokens only)", () => {
     });
   }
   it("no stale hex allowlist entries", () => {
-    const componentNames = svelteFiles(SRC).map((f) => f.split("/").pop()!);
+    const componentNames = svelteFiles(SRC).map((f) => f.split(/[/\\]/).pop()!);
     const stale = Object.keys(HEX_ALLOWLIST).filter((n) => !componentNames.includes(n));
     expect(stale, "hex allowlist sudah tidak relevan — hapus").toEqual([]);
   });
@@ -83,7 +83,7 @@ describe("no hex/rgba literals in Svelte (illustration tokens only)", () => {
 
 describe("every allowlist entry is still justified", () => {
   it("no stale allowlist entries (file tidak boleh hilang / sudah rapi)", () => {
-    const componentNames = svelteFiles(SRC).map((f) => f.split("/").pop()!);
+    const componentNames = svelteFiles(SRC).map((f) => f.split(/[/\\]/).pop()!);
     const stale = Object.keys(ALLOWLIST).filter((n) => !componentNames.includes(n));
     expect(stale, "allowlist sudah tidak relevan — hapus").toEqual([]);
   });
@@ -99,7 +99,7 @@ describe("token names used in components actually exist", () => {
       for (const m of src.matchAll(
         /\b(?:bg|text|border|ring|fill|stroke|outline|accent|divide)-(ks-[\w-]+)/g,
       )) {
-        if (!defined.has(m[1])) missing.add(`${file.split("/").pop()}: ${m[1]}`);
+        if (!defined.has(m[1])) missing.add(`${file.split(/[/\\]/).pop()}: ${m[1]}`);
       }
     }
     expect([...missing], "token tidak ada di app.css — utility jadi tidak ter-generate").toEqual([]);
@@ -242,7 +242,7 @@ describe("form controls are not cramped", () => {
   it("no 10px/11px text on <select>, <input>, <textarea> controls", () => {
     const bad: string[] = [];
     for (const file of svelteFiles(SRC)) {
-      const name = file.split("/").pop()!;
+      const name = file.split(/[/\\]/).pop()!;
       const src = readFileSync(file, "utf8");
       for (const m of src.matchAll(
         /<(select|input|textarea)\b[^>]*\btext-\[(?:10|11)px\][^>]*>/g,
@@ -260,7 +260,7 @@ describe("form controls are not cramped", () => {
   it("every select has px-2 or more horizontal padding", () => {
     const bad: string[] = [];
     for (const file of svelteFiles(SRC)) {
-      const name = file.split("/").pop()!;
+      const name = file.split(/[/\\]/).pop()!;
       const src = readFileSync(file, "utf8");
       for (const m of src.matchAll(/<select\b[^>]*>/g)) {
         const tag = m[0];

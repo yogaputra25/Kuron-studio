@@ -224,6 +224,11 @@ const STR: Record<string, Record<Lang, string>> = {
   aboutTechBe: { en: "Backend — Rust + Tauri v2, SQLite, on-device ONNX bubble detection, async HTTP.", id: "Backend — Rust + Tauri v2, SQLite, deteksi bubble ONNX di perangkat, HTTP async.", zh: "后端——Rust + Tauri v2、SQLite、设备端ONNX气泡检测、异步HTTP。" },
   aboutTechAi: { en: "AI & agents — OpenAI-compatible BYOK + Muse model (Meta); built end-to-end by harness agents (refactor, testing, review, docs).", id: "AI & agen — BYOK kompatibel OpenAI + model Muse (Meta); dibangun end-to-end oleh harness agents (refactor, testing, review, docs).", zh: "AI与智能体——兼容OpenAI的自带密钥 + Muse模型（Meta）；由harness agents端到端构建（重构、测试、评审、文档）。" },
   batchDlgNeedProvider: { en: "Select a provider to start.", id: "Pilih provider dulu untuk mulai.", zh: "请先选择服务商再开始。" },
+  batchDlgEmptyScope: { en: "No pages in this scope — adjust scope or filters.", id: "Tidak ada halaman dalam cakupan ini — ubah cakupan atau filter.", zh: "此范围内没有页面——请调整范围或筛选条件。" },
+  batchTimeoutLabel: { en: "Per-page timeout (minutes)", id: "Timeout per halaman (menit)", zh: "单页超时（分钟）" },
+  batchTimeoutHint: { en: "Default 15. A page that exceeds it is skipped — retry it with Retry failed.", id: "Default 15. Halaman yang melebihi batas dilewati — coba lagi via Retry yang gagal.", zh: "默认15分钟。超时的页面会被跳过——可用“重试失败项”重试。" },
+  batchTimeoutInvalid: { en: "Enter 1–1440 minutes.", id: "Isi 1–1440 menit.", zh: "请输入1–1440分钟。" },
+  batchPreparingLabel: { en: "Preparing pages…", id: "Menyiapkan halaman…", zh: "正在准备页面…" },
 };
 
 export const t = derived(lang, ($l) => (k: string): string => STR[k]?.[$l] ?? k);
