@@ -65,6 +65,25 @@ pub fn translate_text_to_page(job: CoreJob<'_>) -> Result<PageTranslation, AppEr
 /// Stash status pra-klaim ke `CancelState` (path cancel restore ini,
 /// bukan `fail_page`). `&Ctx` (bukan `&State`) agar unit-test tanpa
 /// runtime Tauri. Flag cancel basi SENGAJA tak dibuang di sini.
+/// Guard hemat-kuota: halaman yang sudah lengkap tidak dikirim ulang.
+/// Mengembalikan `Some(prev)` bila `prev` lengkap dan panggilan non-paksa;
+/// `None` bila harus lanjut (belum lengkap atau `force`). Tidak menyentuh
+/// status maupun klaim — pemanggil yang menentukan (skip vs paksa kirim).
+pub fn already_translated(
+    ctx: &Ctx<'_>,
+    page_id: &str,
+    force: bool,
+) -> Result<Option<PageTranslation>, AppError> {
+    if force {
+        return Ok(None);
+    }
+    let snap = super::snapshot::load_snapshot(ctx.app, page_id)?;
+    match snap.prev {
+        Some(t) if crate::translation::translation_complete(&t) => Ok(Some(t)),
+        _ => Ok(None),
+    }
+}
+
 pub fn claim_page(ctx: &Ctx<'_>, page_id: &str) -> Result<(), AppError> {
     let prev = {
         let mut store = crate::error::lock_or_err(&ctx.app.store)?;
@@ -144,10 +163,22 @@ pub fn effective_glossary(
     }
 }
 
-/// Satu POST dengan backoff 2s/4s/8s khusus 429 (di atas retry internal
-/// provider). Error non-429 langsung pulang. `page_id` kosong = tanpa cek
-/// cancel (kompat); non-kosong = cek flag tiap iterasi + `select!` saat sleep.
-/// Cek ulang pasca-parse: POST yg keburu selesai saat cancel DIBUANG (satu
+/// Hasil satu pengiriman: teks + jumlah attempt + pemakaian bila dilaporkan.
+/// `attempts` menghitung tiap `translate_image` (termasuk 1 retry-429 level
+/// protokol di dalamnya) — dipakai counter log dan test 1-POST.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PostOutcome {
+    pub text: String,
+    pub attempts: u32,
+    pub usage: Option<crate::provider::http::TokenUsage>,
+}
+
+/// Satu POST dengan backoff 2s/4s/8s hanya untuk gangguan jaringan sesaat
+/// (bukan kuota, bukan parse). Error kuota langsung pulang ke pemanggil agar
+/// dihitung breaker kolektor — tidak dibakar 4x per halaman. Error non-kuota
+/// non-transien juga langsung pulang. `page_id` kosong = tanpa cek cancel
+/// (kompat); non-kosong = cek flag tiap iterasi + `select!` saat sleep.
+/// Cek ulang pasca-POST: POST yg keburu selesai saat cancel DIBUANG (satu
 /// call token tetap kepakai — sadar, bukan refund).
 pub async fn backoff_translate(
     cancel: &CancelState,
@@ -156,7 +187,7 @@ pub async fn backoff_translate(
     rec: &ProviderRecord,
     prompt: &str,
     jpeg: &[u8],
-) -> Result<String, crate::error::AppError> {
+) -> Result<PostOutcome, crate::error::AppError> {
     let mut last = crate::error::AppError::provider("rate_limited: retry later");
     for (n, wait) in [0u64, 2, 4, 8].iter().enumerate() {
         if cancel.is_cancelled(page_id) {
@@ -177,15 +208,21 @@ pub async fn backoff_translate(
                 }
             }
         }
+        // Satu pengiriman per iterasi: attempt = indeks + 1.
+        let attempts = n as u32 + 1;
         match provider::translate_image(client, rec, prompt, jpeg).await {
-            Ok(t) => {
+            Ok(r) => {
                 if cancel.is_cancelled(page_id) {
                     cancel.clear_cancel(page_id);
                     return Err(crate::error::AppError::cancelled());
                 }
-                return Ok(t);
+                return Ok(PostOutcome { text: r.text, attempts, usage: r.usage });
             }
-            Err(e) if e.to_string().contains("rate_limited") && n < 3 => {
+            Err(e) if e.is_quota() => {
+                // Kuota: jangan bakar attempt lagi — kolektor yang menghitung.
+                return Err(e);
+            }
+            Err(e) if e.is_transient() && n < 3 => {
                 last = e;
             }
             Err(e) => return Err(e),
@@ -324,17 +361,22 @@ pub fn map_text(prep: &PagePrep, model: &str, text: &str) -> Result<PageTranslat
     })
 }
 
-/// Simpan hasil ke cache + persist translated.
+/// Simpan hasil ke cache + persist translated + catat pemakaian.
 pub fn store_result(
     ctx: &Ctx<'_>,
     prep: &PagePrep,
     binding: &ProviderBinding,
     page_t: &PageTranslation,
+    usage: Option<crate::provider::http::TokenUsage>,
 ) -> Result<(), AppError> {
     let payload = serde_json::to_string(page_t)?;
     let db = crate::error::lock_or_err(&ctx.app.db)?;
     cache::cache_set(&db, &binding.cache_key, &payload)?;
     let r = persist_result(ctx, &prep.page_id, page_t);
+    // Data aman dulu, angka menyusul: hanya catat bila persist sukses.
+    if r.is_ok() {
+        crate::usage::record_usage(&db, &prep.page_id, &binding.rec.id, &binding.rec.model, usage)?;
+    }
     ctx.cancel.clear_cancel(&prep.page_id);
     ctx.cancel.take_prev(&prep.page_id);
     r
@@ -343,8 +385,9 @@ pub fn store_result(
 /// Orkestrasi tunggal halaman siap-kirim (#55): dipakai `translate_page`
 /// dan worker `translate_batch` — JANGAN bikin salinan kedua.
 /// Pre-flight cancel: job antre yang keburu dibatalkan langsung restore
-/// tanpa sentuh cache/POST. Lalu cache → POST (backoff) → map → retry POST
-/// sekali saat parse gagal → store.
+/// tanpa sentuh cache/POST. Lalu cache → POST 1x → parse → repair lokal →
+/// store. Parse tetap gagal = `failed` + anjuran Retry manual; TIDAK ada
+/// POST kedua otomatis (hemat kuota).
 pub async fn translate_prep(
     ctx: &Ctx<'_>,
     prep: &PagePrep,
@@ -354,21 +397,49 @@ pub async fn translate_prep(
         return Err(cancel_or_fail(ctx, &prep.page_id, crate::error::AppError::cancelled()));
     }
     if let Some(payload) = cache_lookup(ctx.app, &binding.cache_key)? {
+        crate::logging::info(
+            "page_post",
+            serde_json::json!({
+                "page_id": &prep.page_id,
+                "provider": &binding.rec.id,
+                "model": &binding.rec.model,
+                "cache_hit": true,
+                "request_count": 0,
+            }),
+        );
         return apply_cached(ctx, &prep.page_id, &payload, prep.prev.as_ref());
     }
-    let text = backoff_translate(ctx.cancel, &prep.page_id, &binding.client, &binding.rec, &prep.prompt, &prep.jpeg)
+    let post = backoff_translate(ctx.cancel, &prep.page_id, &binding.client, &binding.rec, &prep.prompt, &prep.jpeg)
         .await
         .map_err(|e| cancel_or_fail(ctx, &prep.page_id, e))?;
-    let page_t = match map_text(prep, &binding.rec.model, &text) {
+    crate::logging::info(
+        "page_post",
+        serde_json::json!({
+            "page_id": &prep.page_id,
+            "provider": &binding.rec.id,
+            "model": &binding.rec.model,
+            "cache_hit": false,
+            "request_count": post.attempts,
+            "input_tokens": post.usage.map(|u| u.input),
+            "output_tokens": post.usage.map(|u| u.output),
+        }),
+    );
+    let page_t = match map_text(prep, &binding.rec.model, &post.text) {
         Ok(p) => p,
-        Err(first) => {
-            let text2 = backoff_translate(ctx.cancel, &prep.page_id, &binding.client, &binding.rec, &prep.prompt, &prep.jpeg)
-                .await
-                .map_err(|e| cancel_or_fail(ctx, &prep.page_id, e))?;
-            map_text(prep, &binding.rec.model, &text2).map_err(|_| cancel_or_fail(ctx, &prep.page_id, first))?
-        }
+        Err(first) => match crate::parser::repair_json(&post.text)
+            .and_then(|fixed| map_text(prep, &binding.rec.model, &fixed).ok())
+        {
+            Some(p) => p,
+            None => {
+                return Err(cancel_or_fail(
+                    ctx,
+                    &prep.page_id,
+                    AppError::parse(format!("{first} — coba Retry manual")),
+                ))
+            }
+        },
     };
-    store_result(ctx, prep, binding, &page_t)?;
+    store_result(ctx, prep, binding, &page_t, post.usage)?;
     Ok(page_t)
 }
 

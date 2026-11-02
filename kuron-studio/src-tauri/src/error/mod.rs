@@ -78,6 +78,33 @@ impl AppError {
         Self::NoTranslation(page_id.to_string())
     }
 
+    /// Benar bila error ini sinyal kuota habis / rate-limit dari provider.
+    /// Klasifikasi pesan terpusat (breaker batch + backoff): varian apa pun
+    /// yang membawa penanda kuota dihitung, sisanya tidak.
+    pub fn is_quota(&self) -> bool {
+        let m = self.to_string().to_lowercase();
+        m.contains("rate_limited")
+            || m.contains("insufficient_quota")
+            || m.contains("quota_exceeded")
+            || m.contains("billing")
+            || m.contains("payment required")
+    }
+
+    /// Benar bila error ini gangguan jaringan sesaat yang layak dicoba ulang
+    /// (bukan kuota, bukan parse, bukan batal). Kuota selalu menang: error
+    /// kuota tidak pernah transien.
+    pub fn is_transient(&self) -> bool {
+        if self.is_quota() {
+            return false;
+        }
+        let m = self.to_string().to_lowercase();
+        m.contains("send ke")
+            || m.contains("timed out")
+            || m.contains("timeout")
+            || m.contains("connection")
+            || m.contains("network")
+    }
+
     fn not_found(kind: &str, id: impl Display) -> Self {
         Self::NotFound {
             kind: kind.to_string(),
@@ -296,5 +323,24 @@ mod tests {
         assert!(matches!(e, AppError::Cancelled));
         let e = AppError::parse("boom");
         assert!(!matches!(e, AppError::Cancelled));
+    }
+
+    #[test]
+    fn is_quota_mengenali_sinyal_kuota_saja() {
+        assert!(AppError::provider("rate_limited: retry later").is_quota());
+        assert!(AppError::provider("http 429: insufficient_quota").is_quota());
+        assert!(AppError::provider("quota_exceeded for model").is_quota());
+        assert!(!AppError::provider("send gagal: timeout").is_quota());
+        assert!(!AppError::parse("invalid json").is_quota());
+        assert!(!AppError::cancelled().is_quota());
+    }
+
+    #[test]
+    fn is_transient_hanya_untuk_gangguan_jaringan() {
+        assert!(AppError::provider("send ke http://x gagal: timeout").is_transient());
+        assert!(AppError::provider("connection reset by peer").is_transient());
+        assert!(!AppError::provider("rate_limited: retry later").is_transient());
+        assert!(!AppError::parse("invalid json").is_transient());
+        assert!(!AppError::cancelled().is_transient());
     }
 }

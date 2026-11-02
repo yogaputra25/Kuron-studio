@@ -52,11 +52,12 @@ async fn translate_one(
     base: &str,
     page_id: &str,
 ) -> PageTranslation {
-    let text = kuron_studio_lib::provider::openai::chat_completions_image(
+    let res = kuron_studio_lib::provider::openai::chat_completions_image(
         client, base, "k", "m", "prompt", b"fake-jpeg",
     )
     .await
     .unwrap();
+    let text = res.text;
     let results = kuron_studio_lib::parser::parse_mosaic_json(&text).unwrap();
     let b = bubble();
     let ordered = order_indices(std::slice::from_ref(&b), "rtl");

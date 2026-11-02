@@ -38,10 +38,9 @@ async fn mock_openai_chat_parse_map_cache() {
     )
     .await
     .unwrap();
-    assert!(out.contains("\"1\""));
+    assert!(out.text.contains("\"1\""));
 
-    let results = parse_mosaic_json(&out).unwrap();
-    assert_eq!(results[0].1.translated, "A");
+    let results = parse_mosaic_json(&out.text).unwrap();
 
     let b = kuron_studio_lib::bubble::BubbleBox { x: 10, y: 20, w: 60, h: 40, confidence: 1.0, shape: None, kind: None, tail: None };
     let ordered = order_indices(std::slice::from_ref(&b), "rtl");

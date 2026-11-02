@@ -37,7 +37,7 @@ async fn post_chat(
     prompt: &str,
     jpeg: &[u8],
     max_tokens: u32,
-) -> Result<String, AppError> {
+) -> Result<http::ChatResult, AppError> {
     let url = format!("{}/chat/completions", http::norm_base(base_url, &[]));
     let body = serde_json::json!({
         "model": model,
@@ -91,7 +91,9 @@ async fn post_chat(
             );
             AppError::parse(e.to_string())
         })?;
-    extract_content(&v)
+    let usage = http::extract_usage(&v);
+    let text = extract_content(&v)?;
+    Ok(http::ChatResult { text, usage })
 }
 
 fn extract_content(v: &serde_json::Value) -> Result<String, AppError> {
@@ -112,7 +114,7 @@ pub async fn chat_completions_image(
     model: &str,
     prompt: &str,
     jpeg_bytes: &[u8],
-) -> Result<String, AppError> {
+) -> Result<http::ChatResult, AppError> {
     post_chat(client, base_url, api_key, model, prompt, jpeg_bytes, 4096).await
 }
 

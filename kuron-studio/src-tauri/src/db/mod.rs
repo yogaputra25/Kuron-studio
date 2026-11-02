@@ -26,6 +26,15 @@ CREATE TABLE IF NOT EXISTS page_previews (
     jpeg BLOB NOT NULL,
     created_at INTEGER NOT NULL,
     PRIMARY KEY (key, max_side)
+);
+CREATE TABLE IF NOT EXISTS usage_records (
+    id TEXT PRIMARY KEY,
+    page_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL DEFAULT '',
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    created_at INTEGER NOT NULL
 );";
 
 /// Buka file DB di `path`.
@@ -85,7 +94,7 @@ CREATE TABLE glossary (id TEXT PRIMARY KEY, source TEXT NOT NULL, target TEXT NO
         migrate(&c).unwrap();
 
         let names = table_names(&c);
-        for t in ["translation_cache", "providers", "glossary", "page_previews"] {
+        for t in ["translation_cache", "providers", "glossary", "page_previews", "usage_records"] {
             assert!(names.contains(&t.to_string()), "tabel {t} harus ada: {names:?}");
         }
         // Data lama utuh.
@@ -115,7 +124,7 @@ CREATE TABLE glossary (id TEXT PRIMARY KEY, source TEXT NOT NULL, target TEXT NO
         let names = table_names(&c);
         assert_eq!(
             names,
-            vec!["glossary", "page_previews", "providers", "translation_cache"]
+            vec!["glossary", "page_previews", "providers", "translation_cache", "usage_records"]
         );
     }
 }

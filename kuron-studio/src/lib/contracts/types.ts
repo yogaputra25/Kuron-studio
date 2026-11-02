@@ -196,6 +196,8 @@ export interface TranslatePageArgs {
   glossary?: string;
   customPrompt?: string;
   model?: string;
+  /** Paksa kirim ulang walau halaman sudah lengkap; absen = hemat (false). */
+  force?: boolean;
 }
 
 export const PROVIDER_TYPES: { value: AiProviderType; label: string; needsKey: boolean }[] = [
@@ -256,6 +258,8 @@ export interface TranslateBatchInput {
   glossary?: string;
   customPrompt?: string;
   model?: string;
+  /** Paksa kirim ulang walau halaman sudah lengkap; absen = hemat (false). */
+  force?: boolean;
 }
 
 export interface RetryBubbleInput {

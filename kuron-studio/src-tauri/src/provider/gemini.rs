@@ -13,7 +13,7 @@ pub async fn chat_completions_image(
     model: &str,
     prompt: &str,
     jpeg_bytes: &[u8],
-) -> Result<String, AppError> {
+) -> Result<http::ChatResult, AppError> {
     let url = format!(
         "{}/v1beta/models/{}:generateContent?key={}",
         http::norm_base(base_url, STRIP_SUFFIXES),
@@ -39,7 +39,9 @@ pub async fn chat_completions_image(
         return Err(AppError::provider(http::err_preview(st, &b)));
     }
     let v: serde_json::Value = res.json().await.map_err(AppError::from)?;
-    extract(&v)
+    let usage = http::extract_usage(&v);
+    let text = extract(&v)?;
+    Ok(http::ChatResult { text, usage })
 }
 
 fn extract(v: &serde_json::Value) -> Result<String, AppError> {

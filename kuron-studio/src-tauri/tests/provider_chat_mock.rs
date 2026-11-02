@@ -82,7 +82,8 @@ async fn openai_validate_path_auth_body() {
 async fn openai_chat_sends_image_url() {
     let (base, rx) = spawn_capture(vec![OPENAI_OK]);
     let out = openai::chat_completions_image(&client(), &base, "k", "m", "prompt", b"fake-jpeg").await.unwrap();
-    assert_eq!(out, "ok");
+    assert_eq!(out.text, "ok");
+    assert_eq!(out.usage, None);
     let (head, body) = rx.recv().unwrap();
     assert!(head.starts_with("POST /chat/completions "), "path: {head}");
     assert!(body.contains("image_url"), "image block: {body}");
@@ -110,7 +111,7 @@ async fn cohere_v2_chat_bearer_image_url() {
     let c = client();
     cohere::validate_minimal(&c, &base, "tok", "command-a-vision-07-2025").await.unwrap();
     let out = cohere::chat_completions_image(&c, &base, "tok", "command-a-vision-07-2025", "p", b"j").await.unwrap();
-    assert_eq!(out, "ok");
+    assert_eq!(out.text, "ok");
     let (h1, b1) = rx.recv().unwrap();
     let (h2, b2) = rx.recv().unwrap();
     assert!(h1.starts_with("POST /v2/chat "), "validate path: {h1}");
