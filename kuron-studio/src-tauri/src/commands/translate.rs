@@ -6,12 +6,12 @@ use crate::translation::{BubbleTranslation, PageTranslation};
 use crate::AppState;
 
 pub use crate::translate::{
-    apply_cached, backoff_translate, bind_provider, cache_lookup, cancel_or_fail, claim_page,
-    effective_glossary, fail_page, load_provider, load_snapshot, map_text,
+    already_translated, apply_cached, backoff_translate, bind_provider, cache_lookup,
+    cancel_or_fail, claim_page, effective_glossary, fail_page, load_provider, load_snapshot,
     mark_page_completed_inner, persist_result, persist_translation, prepare_page, quality_of,
     restore_cancelled, save_translation_inner, store_result, translate_prep,
-    translate_text_to_page, CancelState, Ctx, CANCELLED_MSG, CoreJob, PagePrep, PageSnapshot,
-    PrepOpts, ProviderBinding,
+    translate_text_to_page, CancelState, Ctx, CANCELLED_MSG, CoreJob, PagePrep, PrepOpts,
+    ProviderBinding,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,6 +35,10 @@ pub struct TranslatePageInput {
     /// Override model per request; kosong/absen = pakai simpanan provider.
     #[serde(default)]
     pub model: Option<String>,
+    /// Paksa kirim ulang walau halaman sudah lengkap. Frontend manual
+    /// (tombol translate/retry) mengirim true; default false = hemat.
+    #[serde(default)]
+    pub force: bool,
 }
 
 fn default_lang() -> String { "Indonesian".to_string() }
@@ -49,6 +53,10 @@ pub async fn translate_page(
     input: TranslatePageInput,
 ) -> Result<PageTranslation, String> {
     let ctx = Ctx { app: state.inner(), cancel: cancel.inner() };
+    // Hemat kuota: halaman lengkap + non-paksa langsung pulang tanpa klaim/POST.
+    if let Some(done) = already_translated(&ctx, &input.page_id, input.force)? {
+        return Ok(done);
+    }
     let (prep, binding) = prepare_page(
         &ctx,
         PrepOpts {

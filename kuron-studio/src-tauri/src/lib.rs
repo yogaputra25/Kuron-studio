@@ -20,6 +20,7 @@ pub mod provider;
 pub mod render;
 pub mod translation;
 pub mod translate;
+pub mod usage;
 pub mod commands;
 
 pub use error::AppError;

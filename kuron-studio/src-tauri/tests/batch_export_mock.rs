@@ -64,7 +64,8 @@ async fn run_batch_10() -> (Vec<PageTranslation>, Vec<(String, usize, bool)>) {
                 &client, &base, "k", "m", "prompt", b"fake-jpeg",
             )
             .await
-            .and_then(|text| {
+            .and_then(|res| {
+                let text = res.text;
                 let b = kuron_studio_lib::bubble::BubbleBox {
                     x: 10, y: 20, w: 60, h: 40, confidence: 1.0,
                     shape: None, kind: None, tail: None,

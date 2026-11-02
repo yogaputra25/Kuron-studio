@@ -89,7 +89,8 @@ export function createExportState(args: ExportStateArgs): ExportState {
     if (!opts?.providerId) { error = "Pilih provider dulu (buka editor satu halaman)."; return; }
     busy = true; error = "";
     try {
-      await api.translateBatch(toBatchInput(opts, { pageIds: [pageId], providerId: opts.providerId, readingDirection: opts.readingDirection }));
+      // Retry eksplisit: paksa kirim ulang walau halaman sudah lengkap.
+      await api.translateBatch(toBatchInput(opts, { pageIds: [pageId], providerId: opts.providerId, readingDirection: opts.readingDirection, force: true }));
       args.onRefresh();
     } catch (e) {
       error = String(e);

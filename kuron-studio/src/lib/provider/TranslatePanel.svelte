@@ -102,7 +102,8 @@
       }
       const t = await api.translatePage(toTranslateArgs(
         { targetLang, style, skipSfx, mosaicQuality, customPrompt, model },
-        { pageId, providerId, readingDirection: readingDir, glossary },
+        // Aksi manual eksplisit: paksa kirim ulang walau halaman sudah lengkap.
+        { pageId, providerId, readingDirection: readingDir, glossary, force: true },
       ));
       if (cancelled) return; // response telat pasca-Batal: buang, tanpa persist ganda
       info = `${t.model} · ${t.bubbles.length} bubble · ${((performance.now() - t0) / 1000).toFixed(1)}s`;

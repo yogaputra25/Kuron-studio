@@ -39,6 +39,8 @@ export interface TranslateExtra {
   readingDirection: ReadingDirection;
   /** Glosarium mentah; di-trim, hilang bila kosong (jalur page saja). */
   glossary?: string;
+  /** Paksa kirim ulang (aksi manual); absen = hemat. */
+  force?: boolean;
 }
 
 /** Payload translate_page: trim glossary/customPrompt/model, kosong hilang. */
@@ -54,6 +56,7 @@ export function toTranslateArgs(opts: TranslateOpts, extra: TranslateExtra): Tra
     ...(extra.glossary?.trim() ? { glossary: extra.glossary.trim() } : {}),
     ...(opts.customPrompt.trim() ? { customPrompt: opts.customPrompt.trim() } : {}),
     ...(opts.model.trim() ? { model: opts.model.trim() } : {}),
+    ...(extra.force != null ? { force: extra.force } : {}),
   };
 }
 
@@ -63,6 +66,8 @@ export interface BatchExtra {
   readingDirection: ReadingDirection;
   /** Deadline per halaman (detik); undefined = hilang dari wire (backend default 900). */
   timeoutSecs?: number | undefined;
+  /** Paksa kirim ulang (retry eksplisit); absen = hemat. */
+  force?: boolean | undefined;
 }
 
 /** Payload translate_batch: tanpa trim, tanpa glossary (verbatim lama). */
@@ -78,6 +83,7 @@ export function toBatchInput(opts: TranslateOpts, extra: BatchExtra): TranslateB
     ...(opts.customPrompt ? { customPrompt: opts.customPrompt } : {}),
     ...(opts.model ? { model: opts.model } : {}),
     ...(extra.timeoutSecs != null ? { timeoutSecs: extra.timeoutSecs } : {}),
+    ...(extra.force != null ? { force: extra.force } : {}),
   };
 }
 

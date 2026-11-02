@@ -3,9 +3,9 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::commands::translate::{
-    backoff_translate, cancel_or_fail, claim_page, effective_glossary, fail_page,
-    load_provider, load_snapshot, persist_translation, prepare_page, restore_cancelled,
-    translate_prep, CancelState, Ctx, PagePrep, PrepOpts, ProviderBinding,
+    already_translated, backoff_translate, cancel_or_fail, claim_page, effective_glossary,
+    fail_page, load_provider, load_snapshot, persist_translation, prepare_page,
+    restore_cancelled, translate_prep, CancelState, Ctx, PagePrep, PrepOpts, ProviderBinding,
 };
 use crate::error::AppError;
 use crate::jobs::{DEFAULT_BATCH_CONCURRENCY, JobRegistry};
@@ -38,6 +38,10 @@ pub struct TranslateBatchInput {
     /// Budget per halaman (detik). None/absen = default; None/<=0 = 900 (defense in depth).
     #[serde(default)]
     pub timeout_secs: Option<u64>,
+    /// Paksa kirim ulang walau halaman sudah lengkap (retry eksplisit).
+    /// Batch biasa = false (hemat); retry manual = true.
+    #[serde(default)]
+    pub force: bool,
 }
 
 fn d_lang() -> String { "Indonesian".to_string() }
@@ -63,6 +67,41 @@ pub fn batch_timeout_message(budget_secs: u64) -> String {
         "timeout {} mnt, dilewati — coba Retry Failed",
         budget_secs / 60
     )
+}
+
+/// Pesan breaker kuota; N = sisa halaman yang tidak dikirim.
+pub fn quota_breaker_message(sisa: usize) -> String {
+    format!(
+        "kuota provider habis, {sisa} halaman tidak dikirim — coba lagi nanti atau ganti provider"
+    )
+}
+
+/// Batas gagal kuota beruntun sebelum run dihentikan.
+pub const QUOTA_BREAKER_LIMIT: u32 = 3;
+
+/// Mesin hitung breaker kuota (murni, teruji): gagal kuota menaikkan streak,
+/// hasil lain me-reset; mencapai batas = trip sekali (idempoten).
+#[derive(Debug, Default)]
+struct QuotaBreaker {
+    streak: u32,
+    tripped: bool,
+}
+
+impl QuotaBreaker {
+    /// Catat satu outcome (`true` = gagal kuota). Mengembalikan benar tepat
+    /// saat trip pertama terjadi (bukan setiap panggilan pasca-trip).
+    fn record(&mut self, quota_fail: bool) -> bool {
+        if quota_fail {
+            self.streak += 1;
+        } else {
+            self.streak = 0;
+        }
+        if !self.tripped && self.streak >= QUOTA_BREAKER_LIMIT {
+            self.tripped = true;
+            return true;
+        }
+        false
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,6 +150,9 @@ struct PageOutcome {
 enum PrepSlot {
     Work(Box<(PagePrep, ProviderBinding)>),
     Skip(PageOutcome),
+    /// Halaman sudah lengkap + non-paksa: tanpa klaim, tanpa POST.
+    /// Di-box karena PageTranslation jauh lebih besar dari varian lain.
+    Done(Box<PageTranslation>),
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -155,6 +197,7 @@ pub async fn translate_batch(
         let glossary = input.glossary.clone();
         let custom_prompt = input.custom_prompt.clone();
         let model = input.model.clone();
+        let force = input.force;
         prep_set.spawn(async move {
             let _permit = permits.acquire_owned().await;
             let state_ref: State<'_, AppState> = handle.state();
@@ -171,6 +214,24 @@ pub async fn translate_batch(
                         result: Err(AppError::busy(&page_id)),
                     }),
                 );
+            }
+            // Hemat kuota: lengkap + non-paksa = selesai tanpa klaim/POST.
+            match already_translated(&ctx, &page_id, force) {
+                Ok(Some(done)) => {
+                    reg.release(&page_id);
+                    return (n, PrepSlot::Done(Box::new(done)));
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    reg.release(&page_id);
+                    return (
+                        n,
+                        PrepSlot::Skip(PageOutcome {
+                            page_id,
+                            result: Err(e),
+                        }),
+                    );
+                }
             }
             let prepared = tokio::time::timeout(
                 std::time::Duration::from_secs(budget_secs),
@@ -236,17 +297,28 @@ pub async fn translate_batch(
                 out.page_id.clone(),
                 prepare_progress_message(completed, total),
             ),
+            // Sudah selesai: bukan "menyiapkan", melainkan dilewati.
+            PrepSlot::Done(done) => (
+                done.page_id.clone(),
+                "sudah selesai — dilewati tanpa request".to_string(),
+            ),
         };
         emit_progress(&app, &page_id, 0, total, true, message);
         slots.push((n, slot));
     }
-    // Replay BERURUTAN input: urutan works/pending identik mode sekuensial
-    // (teruji unit via replay_prepared_urut_deterministik_walau_acak).
-    let (works, pending) = replay_prepared(slots);
+    // Replay BERURUTAN input: urutan works/pending/done identik mode sekuensial
+    // (teruji unit via replay_prepared_urut_deterministik_walau_selesai_acak).
+    let (works, pending, done_pages) = replay_prepared(slots);
     // Fase 2: mpsc + semaphore registry untuk POST LLM. State dipindah
     // per-worker via clone AppHandle + try_state (Mutex di dalam AppState
     // aman di-share). Pre-flight cancel di translate_prep: job antre yang
     // dibatalkan restore tanpa POST.
+    // Breaker kuota: 3 gagal kuota beruntun (urutan selesai) menghentikan run.
+    // Flag dibaca worker SEBELUM POST; antrean yang belum jalan dilewati tanpa
+    // request. In-flight (<= konkurensi) mungkin masih menyelesaikan 1 POST.
+    let quota_trip = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let works_total = works.len();
+    let works_done = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let (tx, mut rx) = tokio::sync::mpsc::channel::<PageOutcome>(total.max(1));
     let permits = registry.semaphore();
     for (prep, binding) in works {
@@ -254,18 +326,30 @@ pub async fn translate_batch(
         let reg = Arc::clone(&registry);
         let permits = Arc::clone(&permits);
         let handle = app.clone();
+        let trip = Arc::clone(&quota_trip);
+        let wdone = Arc::clone(&works_done);
         tokio::spawn(async move {
             let _permit = permits.acquire_owned().await;
+            let page_id = prep.page_id.clone();
             let state_ref: State<'_, AppState> = handle.state();
             let cancel_ref: State<'_, CancelState> = handle.state();
-            let page_id = prep.page_id.clone();
+            let ctx = Ctx { app: state_ref.inner(), cancel: cancel_ref.inner() };
+            // Breaker trip: lewati tanpa POST. Prepare sudah klaim halaman ini
+            // (status Translating + stash pra-klaim), jadi klaim basi WAJIB
+            // di-restore — kalau tidak, halaman macet "busy" selamanya.
+            if trip.load(std::sync::atomic::Ordering::SeqCst) {
+                let sisa = works_total.saturating_sub(wdone.load(std::sync::atomic::Ordering::SeqCst));
+                let _ = restore_cancelled(&ctx, &page_id);
+                reg.release(&page_id);
+                let _ = tx.send(PageOutcome {
+                    page_id,
+                    result: Err(AppError::provider(quota_breaker_message(sisa))),
+                }).await;
+                return;
+            }
             let result = match tokio::time::timeout(
                 std::time::Duration::from_secs(budget_secs),
-                translate_prep(
-                    &Ctx { app: state_ref.inner(), cancel: cancel_ref.inner() },
-                    &prep,
-                    &binding,
-                ),
+                translate_prep(&ctx, &prep, &binding),
             )
             .await
             {
@@ -281,19 +365,60 @@ pub async fn translate_batch(
     // Fase 3: kumpulkan + emit translate_progress per halaman selesai.
     let mut ok_pages: Vec<PageTranslation> = Vec::new();
     let mut done = 0usize;
+    // Halaman yang sudah selesai: emit ok berurutan input, tanpa request.
+    for t in done_pages {
+        done += 1;
+        let pid = t.page_id.clone();
+        emit_progress(&app, &pid, done, total, true, "sudah selesai — dilewati tanpa request".to_string());
+        ok_pages.push(*t);
+    }
     // Progress untuk yang gagal prepare dulu (tetap berurutan done).
     for p in pending {
         done += 1;
         emit_progress(&app, &p.page_id, done, total, false, outcome_msg(&p.result));
     }
+    let mut breaker = QuotaBreaker::default();
+    let mut works_seen = 0usize;
     while let Some(out) = rx.recv().await {
         done += 1;
+        works_seen += 1;
+        works_done.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        // Breaker: 3 gagal kuota beruntun (urutan selesai) menghentikan run.
+        // Non-kuota (parse/jaringan/timeout) me-reset hitungan.
+        let quota_fail = out.result.as_ref().is_err_and(AppError::is_quota);
+        if breaker.record(quota_fail) {
+            quota_trip.store(true, std::sync::atomic::Ordering::SeqCst);
+            let sisa = works_total.saturating_sub(works_seen);
+            crate::logging::warn(
+                "batch_quota_breaker_trip",
+                serde_json::json!({
+                    "provider": &input.provider_id,
+                    "sisa": sisa,
+                }),
+            );
+        }
         let ok = out.result.is_ok();
         let msg = outcome_msg(&out.result);
         if let Ok(t) = out.result {
             ok_pages.push(t);
         }
         emit_progress(&app, &out.page_id, done, total, ok, msg);
+    }
+    // Ringkasan pemakaian per provider+model: hanya halaman ber-POST nyata
+    // (berbaris usage). Cache-hit/dilewati tak ikut hitung. Tak pernah
+    // menggagalkan batch bila DB terkunci.
+    match summarize_usage(&app, &input.page_ids) {
+        Ok(rows) => crate::logging::info(
+            "batch_usage_summary",
+            serde_json::json!({
+                "provider": &input.provider_id,
+                "rows": rows,
+            }),
+        ),
+        Err(e) => crate::logging::warn(
+            "batch_usage_summary_gagal",
+            serde_json::json!({ "error": e.to_string() }),
+        ),
     }
     // Kembalikan sesuai urutan input.
     ok_pages.sort_by_key(|t| {
@@ -306,27 +431,45 @@ pub async fn translate_batch(
     Ok(ok_pages)
 }
 
+/// Agregat pemakaian untuk halaman-halaman satu run. Fungsi terpisah agar
+/// tipe kompleks tak inline di body command (clippy `type_complexity`).
+fn summarize_usage(
+    app: &AppHandle,
+    page_ids: &[String],
+) -> Result<Vec<crate::usage::UsageSummary>, AppError> {
+    let st = app.state::<AppState>();
+    let db = crate::error::lock_or_err(&st.db)?;
+    crate::usage::summarize_for_pages(&db, page_ids)
+}
+
 /// Pesan progres fase-1 ("Menyiapkan i/M..."). Fungsi terpisah agar formatnya
 /// teruji unit; emit-nya sendiri butuh AppHandle (diuji integrasi/manual).
 fn prepare_progress_message(n: usize, total: usize) -> String {
     format!("Menyiapkan {n}/{total}...")
 }
 
-/// Replay hasil fase-1 berurutan input: urutan works/pending identik dengan
+/// Replay hasil fase-1 berurutan input: urutan works/pending/done identik dengan
 /// mode sekuensial walau task selesai acak. Murni (tanpa AppHandle) → teruji.
-fn replay_prepared(
-    mut slots: Vec<(usize, PrepSlot)>,
-) -> (Vec<(PagePrep, ProviderBinding)>, Vec<PageOutcome>) {
+/// Alias tipe agar tak memicu clippy `type_complexity` di signature.
+type PreparedSlots = (
+    Vec<(PagePrep, ProviderBinding)>,
+    Vec<PageOutcome>,
+    Vec<Box<PageTranslation>>,
+);
+
+fn replay_prepared(mut slots: Vec<(usize, PrepSlot)>) -> PreparedSlots {
     slots.sort_by_key(|(n, _)| *n);
     let mut works = Vec::with_capacity(slots.len());
     let mut pending = Vec::new();
+    let mut done_pages = Vec::new();
     for (_, slot) in slots {
         match slot {
             PrepSlot::Work(boxed) => works.push(*boxed),
             PrepSlot::Skip(out) => pending.push(out),
+            PrepSlot::Done(t) => done_pages.push(t),
         }
     }
-    (works, pending)
+    (works, pending, done_pages)
 }
 
 fn outcome_msg(r: &Result<PageTranslation, AppError>) -> String {
@@ -402,11 +545,12 @@ pub async fn retry_bubble(
     );
     let (client, mut rec) = load_provider(ctx.app, &input.provider_id)?;
     rec.model = crate::provider::effective_model(&rec, input.model.as_deref());
-    let text = backoff_translate(ctx.cancel, &input.page_id, &client, &rec, &prompt, &jpeg)
+    let post = backoff_translate(ctx.cancel, &input.page_id, &client, &rec, &prompt, &jpeg)
         .await
         .map_err(|e| cancel_or_fail(&ctx, &input.page_id, e))?;
-    let results = crate::parser::parse_mosaic_json(&text)
-        .map_err(|e| cancel_or_fail(&ctx, &input.page_id, AppError::parse(format!("parse retry failed: {e} ({})", preview_200(&text)))))?;
+    let text = &post.text;
+    let results = crate::parser::parse_mosaic_json(text)
+        .map_err(|e| cancel_or_fail(&ctx, &input.page_id, AppError::parse(format!("parse retry failed: {e} ({})", preview_200(&post.text)))))?;
     let r = results
         .first()
         .map(|(_, r)| r.clone())
@@ -628,9 +772,31 @@ mod tests {
                 PrepSlot::Skip(dummy_outcome("p1")),
             ),
         ];
-        let (works, pending) = replay_prepared(slots);
+        let (works, pending, done_pages) = replay_prepared(slots);
         assert!(works.is_empty());
+        assert!(done_pages.is_empty());
         let ids: Vec<&str> = pending.iter().map(|p| p.page_id.as_str()).collect();
         assert_eq!(ids, vec!["p0", "p1", "p2"]);
+    }
+
+    #[test]
+    fn quota_breaker_trip_setelah_tiga_gagal_beruntun() {
+        let mut b = QuotaBreaker::default();
+        assert!(!b.record(true));
+        assert!(!b.record(true));
+        assert!(b.record(true));
+        // Pasca-trip idempoten: tetap trip, tak trip-ulang.
+        assert!(!b.record(true));
+    }
+
+    #[test]
+    fn quota_breaker_reset_oleh_hasil_non_kuota() {
+        let mut b = QuotaBreaker::default();
+        assert!(!b.record(true));
+        assert!(!b.record(true));
+        assert!(!b.record(false));
+        assert!(!b.record(true));
+        assert!(!b.record(true));
+        assert!(b.record(true));
     }
 }

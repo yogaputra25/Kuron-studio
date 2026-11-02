@@ -43,15 +43,81 @@ pub fn data_url(mime: &str, bytes: &[u8]) -> String {
     format!("data:{mime};base64,{}", b64(bytes))
 }
 
-/// Benar bila status minta retry-429 satu kali.
-pub fn is_429(status: reqwest::StatusCode) -> bool {
-    status == reqwest::StatusCode::TOO_MANY_REQUESTS
+/// Token masuk/keluar satu respons chat. Bentuk per provider beda
+/// (OpenAI `usage`, Gemini `usageMetadata`, Cohere `tokens`) — dinormalisasi
+/// di [`extract_usage`]. `None` = provider tak melaporkan.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct TokenUsage {
+    pub input: u64,
+    pub output: u64,
 }
 
-/// Error saat 429 bertahan setelah kirim ulang — string sama seperti blok lama.
-pub fn rate_limited() -> String {
-    "rate_limited: retry later".to_string()
+/// Hasil satu chat completions: teks + pemakaian opsional.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChatResult {
+    pub text: String,
+    pub usage: Option<TokenUsage>,
 }
+
+ /// Benar bila status minta retry-429 satu kali.
+ pub fn is_429(status: reqwest::StatusCode) -> bool {
+     status == reqwest::StatusCode::TOO_MANY_REQUESTS
+ }
+ 
+fn u64_at(v: &serde_json::Value, keys: &[&str]) -> Option<u64> {
+    let mut cur = v;
+    for k in keys {
+        cur = cur.get(*k)?;
+    }
+    cur.as_u64()
+}
+
+/// Ambil pemakaian dari body respons apa pun bentuk providernya.
+/// OpenAI-shape (`usage.prompt_tokens/completion_tokens`), Gemini
+/// (`usageMetadata.promptTokenCount/candidatesTokenCount`), Cohere v2
+/// (`usage.tokens.input_tokens/output_tokens`, fallback `billed_units`).
+pub fn extract_usage(v: &serde_json::Value) -> Option<TokenUsage> {
+    if let Some(u) = v.get("usage") {
+        // OpenAI-shape.
+        if let (Some(i), Some(o)) = (
+            u.get("prompt_tokens").and_then(|n| n.as_u64()),
+            u.get("completion_tokens").and_then(|n| n.as_u64()),
+        ) {
+            return Some(TokenUsage { input: i, output: o });
+        }
+        // Cohere-shape.
+        if let Some(t) = u.get("tokens") {
+            if let (Some(i), Some(o)) = (
+                u64_at(t, &["input_tokens"]),
+                u64_at(t, &["output_tokens"]),
+            ) {
+                return Some(TokenUsage { input: i, output: o });
+            }
+        }
+        if let Some(b) = u.get("billed_units") {
+            if let (Some(i), Some(o)) = (
+                u64_at(b, &["input_tokens"]),
+                u64_at(b, &["output_tokens"]),
+            ) {
+                return Some(TokenUsage { input: i, output: o });
+            }
+        }
+    }
+    if let Some(m) = v.get("usageMetadata") {
+        if let (Some(i), Some(o)) = (
+            u64_at(m, &["promptTokenCount"]),
+            u64_at(m, &["candidatesTokenCount"]),
+        ) {
+            return Some(TokenUsage { input: i, output: o });
+        }
+    }
+    None
+}
+
+ /// Error saat 429 bertahan setelah kirim ulang — string sama seperti blok lama.
+ pub fn rate_limited() -> String {
+     "rate_limited: retry later".to_string()
+ }
 
 /// Kirim request sekali; bila kena 429, panggil `on_retry` (mis. log warn),
 /// tunggu [`RETRY_429_DELAY`], lalu kirim ulang sekali memakai request yang
@@ -71,4 +137,21 @@ pub async fn post_with_retry(
     on_retry();
     tokio::time::sleep(RETRY_429_DELAY).await;
     send().send().await.map_err(|e| (1u32, e))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extract_usage_mengenali_tiga_bentuk_provider() {
+        let openai: serde_json::Value = serde_json::json!({"usage": {"prompt_tokens": 10, "completion_tokens": 20}});
+        assert_eq!(extract_usage(&openai), Some(TokenUsage { input: 10, output: 20 }));
+        let gemini: serde_json::Value = serde_json::json!({"usageMetadata": {"promptTokenCount": 5, "candidatesTokenCount": 7}});
+        assert_eq!(extract_usage(&gemini), Some(TokenUsage { input: 5, output: 7 }));
+        let cohere: serde_json::Value = serde_json::json!({"usage": {"tokens": {"input_tokens": 3, "output_tokens": 4}}});
+        assert_eq!(extract_usage(&cohere), Some(TokenUsage { input: 3, output: 4 }));
+        let kosong: serde_json::Value = serde_json::json!({"choices": []});
+        assert_eq!(extract_usage(&kosong), None);
+    }
 }

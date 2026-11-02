@@ -17,7 +17,7 @@ pub async fn translate_image(
     rec: &ProviderRecord,
     prompt: &str,
     jpeg: &[u8],
-) -> Result<String, AppError> {
+) -> Result<http::ChatResult, AppError> {
     let base = rec.effective_base_url();
     match rec.provider_type {
         AiProviderType::Gemini => gemini::chat_completions_image(client, &base, &rec.api_key, &rec.model, prompt, jpeg).await,

@@ -81,12 +81,87 @@ pub fn parse_full_image_json(s: &str) -> Result<Vec<FullBubble>, AppError> {
         serde_json::from_str(t).map_err(|e| AppError::parse(format!("invalid json: {e}")))?;
     Ok(v)
 }
-
 /// First 200 chars for logs (never include keys/b64 here by callers).
 pub fn preview_200(s: &str) -> String {
     s.chars().take(200).collect()
 }
 
+/// Cari rentang blok `{...}` / `[...]` seimbang terpanjang, sadar-string
+/// (kurung di dalam string dan escape `\"` diabaikan). `None` bila tak ada.
+fn largest_json_block(t: &str) -> Option<&str> {
+    let b = t.as_bytes();
+    let mut best: Option<(usize, usize)> = None;
+    let mut i = 0;
+    while i < b.len() {
+        let (open, close) = match b[i] {
+            b'{' => (b'{', b'}'),
+            b'[' => (b'[', b']'),
+            _ => {
+                i += 1;
+                continue;
+            }
+        };
+        let mut depth = 0usize;
+        let mut in_str = false;
+        let mut esc = false;
+        let mut j = i;
+        while j < b.len() {
+            let c = b[j];
+            if in_str {
+                if esc {
+                    esc = false;
+                } else if c == b'\\' {
+                    esc = true;
+                } else if c == b'"' {
+                    in_str = false;
+                }
+            } else if c == b'"' {
+                in_str = true;
+            } else if c == open {
+                depth += 1;
+            } else if c == close {
+                depth -= 1;
+                if depth == 0 {
+                    let len = j + 1 - i;
+                    if best.map_or(true, |(_, bl)| len > bl) {
+                        best = Some((i, len));
+                    }
+                    break;
+                }
+            }
+            j += 1;
+        }
+        i += 1;
+    }
+    best.map(|(s, len)| &t[s..s + len])
+}
+
+/// Perbaikan struktural saja (tanpa menebak isi): lepas pagar markdown, ambil
+/// blok JSON terbesar, normalisasi kutip pintar. Mengembalikan `None` bila
+/// tak ada yang bisa diperbaiki — pemanggil lalu gagal cepat tanpa POST ulang.
+/// Hasilnya WAJIB lolos parse penuh di pemanggil; repair tak pernah diterima
+/// sebagian.
+pub fn repair_json(s: &str) -> Option<String> {
+    let t = strip_markdown(s);
+    let block = largest_json_block(t)?;
+    // Satu pass: kutip pintar ganda/tunggal → ASCII.
+    let out: String = block
+        .chars()
+        .map(|c| match c {
+            '\u{201C}' | '\u{201D}' => '"',
+            '\u{2018}' | '\u{2019}' => '\'',
+            _ => c,
+        })
+        .collect();
+    // Blok utuh tanpa perubahan = sudah dicoba parse dan gagal (mis. kunci
+    // non-numerik) — bukan kasus repair.
+    if out == t {
+        return None;
+    }
+    // Blok lebih kecil dari respons = ada sampah di sekitar; bloknya kandidat.
+    // Blok sama panjang tapi dinormalisasi = kutip pintar kandidat.
+    Some(out)
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -117,5 +192,31 @@ mod tests {
         assert!(parse_mosaic_json("  ").is_err());
         assert!(parse_full_image_json("[]").unwrap().is_empty());
         assert!(parse_full_image_json("x").is_err());
+    }
+
+    #[test]
+    fn repair_menyelamatkan_blok_valid_dari_sampah() {
+        let dirty = "Berikut hasilnya:\n{\"1\":{\"original\":\"a\",\"reading\":\"\",\"translated\":\"A\"}}\nsemoga membantu";
+        let fixed = repair_json(dirty).expect("blok valid diselamatkan");
+        let r = parse_mosaic_json(&fixed).unwrap();
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].1.translated, "A");
+    }
+
+    #[test]
+    fn repair_menolak_json_rusak_berat() {
+        assert!(repair_json("not json at all").is_none());
+        assert!(repair_json("{\"1\":{\"original\":\"a\"").is_none());
+        // Kunci non-numerik: blok utuh tapi gagal parse = bukan kasus repair.
+        assert!(repair_json("{\"satu\":1}").is_none());
+    }
+
+    #[test]
+    fn repair_menormalisasi_kutip_pintar() {
+        let dirty = "\u{201C}1\u{201D}:{\"original\":\"a\",\"reading\":\"\",\"translated\":\"A\"}";
+        let wrapped = format!("{{{dirty}}}");
+        let fixed = repair_json(&wrapped).expect("kutip dinormalisasi");
+        let r = parse_mosaic_json(&fixed).unwrap();
+        assert_eq!(r[0].1.original, "a");
     }
 }
