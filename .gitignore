@@ -18,3 +18,5 @@ kuron-studio/src-tauri/gen/apple/
 .agents/*
 .pi/*
 .omp/*
+skills/*
+tools/*
