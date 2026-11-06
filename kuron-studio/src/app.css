@@ -44,10 +44,17 @@
   --color-danger-soft: var(--ks-danger-soft);
   --color-info: var(--ks-info);
   --color-info-soft: var(--ks-info-soft);
+  --color-ring: var(--ks-ring);
+  --color-selected: var(--ks-selected);
 
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Space Grotesk Variable", "Inter Variable", sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+
+  --text-2xs: 0.6875rem; /* 11px — pengganti sah text-[11px] */
+  --text-2xs--line-height: 1.45;
+  --text-3xs: 0.625rem; /* 10px — pengganti sah text-[10px] */
+  --text-3xs--line-height: 1.4;
 
   --radius-card: 0.75rem;
 }
@@ -85,6 +92,9 @@
   --ks-danger-soft: #2e1416;
   --ks-info: #6ba6ff;
   --ks-info-soft: #111e33;
+
+  --ks-ring: #9a9aa8;
+  --ks-selected: #34343f;
 
   --ks-illust-solid: #221f1b;
   --ks-illust-on-solid: #fffdf9;
@@ -124,6 +134,9 @@
   --ks-info: #1f5fbf;
   --ks-info-soft: #e5eefb;
 
+  --ks-ring: #55555f;
+  --ks-selected: #d8d7d1;
+
   --ks-illust-solid: #221f1b;
   --ks-illust-on-solid: #fffdf9;
   --ks-illust-on-solid-muted: #b9b2a6;
@@ -145,10 +158,19 @@ body {
 }
 
 /* Fokus keyboard harus kelihatan di mana-mana. Primitif UI sudah pasang
-   ring-nya sendiri; permukaan mentah (canvas, teks panjang) dapat ini. */
+   ring-nya sendiri; permukaan mentah (canvas, teks panjang) dapat ini.
+   Warna via --ks-ring (netral, kontras di dark + light), bukan aksen —
+   cincin fokus adalah penanda posisi, bukan aksi. */
 :focus-visible {
-  outline: 2px solid var(--ks-accent);
+  outline: 2px solid var(--ks-ring);
   outline-offset: 2px;
+}
+
+/* Baris terpilih persisten (opt-in via atribut, mis. Lov / command palette /
+   daftar halaman): latar --ks-selected, SELALU beda dari --ks-hover.
+   Dilarang mengarang warna selected per layar. */
+[data-current="true"] {
+  background-color: var(--ks-selected);
 }
 
 /* Angka di badge status & koordinat: rata lebar, easy di-scan. */

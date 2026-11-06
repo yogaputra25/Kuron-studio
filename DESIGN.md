@@ -40,6 +40,71 @@ Ikuti `design/prototype/tokens.css` (identik dengan `app.css`): `.btn` (pri/def/
 
 String UI Indonesia default; tambah key baru = 3 bahasa di `i18n.ts` satu commit. Fokus keyboard selalu terlihat; hormati `prefers-reduced-motion`.
 
+## Peran → token
+
+Satu peran = satu token. Tint selalu `color-mix(in srgb, var(--token) N%, transparent)`, tidak pernah hex baru → parity dark/light otomatis.
+
+| Peran | Token | Catatan |
+|---|---|---|
+| Kanvas aplikasi | `--ks-bg` | latar window terdalam |
+| Panel di atas kanvas | `--ks-surface` | latar halaman kerja |
+| Panel bertumpuk | `--ks-surface-2` | header, toolbar, rail |
+| Kartu / modal terangkat | `--ks-raised` | + elevasi level 2–3, bukan shadow bebas |
+| Hover baris list | `--ks-hover` | sementara; hilang saat pointer pergi |
+| Baris terpilih persisten | `--ks-selected` | opt-in `[data-current="true"]`; dilarang mengarang warna selected per layar |
+| Kursor keyboard (sementara) | tint + inset ring, tanpa token sendiri | `color-mix(in srgb, var(--ks-text) 12%, transparent)` + `box-shadow: inset 0 0 0 1px var(--ks-ring)`; dilarang sekadar `--ks-hover` (nyaris tak terlihat di light) |
+| Garis rambut | `--ks-line` | semua pembatas struktural 1px |
+| Garis kuat / divider drag | `--ks-line-strong` | kontur jendela luar, border dialog |
+| Cincin fokus | `--ks-ring` | `:focus-visible` + halo seleksi; bukan dekorasi permanen |
+| Aksi utama | `--ks-accent` | satu-satunya aksi afirmatif per alur; bukan untuk hover, dekorasi, atau aksi sekunder |
+| Info teknis | `--ks-cyan` | hanya koordinat, ID, jumlah bubble — selalu mono + `.tnum`; teks sekunder biasa pakai `--ks-text-3` |
+| Status | `--ks-success/warn/danger/info` (+ `-soft` untuk latar badge) | badge tanpa border, duduk di atas `-soft` |
+
+## Elevasi (3 level, tidak ada level keempat)
+
+| Level | Komposisi | Pakai untuk |
+|---|---|---|
+| 1 | border hairline `--ks-line`, tanpa shadow | default — hampir semua hal |
+| 2 | border + `shadow-xs` | kontrol outline, kartu tertanam |
+| 3 | border `--ks-line-strong` + `shadow-floating` | popover / dialog yang lepas dari kanvas |
+
+Butuh lebih dari level 3 biasanya berarti yang dicari adalah `--ks-ring` fokus, bukan shadow. Level keempat dilarang.
+
+## Baris list
+
+| State | Tampilan |
+|---|---|
+| idle | transparan |
+| hover | `--ks-hover` |
+| kursor keyboard | tint foreground + inset `--ks-ring` (lihat tabel peran) |
+| aktif persisten | `--ks-selected` + `[data-current="true"]` |
+
+Tetap tiga state yang berbeda dan terlihat (hover / kursor / terpilih tidak boleh saling menyamar). Dilarang warna selected custom per layar.
+
+## Perilaku UX
+
+Aturan perilaku, bukan selera. Berlaku untuk Deteksi bubble, Terjemah batch, Ekspor, Import PDF, dan semua alur async lain.
+
+| Durasi | Yang ditampilkan |
+|---|---|
+| 0–100 ms | tidak ada |
+| 100 ms–1 s | disable kontrol saja |
+| 1–3 s | disable + spinner |
+| 3 s+ / multi-tahap | label progres per tahap |
+
+- `disabled` di-bind segera; spinner baru muncul setelah ~200 ms (operasi lokal tidak berkedip).
+- Ruang label yang berganti dipesan (`width`, bukan `min-width`) supaya layout tidak melompat.
+- Copy tidak overclaim: verb hasil ("terhapus", "terverifikasi", "ditemukan") hanya bila ada data hasil nyata; selama proses pakai bahasa netral ("Menerjemahkan 4/12 halaman…"); tanpa pengisi ("silakan", "cukup", "tinggal").
+- Error menyebut sebab + jalan keluar — berlaku untuk toast juga, bukan hanya empty state.
+- Jalur mundur sunyi (Batal / Tutup / Buang): gaya `ghost`, tanpa warna aksen, tanpa chip shortcut, tanpa animasi pengalih perhatian; `Esc` selalu menutup lapisan teratas.
+- Shortcut: label ikut binding nyata (`⌘`/`⇧` di macOS, `Ctrl+`/`Shift+` di lainnya); chip shortcut hanya lewat satu komponen `ui/Shortcut.svelte`, bukan `<kbd>` ad-hoc.
+- Motion: `prefers-reduced-motion` dihormati per elemen (`motion-reduce:`), bukan satu switch global; spinner tetap "hidup" saat reduced motion; scroll yang dipicu skrip memakai perilaku aman-reduced-motion.
+- Kosong vs error vs loading: data kosong → aksi untuk mendapatkannya, bukan ilustrasi; toast hanya untuk hasil sesaat; error yang harus dibaca/di-retry/copy → inline, persisten.
+
+## Rujukan rubric
+
+Review layar sebelum merge memakai `design/ux-review-rubric.md` (satu halaman per layar/screenshot, jawab ya/tidak tanpa debat). Rubric mengikat untuk perubahan UI; perubahan non-UI dikecualikan.
+
 ## Rujukan
 
 - `design/prototype/*.html` — mockup per layar; `tokens.css` = primitif.
