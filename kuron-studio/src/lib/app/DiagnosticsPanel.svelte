@@ -1,6 +1,13 @@
 <script lang="ts">
   import { api, type DiagnosticsInfo } from "../contracts/api";
   import { onInvoke, type InvokeMeta } from "../contracts/log";
+  import { t } from "./i18n";
+  import {
+    notificationStatus,
+    requestNotificationPermission,
+    trySendNotification,
+    type NotificationState,
+  } from "./notify";
   import Button from "../ui/Button.svelte";
   import Field from "../ui/Field.svelte";
   import Panel from "../ui/Panel.svelte";
@@ -28,6 +35,7 @@
       entries = [m, ...entries].slice(0, KEEP);
     });
     void refresh();
+    void loadNotif();
     return off;
   });
 
@@ -75,6 +83,38 @@
   let copied = $state(false);
   let copyError = $state("");
 
+  /** Status izin notifikasi OS + catatan aksi terakhir (alat cek permission). */
+  let notifState = $state<NotificationState>("unknown");
+  let notifNote = $state("");
+
+  async function loadNotif() {
+    notifState = await notificationStatus();
+  }
+
+  async function askNotifPermission() {
+    notifState = await requestNotificationPermission();
+    notifNote =
+      notifState === "granted" ? $t("notifTestSent") : $t("notifHintDenied");
+  }
+
+  async function sendNotifTest() {
+    const err = await trySendNotification($t("batchNotifyTitle"), $t("notifTestSent"));
+    const st = await notificationStatus();
+    notifState = st;
+    notifNote =
+      err === null
+        ? $t("notifTestSent")
+        : `${$t("notifTestFailed")} ${$t("notifErrorPrefix")}: ${err}`;
+  }
+
+  const notifLabel = $derived(
+    notifState === "granted"
+      ? $t("notifGranted")
+      : notifState === "not-granted"
+        ? $t("notifNotGranted")
+        : $t("notifUnknown"),
+  );
+
   function fmtTime(ms: number): string {
     const d = new Date(ms);
     return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
@@ -113,6 +153,30 @@
         </dd>
       </div>
     </dl>
+  {/if}
+
+  <div class="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-line bg-surface-2/60 p-3 text-xs">
+    <span class="font-medium text-ink">{$t("notifSection")}</span>
+    <span
+      class="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+      class:bg-success-soft={notifState === "granted"}
+      class:text-success={notifState === "granted"}
+      class:bg-warn-soft={notifState !== "granted"}
+      class:text-warn={notifState !== "granted"}
+    >{notifLabel}</span>
+    <span class="min-w-2 flex-1"></span>
+    <Button variant="default" size="sm" onclick={loadNotif}>Refresh</Button>
+    <Button variant="default" size="sm" onclick={askNotifPermission}>{$t("notifAsk")}</Button>
+    <Button
+      variant="default"
+      size="sm"
+      onclick={sendNotifTest}
+      disabled={notifState !== "granted"}
+      title={notifState !== "granted" ? $t("notifHintDenied") : ""}
+    >{$t("notifTest")}</Button>
+  </div>
+  {#if notifNote}
+    <p class="mb-3 text-[11px] text-ink-2">{notifNote}</p>
   {/if}
 
   <div class="mb-3 flex flex-wrap items-center gap-2">

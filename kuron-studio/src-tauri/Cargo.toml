@@ -18,6 +18,8 @@ tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-updater = { version = "2", features = [], optional = true }
 tauri-plugin-process = { version = "2", optional = true }
+tauri-plugin-notification = { version = "2", optional = true }
+tauri-plugin-window-state = { version = "2", features = [], optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
@@ -50,6 +52,8 @@ getrandom = "0.2"
 [target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
 tauri-plugin-updater = { version = "2", features = [] }
 tauri-plugin-process = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-window-state = { version = "2", features = [] }
 
 [dev-dependencies]
 # Fitur "test" hanya untuk integration test (`tauri::test::mock_builder`

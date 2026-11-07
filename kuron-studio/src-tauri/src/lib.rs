@@ -134,6 +134,10 @@ pub fn run() {
             // M4-7: updater (desktop only); endpoints/pubkey in tauri.conf.json.
             #[cfg(desktop)]
             app.handle().plugin(tauri_plugin_updater::Builder::new().build()).map_err(AppError::store)?;
+            // Batch-done: notifikasi sistem satu tembakan per run selesai
+            // (desktop only; mobile.json sengaja tanpa capability notifikasi).
+            #[cfg(desktop)]
+            app.handle().plugin(tauri_plugin_notification::init()).map_err(AppError::store)?;
             // Menu kustom (desktop): About bawaan macOS tak memberi event,
             // jadi About kita = item kustom -> event `show-about`.
             #[cfg(desktop)]
@@ -184,6 +188,10 @@ pub fn run() {
             diagnostics,
             read_log
         ]);
+        // Ingat ukuran/posisi jendela antar sesi (desktop only, otomatis;
+        // tanpa panggilan frontend — JS package tak perlu).
+        #[cfg(desktop)]
+        let builder = builder.plugin(tauri_plugin_window_state::Builder::new().build());
         // Menu About kustom -> frontend (AboutPage). Predefined lain
         // ditangani OS, tak perlu listener.
         #[cfg(desktop)]

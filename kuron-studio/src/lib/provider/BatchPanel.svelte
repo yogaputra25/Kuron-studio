@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import { onTranslateProgress } from "../app/events";
+  import { notifyBatchDone } from "../app/notify";
+  import { nudgeWindowForBatchDone } from "../app/windowTitle";
   import { api } from "../contracts/api";
   import { initialBatchState, reduceProgress } from "./batch";
   import { toBatchInput } from "./translateOpts";
@@ -49,7 +51,17 @@
     error = "";
     batch = initialBatchState(ids.length);
     try {
-      await api.translateBatch(toBatchInput(opts, { pageIds: ids, providerId: opts.providerId, readingDirection: opts.readingDirection, timeoutSecs: batchTimeoutSecs() }));
+      // translate_batch resolve walau sebagian gagal (yang gagal tak ada di
+      // return) → hitung ringkasan dari return, bukan dari event (tanpa race).
+      const results = await api.translateBatch(toBatchInput(opts, { pageIds: ids, providerId: opts.providerId, readingDirection: opts.readingDirection, timeoutSecs: batchTimeoutSecs() }));
+      const failed = ids.length - results.length;
+      // Satu notifikasi ringkasan per run (bukan per halaman) + pentalan
+      // dock bila user sedang di app lain (jalur andal, tanpa permission OS).
+      void notifyBatchDone(
+        $t("batchNotifyTitle"),
+        $t("batchNotifyBody").replace("{ok}", String(results.length)).replace("{failed}", String(failed)),
+      );
+      void nudgeWindowForBatchDone();
     } catch (e) {
       error = String(e);
     } finally {

@@ -15,6 +15,11 @@ vi.mock("../app/events", () => ({
   onDragDrop: () => () => {},
 }));
 
+const { notifyMock } = vi.hoisted(() => ({ notifyMock: vi.fn() }));
+vi.mock("../app/notify", () => ({
+  notifyBatchDone: (...a: unknown[]) => notifyMock(...a),
+}));
+
 describe("BatchPanel behavioral mount tests", () => {
   const dummyPages: Page[] = [
     {
@@ -45,6 +50,7 @@ describe("BatchPanel behavioral mount tests", () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    notifyMock.mockResolvedValue(undefined);
     vi.spyOn(api, "translateBatch").mockResolvedValue([]);
     vi.spyOn(api, "cancelTranslate").mockResolvedValue(undefined);
   });
@@ -86,6 +92,62 @@ describe("BatchPanel behavioral mount tests", () => {
       );
       expect(onDone).toHaveBeenCalled();
     });
+  });
+
+  it("mengirim satu notifikasi ringkasan saat batch sukses penuh", async () => {
+    vi.mocked(api.translateBatch).mockResolvedValue([{}, {}] as never);
+    const onDone = vi.fn();
+    const { getByRole } = renderWithI18n(BatchPanel, {
+      props: {
+        pages: dummyPages,
+        opts: defaultOpts,
+        onDone,
+        onClose: vi.fn(),
+      },
+    });
+
+    await fireEvent.click(getByRole("button", { name: /Batch 2/i }));
+
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(notifyMock).toHaveBeenCalledTimes(1);
+    expect(notifyMock).toHaveBeenCalledWith("Batch selesai", "2 berhasil, 0 gagal");
+  });
+
+  it("notifikasi menghitung gagal = diminta − kembali (tanpa spam per halaman)", async () => {
+    vi.mocked(api.translateBatch).mockResolvedValue([{}] as never);
+    const onDone = vi.fn();
+    const { getByRole } = renderWithI18n(BatchPanel, {
+      props: {
+        pages: dummyPages,
+        opts: defaultOpts,
+        onDone,
+        onClose: vi.fn(),
+      },
+    });
+
+    await fireEvent.click(getByRole("button", { name: /Batch 2/i }));
+
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(notifyMock).toHaveBeenCalledTimes(1);
+    expect(notifyMock).toHaveBeenCalledWith("Batch selesai", "1 berhasil, 1 gagal");
+  });
+
+  it("tanpa notifikasi bila batch melempar (error tampil di panel)", async () => {
+    vi.mocked(api.translateBatch).mockRejectedValue(new Error("boom"));
+    const onDone = vi.fn();
+    const { getByRole } = renderWithI18n(BatchPanel, {
+      props: {
+        pages: dummyPages,
+        opts: defaultOpts,
+        onDone,
+        onClose: vi.fn(),
+      },
+    });
+
+    await fireEvent.click(getByRole("button", { name: /Batch 2/i }));
+
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(notifyMock).not.toHaveBeenCalled();
   });
 
   it("calls onClose when closing the panel", async () => {

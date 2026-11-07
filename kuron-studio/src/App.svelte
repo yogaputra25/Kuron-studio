@@ -6,6 +6,7 @@
   import { pickFiles, pickFolder } from "./lib/app/dialogs";
 
   import { isMobile, isNarrow, watchViewport } from "./lib/app/device";
+  import { notifyBatchDone } from "./lib/app/notify";
   import { read, STORAGE_KEYS, write } from "./lib/app/storage";
   import { api } from "./lib/contracts/api";
   import AlertBanners from "./lib/app/shell/AlertBanners.svelte";
@@ -26,6 +27,7 @@
   import KanbanBar from "./lib/app/shell/KanbanBar.svelte";
   import ProjectCard from "./lib/app/shell/ProjectCard.svelte";
   import { onInvoke } from "./lib/contracts/log";
+  import { nudgeWindowForBatchDone, syncWindowTitle } from "./lib/app/windowTitle";
   import { createProjectStore } from "./lib/library/projectStore.svelte.ts";
 
   import { createSelection, orderIds } from "./lib/library/selection.svelte.ts";
@@ -172,6 +174,14 @@
   // M4-6: apply persisted theme before first paint of the shell.
   $effect(() => {
     document.documentElement.dataset.theme = $theme;
+  });
+
+  // Judul jendela native: baca `current` utuh (bukan cuma nama) supaya
+  // effect jalan ulang tiap project aktif diganti/direfresh (termasuk
+  // progres detect/translate/batch yang me-replace project di store).
+  $effect(() => {
+    const c = current;
+    void syncWindowTitle(c?.name ?? null);
   });
 
   // Antrean thumbnail milik modul previews/thumbnailQueue (FE-2).
@@ -412,7 +422,18 @@
     pendingDetectCancel = cancel;
     try {
       const updated = await done;
-      if (updated && current) projectStore.replaceProject(current.id, updated);
+      if (updated && current) {
+        projectStore.replaceProject(current.id, updated);
+        // Satu notifikasi ringkasan per run detect (bukan per halaman).
+        const st = detectRun.state;
+        if (st) {
+          void notifyBatchDone(
+            $t("batchNotifyTitle"),
+            $t("batchNotifyBody").replace("{ok}", String(st.total - st.failed.length)).replace("{failed}", String(st.failed.length)),
+          );
+          void nudgeWindowForBatchDone();
+        }
+      }
     } catch (e) {
       if (detectRun.isCurrent(gen)) error = String(e);
     } finally {

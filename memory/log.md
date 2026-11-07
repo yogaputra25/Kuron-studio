@@ -545,3 +545,52 @@ menyentuh baris lama).
 - Hasil: 19 PNG tertimpa di `design/references-v1/` (400–860 KB), semua dibaca visual dan sesuai isi. Dialog 17 difoto di folder bersih agar nama file client_secret di Desktop tak ikut ke repo.
 - Keputusan: Nama file 01–19 dipertahankan demi kompatibilitas walau isi (29 vs 26/52 halaman) berubah; didokumentasikan di README. API key tak pernah diisi (form kosong).
 - Lanjut: Pakai references baru untuk perbandingan desain; tutup isu terkait bila disetujui user.
+
+## 2026-11-07 — Desktop-feel gelombang 1: judul dinamis + notifikasi batch + window-state
+
+- Kerja: Tiga micro-task paralel via subagents terisolasi (desktop-title, desktop-notify, desktop-winstate), merge manual ke main (tumpang-tindih Cargo.toml/lib.rs/default.json/App.svelte/Cargo.lock digabung tangan; gen/schemas diregenerasi cargo build). Tanpa openspec (ringan). Tanpa commit.
+- Hasil: (1) Judul native mengikuti project aktif (`windowTitle.ts` + test, permission `core:window:allow-set-title`). (2) Satu notifikasi sistem per run batch detect/translate (`notify.ts`, plugin notification desktop-only, string id/en/zh). (3) Ukuran/posisi jendela diingat antar sesi (plugin window-state desktop-only, tanpa JS). Gate: pnpm test 66 file/586 lulus, pnpm check 0, cargo lib 207 + export 2 lulus, clippy bersih.
+- Keputusan: `cargo test batch_quota_mock::respons_rusak_tetap_satu_post_dan_gagal_jelas` gagal IDENTIK di base 7ea2102 (stash -u + rerun) — pre-existing wording reqwest ("error decoding response body" vs ekspektasi "parse"), di luar scope, perlu isu/fix terpisah. Smoke runtime (`tauri dev`: judul berubah, notifikasi muncul sekali, posisi pulih) belum dilakukan — butuh app jalan.
+- Lanjut: Gelombang 2 (tray, single-instance + file-association, reveal-in-Finder) bila user setuju; smoke proof manual.
+
+## 2026-11-07 — Setting cek permission notifikasi di Diagnostics
+
+- Kerja: Debug sistematis laporan "notifikasi batch tak jalan": wiring kode lengkap (plugin terdaftar, capability ada, call sites ada), binary 09:56 LEBIH BARU dari source 09:29 — jadi bukan build basi. Akar: status izin OS tak terlihat di mana pun + bridge best-effort menelan gagal diam-diam. Tambah `notificationStatus()`/`requestNotificationPermission()` di `notify.ts`, seksi "Notifikasi sistem" di DiagnosticsPanel (badge status + Minta izin + Kirim tes + Refresh), 9 key i18n id/en/zh, 6 test baru di `notify.test.ts`.
+- Hasil: `pnpm test` 66 file/592 lulus, `pnpm check` 0. Rust tak disentuh.
+- Keputusan: Tanpa commit. User cek di app: buka Diagnostics → lihat badge; bila "belum diizinkan", klik Minta izin (prompt OS sekali) atau aktifkan manual di System Settings → Notifications → Kuron Studio, lalu Kirim tes.
+- Lanjut: Bila badge granted tapi tes tak muncul → laporkan, penyelidikan lanjut ke sisi OS/event-loop.
+
+## 2026-11-07 — Notifikasi dev-mode terkirim atas nama Terminal
+
+- Kerja: Selidiki "notifikasi tak masuk": binary 09:56 sudah memuat plugin (bukan build basi). Baca source plugin di registry: desktop `permission_state()`/`request_permission()` SELALU Granted (tak ada prompt runtime di desktop); `desktop.rs` pakai `set_application("com.apple.Terminal")` saat `is_dev()` karena binary dev tanpa bundle id (notify-rust 4.18 default NSUserNotificationCenter path). Jadi di dev, notifikasi patuh pada switch Notifikasi milik Terminal + muncul bernama Terminal.
+- Hasil: Perbaiki teks `notifHintDenied` (id/en/zh) agar menunjuk ke Terminal saat dev; test + check hijau.
+- Keputusan: Badge "diizinkan" di desktop selalu hijau by design plugin — bukan bukti OS akan menampilkan. Verifikasi sebenarnya = System Settings → Notifications → Terminal + tombol Kirim tes. Rilis bundle (`id.kuron.studio`) atribusi benar.
+- Lanjut: User konfirmasi Kirim tes muncul setelah switch Terminal dinyalakan.
+
+## 2026-11-07 — Notifikasi tak tampil: atribusi Terminal + API deprecated
+
+- Kerja: User lapor tak ada entri Kuron di Settings → Notifications. Verifikasi source: plugin kirim via NSUserNotificationCenter (notify-rust default, tanpa `preview-macos-un`), API yang deprecated sejak 10.14; di macOS 27.2 banner dari jalur ini praktis tak tampil. Dev tanpa bundle id → atribusi ke Terminal (bukan Kuron) — tidak terdaftarnya Kuron di Settings adalah ekspektasi, bukan bug. Tambah `trySendNotification()` (kembalikan error OS sebagai string, tak melempar) + tombol Kirim tes kini menampilkan error asli; 2 test baru.
+- Hasil: focused 15 lulus, `pnpm check` 0, full suite 66 file/592+2 lulus. Tanpa commit.
+- Keputusan: Bila Kirim tes lapor "terkirim" tapi tak terlihat → jalur deprecated, opsi: (a) terima keterbatasan dev, verifikasi final di bundle rilis; (b) ganti jalur kirim modern (kerja besar, luar scope). Bila muncul error OS → ikuti pesan errornya.
+- Lanjut: Tunggu hasil Kirim tes + isi switch Notifications → Terminal dari user.
+
+## 2026-11-07 — Bypass binding JS notifikasi via raw invoke
+
+- Kerja: Temuan decisive dari binding 2.5.0: `sendNotification()` = `new window.Notification()` (Web API, bukan Rust invoke) dan `isPermissionGranted()` cek `window.Notification.permission` dulu — di WKWebView denied tanpa prompt. Itulah badge kuning + tombol mati. Tulis ulang `notify.ts` ke command Rust mentah via `contracts/log.call` (`is_permission_granted`/`request_permission`/`notify`), tercatat di Diagnostics; tulis ulang `notify.test.ts` (11 test, mock call). Loop orca dihentikan: proses app jalan tapi tanpa window terlihat — tak bisa klik tanpa mengganggu sesi user.
+- Hasil: `pnpm test` 66/594, `pnpm check` 0. Tanpa commit.
+- Keputusan: Verifikasi tampil-tidaknya banner tetap butuh mata user (loop: Diagnostics → Kirim tes → baca catatan). Bila "terkirim" tapi sunyi = drop API deprecated; bila error OS = ikuti pesannya.
+- Lanjut: Tunggu hasil Kirim tes dari user.
+
+## 2026-11-07 — Pivot sinyal batch: pentalan dock (bukan notifikasi OS)
+
+- Kerja: Bukti final dari screenshot user (semua invoke ok, badge hijau, banner nihil) + binding JS 2.5.0 (`sendNotification` = `window.Notification`, tak pernah sentuh Rust) + ncprefs tanpa Terminal/Kuron: notifikasi OS tak bisa diandalkan di dev macOS 27. Tambah `nudgeWindowForBatchDone()` di `windowTitle.ts` (isFocused → requestUserAttention Critical hanya bila tak fokus), dipanggil di BatchPanel + App.detectAll berdampingan notifyBatchDone (tetap best-effort untuk Windows/Linux/rilis); capability `core:window:allow-is-focused` + `allow-request-user-attention`; 3 test baru.
+- Hasil: focused 20 lulus, `pnpm check` 0, full 66 file lulus. Tanpa commit, Rust tak disentuh.
+- Keputusan: Jalur OS dipertahankan sebagai bonus; sinyal utama = pentalan dock (andal dev+rilis, tanpa permission). Verifikasi visual: jalan batch → pindah ke app lain → ikon dock Kuron memantul sampai fokus kembali.
+- Lanjut: Tutup thread notifikasi; gelombang 2 (tray dkk) bila diminta.
+
+## 2026-11-07 — Backend dev reload otomatis, siap verifikasi runtime
+
+- Kerja: Cek ulang pasca-pivot: watcher `tauri dev` milik user rebuild binary 10:51 + restart proses 10:51 sendiri (plugin notification, capability notification:default + 2 window perm termuat). Jendela app saat ini tak terlihat (proses jalan windowless) → bukti runtime (badge hijau, Kirim tes, pentalan dock) diserahkan ke user bermata.
+- Hasil: Tak ada perubahan kode; gate terakhir tetap hijau (66/596, check 0).
+- Keputusan: Tanpa commit. Satu-satunya langkah tersisa = user buka jendela + Diagnostics → Refresh (badge harus hijau) → Kirim tes → batch kecil sambil pindah app (dock memantul).
+- Lanjut: Tutup thread bila terkonfirmasi; bila Kirim tes ber-error, tempel pesannya.

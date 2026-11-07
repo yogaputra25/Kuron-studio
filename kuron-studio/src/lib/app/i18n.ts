@@ -229,6 +229,22 @@ const STR: Record<string, Record<Lang, string>> = {
   batchTimeoutHint: { en: "Default 15. A page that exceeds it is skipped — retry it with Retry failed.", id: "Default 15. Halaman yang melebihi batas dilewati — coba lagi via Retry yang gagal.", zh: "默认15分钟。超时的页面会被跳过——可用“重试失败项”重试。" },
   batchTimeoutInvalid: { en: "Enter 1–1440 minutes.", id: "Isi 1–1440 menit.", zh: "请输入1–1440分钟。" },
   batchPreparingLabel: { en: "Preparing pages…", id: "Menyiapkan halaman…", zh: "正在准备页面…" },
+  batchNotifyTitle: { en: "Batch finished", id: "Batch selesai", zh: "批量完成" },
+  batchNotifyBody: {
+    en: "{ok} succeeded, {failed} failed",
+    id: "{ok} berhasil, {failed} gagal",
+    zh: "成功 {ok}，失败 {failed}",
+  },
+  notifSection: { en: "System notifications", id: "Notifikasi sistem", zh: "系统通知" },
+  notifGranted: { en: "allowed", id: "diizinkan", zh: "已允许" },
+  notifNotGranted: { en: "not allowed yet", id: "belum diizinkan", zh: "尚未允许" },
+  notifUnknown: { en: "unknown (not a desktop build?)", id: "tak diketahui (bukan build desktop?)", zh: "未知（非桌面构建？）" },
+  notifAsk: { en: "Ask permission", id: "Minta izin", zh: "请求权限" },
+  notifTest: { en: "Send test", id: "Kirim tes", zh: "发送测试" },
+  notifTestSent: { en: "Test sent — check the OS notification area.", id: "Tes terkirim — cek area notifikasi OS.", zh: "测试已发送——请查看系统通知区域。" },
+  notifTestFailed: { en: "Test failed — nothing was delivered.", id: "Tes gagal — tidak ada yang terkirim.", zh: "测试失败——未送达。" },
+  notifErrorPrefix: { en: "OS error", id: "Error OS", zh: "系统错误" },
+  notifHintDenied: { en: "Nothing shows? In dev the notice is sent as Terminal — enable Terminal in OS Settings → Notifications (bundled release uses Kuron Studio).", id: "Tidak muncul? Saat dev, notifikasi dikirim atas nama Terminal — aktifkan Terminal di Pengaturan OS → Notifikasi (rilis bundle memakai Kuron Studio).", zh: "没有显示？开发模式下通知以终端名义发送——请在系统设置→通知中启用终端（打包版本使用Kuron Studio）。" },
 };
 
 export const t = derived(lang, ($l) => (k: string): string => STR[k]?.[$l] ?? k);

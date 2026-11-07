@@ -25,6 +25,7 @@ const PAIRS: [rust: string, npm: string][] = [
   ["tauri-plugin-dialog", "@tauri-apps/plugin-dialog"],
   ["tauri-plugin-process", "@tauri-apps/plugin-process"],
   ["tauri-plugin-updater", "@tauri-apps/plugin-updater"],
+  ["tauri-plugin-notification", "@tauri-apps/plugin-notification"],
 ];
 
 function cargoLock(): Map<string, string> {
