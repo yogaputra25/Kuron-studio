@@ -637,3 +637,14 @@ menyentuh baris lama).
 - Hasil: (1) Edit SEJAJAR — 8 sel ukur piksel pusat 62.5 semua; BT_06 28px di sel 24px pin-atas tapi glyph tetap center. Tanpa ubahan. (2) Enter SEJAJAR 0.2px; struktur spaceBetween+cross-center benar. Tanpa ubahan. (3) OVERFLOW NYATA: baris akhir 119.4 > kartu 115 → kepotong 4px; kedua kartu 115→130. (4) NYATA: reflow vertikal abaikan main=center (cabang vertikal tanpa logika main) → padding simetris 11.1 di 3 kartu stat. Linter S-10 baru (meluber vertikal) + test RED/GREEN; file 0 warning S-10. Gate: 3 test hijau, audit PASS, lint 6.
 - Keputusan: Implementasi dukungan main vertikal DITOLAK (95 kontainer ikut geser — tembakau redesign). Fix bedah per spot; reflow gap didokumentasi di SKILL bila perlu.
 - Lanjut: Thread notifikasi tetap menunggu hasil Kirim tes user.
+
+## 2026-11-08 — Tandem-tidy user + skill v2.5.1, gate hijau
+- Kerja: Verifikasi file hasil rapihan user di FigCraft (app terbuka). Paritas reflow vs engine: drift 0/1685 node. Koreksi: (1) revert edit nyasar saya di ElevCard 1035 (disangka ScChecks — ID bergeser antar save app; gap/fixed dikembalikan, warning EL_3 hilang); (2) ikon lu-scan-line baru user di BtnDetect → coral_fg fill+stroke (S-09). Bukti piksel: 5 baris halaman 60px rata (dot x=10, teks x=66); BtnDetect ikon gelap di coral; ElevCard 3 level rapi; MidPanel center; 01/03/05/06 export segar pasca reload --hard.
+- Hasil: test 4 berkas hijau, audit PASS, lint 6 (warisan coral, disepakati), drift 0. Skill v2.5.1: §12 Identitas Nama + Disiplin File Hidup; triple-lock 2.5.1 (SKILL×4, HARNESS, VERSION, CHANGELOG). Engine dihentikan, throwaway dibersihkan, bukti di design/previews/proof-{10,406,488,752,954}.png.
+- Keputusan: ScChecks asli (1292) + Panel1 spaceBetween TAK disentuh — stabil (drift 0) dan itu pilihan struktural user; center hanya bila user minta. Tulis file dilarang selagi app user terbuka (koordinasi jeda + reload).
+- Lanjut: Thread notifikasi tetap menunggu hasil Kirim tes user.
+
+## 2026-11-08 — Revert git (unstage) + fix ikon diterapkan ulang
+- Kerja: User unstage di git (bukan di FigCraft) → working tree file kembali ke HEAD, fix ikon scan hilang. Diagnosis: HEAD sudah berisi rapihan user (aman, tak ada kerja user hilang); yang hilang hanya fix coral_fg 1617 yang belum di-commit. Diterapkan ulang (fill+stroke), tanpa commit.
+- Hasil: drift 0, lint 6 (warisan). Status git tak diubah selain itu.
+- Lanjut: Thread notifikasi tetap menunggu hasil Kirim tes user.
