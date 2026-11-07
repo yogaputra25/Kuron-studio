@@ -594,3 +594,46 @@ menyentuh baris lama).
 - Hasil: Tak ada perubahan kode; gate terakhir tetap hijau (66/596, check 0).
 - Keputusan: Tanpa commit. Satu-satunya langkah tersisa = user buka jendela + Diagnostics → Refresh (badge harus hijau) → Kirim tes → batch kecil sambil pindah app (dock memantul).
 - Lanjut: Tutup thread bila terkonfirmasi; bila Kirim tes ber-error, tempel pesannya.
+
+## 2026-11-07 — Clean storage: worktree subagents + pnpm store
+
+- Kerja: User minta clean build artifacts (bukan cabut integrasi — miskomunikasi awal dikoreksi sebelum ada edit; repo tak tersentuh). Temuan: `.muse/` 14 GB (worktree subagent terisolasi + target Rust masing-masing). User sudah commit fca244b + tampaknya cargo clean manual (target/ utama tak ada).
+- Hasil: `git worktree remove` 2 worktree selesai (sudah merge+commit) → `.muse/` 14 GB → 0 B. `pnpm store prune` → 289 MB → 145 MB. Tanpa sentuh source, tanpa commit.
+- Keputusan: Worktree orca-preparing (locked, milik Orca) tidak disentuh.
+- Lanjut: Thread notifikasi tetap terbuka menunggu hasil Kirim tes user.
+
+## 2026-11-07 — Dogfood posisi teks 01/05/06 + SKILL §11 anti-halu (v2.5.0)
+- Kerja: User kesal fix posisi/alignment balik jelek + model halu soal fitur FigCraft. Dipetakan dari sumber: engine = binary tertutup (/Applications/Figcraft.app, 569 perintah via `figcraft-cli commands`);-alive; `.figcraft` = zip document.json (kunci konektivitas: parent↔children, flows/prototype; layout keys; tipe yg dipakai). Verifikasi dialihkan ke headless `figcraft-cli export` (baca dari disk, byte-identik dgn live engine).
+- Hasil: (1) Klaim glyph-centering GUGUR oleh piksel — engine gambar dari atas box, box-center reflow sudah benar (combo CBVal y=8.6: glyph center meleset 0.6px; "fix" y=12 meleset 3px) → di-revert. (2) Akar "balik jelek": save() selalu reflow — tune-y manual pasti ter-recompute; defect asli = chip DPI padding vertikal 12px di wadah 26px menjepit teks (inner<text-h → pin ke pad-top). Fix struktural: padding 6px + samakan chip h=26 → label vs chip selisih 0.8px (piksel headless). (3) Test: regresi silent-skip reflow (ImportError `tools` saat run sbg skrip → fallback impor saudara) + box-center; SEMUA HIJAU 3 berkas, audit PASS, lint 6 warning lama utuh. (4) save() compact seperti engine (2.3MB→1.1MB). (5) SKILL §11 Peta Mesin & Anti-Halu + CHANGELOG 2.5.0; kanonis .claude (pelajaran: edit .agents tertimpa sync — kanonis = .claude); 4 salinan sinkron; lock VERSION=SKILL=HARNESS=2.5.0. File: 83KB.
+- Keputusan: Jangan tune-y manual; perbaiki struktur (layout/padding/sizing). Piksel > mata > JSON. tools/ + .agents/ di-gitignore (produk lokal, belum di-commit).
+- Lanjut: Wave 6 gerbang rilis (matriks harness ulang utk 2.5.0 bila perlu); thread notifikasi tetap menunggu hasil Kirim tes user.
+
+## 2026-11-08 — Normalisasi size 6 spot (01/03/06)
+- Kerja: User kirim 6 crop ("perbaiki size"). Diukur di file vs skala DESIGN.md (button h-7/8; label primer 12px; item 11px; badge/header 10px).
+- Hasil: 4 normalisasi struktural (hug → reflow aman): "Mulai Deteksi" 11→12px SemiBold (paritas BtnDoExport; tombol hug 121→128px, glyph center 0.2px); "Pilih File..." 11→12px Medium; trigger "Tinjau Balon Kata" 10→11px (samakan item menu); filename p001.jpg 12px Bold→11px Regular (samakan 3 sibling; box 61.5→56.6 identik). #1 elevasi + #3 ledger TAK diubah (sudah konsisten: JP13B/ID12/data11/header+badge10). Gate: test hijau, audit PASS, layar 01 utuh pasca-reflow.
+- Keputusan: Ukuran hanya diubah bila menyimpang dari skala; konsisten = jangan disentuh.
+- Lanjut: Wave 6 gerbang rilis; thread notifikasi menunggu hasil Kirim tes user.
+
+## 2026-11-08 — Ikon tombol coral putih vs teks hitam (S-09)
+- Kerja: User tunjuk ikon putih + teks hitam di tombol coral. Audit: 10 tombol coral semua teks sudah coral_fg (#1a0a08) tapi 10 vektor ikon masih putih — legacy pra-builder (build_button sudah benar: stroke=text_color).
+- Hasil: 10 ikon -> coral_fg struktural (satu bug class). Linter S-09 baru: vektor non-coral_fg di atas fill coral -> warning + test RED/GREEN. File: 0 warning S-09. Bukti PNG: ikon scan gelap sejajar teks.
+- Keputusan: Ikon ikut warna teks varian tombol; S-09 jaga regresi.
+- Lanjut: Wave 6 gerbang rilis; thread notifikasi menunggu hasil Kirim tes user.
+
+## 2026-11-08 — De-stiffen 01 Dashboard (konten+ritme)
+- Kerja: User nilai desain kaku pasca-fix size. Diagnosis §4: ruang bawah mati, protagonis ganda (Buka Editor coral+gelap campur), thumbnail kembar 3, balok log berat.
+- Hasil: (1) BtnOpen1+BtnDetect coral->gelap (protagonis tunggal: Project Baru). (2) Microcopy nyata per kartu: えっ…？/わはは！/まかせろ！, KOCAK SLAPSTICK SCENE, /// DUAR ///. (3) Kartu 0% = empty state jujur (gelembung dihapus). (4) PintasBar F3/Enter/⌘D/Esc isi ruang mati (chip mono + padding 6). 3 pass PNG; gate hijau; lint 6 tetap.
+- Keputusan: Variasi lewat konten (teks/keberadaan node), bukan geser manual — reflow pegang geometri.
+- Lanjut: 05 berikutnya; thread notifikasi menunggu hasil Kirim tes user.
+
+## 2026-11-08 — De-stiffen bertahap: 05, 06, 02, 03, 07 + gate akhir
+- Kerja: Lanjut de-stiffen konten+ritme per layar (pilihan user: semua bertahap).
+- Hasil: (1) 05: modal 720→620 (slack 111px hilang; reflow center vertikal tak jalan — cabang vertikal abaikan main_align, didokumentasi; modal tetap top-anchor stabil) + footer zoom rapi. (2) 06: konsisten (header 12px, gap 20, hirarki utuh) + dropdown zoom center — tanpa ubahan. (3) 02: 24 gelembung ×12 kartu divariasi (hub hug-native; 2 kata 5char → 4char karena fallback-JP ~6.5px/char > estimasi; fixed-width detour di-revert). (4) 03/07: hidup & konsisten — tanpa ubahan (catat: 03 punya 2 coral CTA zona beda — dibiarkan, keputusan lama). Gate: 3 test hijau, audit PASS, lint 6, S-09 0. File 84KB.
+- Keputusan: Ubah hanya yang menyimpang/tak-berisi; spek yang sistematis jangan dirusak atas nama variasi.
+- Lanjut: Thread notifikasi tetap menunggu hasil Kirim tes user.
+
+## 2026-11-08 — Empat spot user: ukur, overflow, centering + S-10
+- Kerja: User tunjuk 4 crop: (1) Edit vs kiri, (2) hint Enter + "code bener?", (3) kartu perlu height/padding, (4) stat 28 terlalu atas.
+- Hasil: (1) Edit SEJAJAR — 8 sel ukur piksel pusat 62.5 semua; BT_06 28px di sel 24px pin-atas tapi glyph tetap center. Tanpa ubahan. (2) Enter SEJAJAR 0.2px; struktur spaceBetween+cross-center benar. Tanpa ubahan. (3) OVERFLOW NYATA: baris akhir 119.4 > kartu 115 → kepotong 4px; kedua kartu 115→130. (4) NYATA: reflow vertikal abaikan main=center (cabang vertikal tanpa logika main) → padding simetris 11.1 di 3 kartu stat. Linter S-10 baru (meluber vertikal) + test RED/GREEN; file 0 warning S-10. Gate: 3 test hijau, audit PASS, lint 6.
+- Keputusan: Implementasi dukungan main vertikal DITOLAK (95 kontainer ikut geser — tembakau redesign). Fix bedah per spot; reflow gap didokumentasi di SKILL bila perlu.
+- Lanjut: Thread notifikasi tetap menunggu hasil Kirim tes user.
